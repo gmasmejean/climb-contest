@@ -347,6 +347,101 @@ consécutifs distincts.
 
 ---
 
+## ADR-017 — Inscription organisateur ouverte, invitation pour les comptes suivants
+
+**Date :** 2026-09-15
+**Contexte :** `ROADMAP.md` Lot 1 demandait explicitement une recommandation
+sur la politique d'inscription (« réservée au premier utilisateur ou par
+invitation »). La réponse a clarifié le vrai besoin : n'importe qui doit
+pouvoir créer un compte organisateur (et donc un nouveau club) en visitant
+l'application — ce n'est pas un bootstrap mono-club. Les comptes
+supplémentaires d'un même club, eux, sont créés par invitation d'un `owner`.
+
+**Décision :**
+- `POST /auth/register` reste ouverte en permanence : elle crée un nouveau
+  `club` (nom fourni au formulaire) et son premier `user` (`role = 'owner'`),
+  avec `email_verified_at = null` jusqu'à validation du lien reçu par e-mail.
+- La connexion est refusée tant que `email_verified_at` est `null`.
+- `POST /auth/invitations` (réservée aux `owner`, cf. middleware
+  `requireOwner`) crée un `user` du même club, `password_hash = null`, avec
+  un jeton d'invitation envoyé par e-mail. `POST
+  /auth/invitations/accept` définit le mot de passe et active le compte
+  (cliquer un lien reçu sur sa propre boîte prouve déjà la possession de
+  l'e-mail — pas de double vérification pour ce chemin).
+- Extension de la table `user` (au-delà de `SPEC.md` § 5) : `password_hash`
+  devient nullable, ajout de `email_verified_at`, `invited_by_user_id`,
+  `pending_token_hash`, `pending_token_purpose`
+  (`'email_verification' | 'invitation'`), `pending_token_expires_at`. Un
+  seul mécanisme de « jeton en attente » couvre les deux usages plutôt qu'une
+  table séparée par cas.
+- Seul le rôle `owner` peut inviter (`organizer` ne le peut pas) — choix par
+  défaut le plus simple, non demandé explicitement, à revoir si un besoin de
+  délégation plus fin apparaît.
+
+**Options écartées :**
+- Bootstrap « premier utilisateur seulement » avec un club unique par
+  déploiement — écarté : ne correspond pas au besoin réel (n'importe quel
+  club doit pouvoir s'inscrire lui-même).
+- Une table `invitation` séparée — écartée au profit de l'extension de
+  `user`, plus proche du modèle existant et sans duplication de type.
+
+**Conséquences :** validation admin des créations de club/organisateur et
+zone publique de recherche club/compétition, mentionnées comme besoins
+futurs, notées dans `TODO.md` — hors périmètre de ce lot.
+
+---
+
+## ADR-018 — Migrations réversibles sans rollback natif de Drizzle Kit
+
+**Date :** 2026-09-15
+**Contexte :** CLAUDE.md et `ROADMAP.md` Lot 1 exigent des migrations
+réversibles, testées dans les deux sens. Drizzle Kit (`drizzle-kit
+generate`) ne génère que des migrations « up » ; il n'a pas d'équivalent
+« down » intégré.
+
+**Décision :** chaque migration générée (`packages/db/drizzle/NNNN_*.sql`)
+est accompagnée d'un fichier `NNNN_*.down.sql` écrit à la main, qui annule
+exactement ce que le fichier « up » a créé. Un petit runner maison
+(`packages/db/src/migrate-shared.ts`, exposé via `migrate.ts` et
+`migrate-down.ts`) applique les fichiers dans l'ordre, suit l'état dans une
+table `_migrations_applied` (distincte de la table interne de Drizzle,
+puisqu'on ne passe pas par son `migrate()`), et permet de reculer d'un ou
+plusieurs crans. Testé par `packages/db/src/db.test.ts` (up → down → up,
+vérifie que le jeu de tables revient exactement à zéro puis se recrée).
+
+**Options écartées :**
+- Un outil de migration tiers avec support natif du rollback (ex.
+  `node-pg-migrate`) — écarté pour ne pas abandonner Drizzle Kit comme
+  source de vérité du schéma (diff automatique depuis `schema.ts`).
+- Convention `text` + `CHECK` plutôt que des `ENUM` Postgres natifs pour
+  toutes les colonnes à choix fermé (rôle, statuts…) : un `ENUM` ne peut pas
+  perdre de valeur sans recréer le type, ce qui aurait compliqué chaque
+  migration « down » touchant ces colonnes.
+
+---
+
+## ADR-019 — Interface `Mailer`, SMTP configurable, Mailpit en dev/test/CI
+
+**Date :** 2026-09-15
+**Contexte :** ADR-017 introduit un besoin d'envoi d'e-mail réel (validation,
+invitation) qu'aucun document de référence ne prévoyait.
+
+**Décision :** interface `Mailer` (`send(to, subject, html): Promise<void>`),
+dans le même esprit que `StorageAdapter` (SPEC.md § 6.1). Implémentation
+`SmtpMailer` (`nodemailer`), configurée uniquement par variables
+d'environnement (`SMTP_HOST/PORT/USER/PASS`, `MAIL_FROM`) — aucun verrou
+fournisseur. En dev/test/CI, `SMTP_HOST` pointe vers un conteneur Mailpit
+(`docker-compose.yml`) : aucun e-mail n'est jamais réellement envoyé hors
+production. Les tests d'intégration (`apps/api`) utilisent une
+`FakeMailer` en mémoire plutôt que Mailpit, pour rester rapides et
+déterministes sans dépendre d'un conteneur SMTP supplémentaire en CI.
+
+**Options écartées :** un service transactionnel tiers (SendGrid, Postmark…)
+— écarté, contraire à « pas de verrouillage fournisseur » (CLAUDE.md/
+SPEC.md § 6.1).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la

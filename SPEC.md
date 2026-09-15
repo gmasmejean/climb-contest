@@ -67,7 +67,19 @@ la colonne « Terme métier ». Aucun synonyme n'est introduit ailleurs.
 
 ### 3.1 Organisateur
 
-Compte nominatif (e-mail + mot de passe), rattaché à un club. Il peut :
+Compte nominatif (e-mail + mot de passe), rattaché à un club.
+
+**Inscription (ADR-017, Lot 1) :** ouverte à tous — n'importe qui peut créer
+un compte via `/register`, ce qui crée à la fois un nouveau club et son
+premier compte (`role = 'owner'`). Le compte est activé après validation de
+l'e-mail (lien envoyé, valable 24 h). Les comptes supplémentaires d'un même
+club sont créés par invitation d'un `owner` (lien envoyé par e-mail, valable
+7 jours, qui sert à la fois de preuve de possession de l'e-mail et de moyen
+de définir le mot de passe). Validation admin des créations de club et zone
+publique de recherche club/compétition : besoins identifiés, pas dans le
+périmètre actuel (voir `TODO.md`).
+
+Il peut :
 
 **Préparer**
 - créer une compétition : nom, date(s), lieu, club, format (contest ou phases) ;
@@ -316,8 +328,14 @@ club
   id, name, slug, created_at
 
 user                                   -- organisateurs uniquement
-  id, club_id → club, email (unique), password_hash,
+  id, club_id → club, email (unique), password_hash (nullable),
   display_name, role ('owner' | 'organizer'), last_login_at
+  email_verified_at (nullable)          -- ADR-017 : null = connexion refusée
+  invited_by_user_id (nullable) → user
+  pending_token_hash (nullable)         -- ADR-017 : vérification e-mail ou
+  pending_token_purpose (nullable:      -- invitation — un seul mécanisme
+    'email_verification' | 'invitation')
+  pending_token_expires_at (nullable)
 
 competition
   id, club_id → club
