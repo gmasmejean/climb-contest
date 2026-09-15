@@ -69,12 +69,12 @@ async function registerAndVerify(email: string, password = 'un-mot-de-passe-soli
     body: JSON.stringify({ email, password, displayName: 'Alex', clubName: 'Club Démo' }),
   })
   const token = mailer.lastTokenFor(email)
-  const verifyResponse = await app.request(
-    `/api/v1/auth/verify-email?token=${token}`,
-    { redirect: 'manual' },
-  )
-  expect(verifyResponse.status).toBe(302)
-  expect(verifyResponse.headers.get('location')).toContain('verified=1')
+  const verifyResponse = await app.request('/api/v1/auth/verify-email', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+  expect(verifyResponse.status).toBe(200)
 }
 
 describe('POST /auth/register', () => {
@@ -128,11 +128,12 @@ describe('vérification et connexion', () => {
     expect(before.status).toBe(403)
 
     const token = mailer.lastTokenFor(email)
-    const verifyResponse = await app.request(`/api/v1/auth/verify-email?token=${token}`, {
-      redirect: 'manual',
+    const verifyResponse = await app.request('/api/v1/auth/verify-email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token }),
     })
-    expect(verifyResponse.status).toBe(302)
-    expect(verifyResponse.headers.get('location')).toContain('verified=1')
+    expect(verifyResponse.status).toBe(200)
 
     const after = await app.request('/api/v1/auth/login', {
       method: 'POST',
@@ -142,7 +143,7 @@ describe('vérification et connexion', () => {
     expect(after.status).toBe(200)
   })
 
-  it('jeton de vérification expiré ou déjà utilisé → 302 vers login avec erreur', async () => {
+  it('jeton de vérification déjà utilisé → refusé la deuxième fois', async () => {
     const email = 'expired@club-demo.test'
     await app.request('/api/v1/auth/register', {
       method: 'POST',
@@ -155,11 +156,18 @@ describe('vérification et connexion', () => {
       }),
     })
     const token = mailer.lastTokenFor(email)
-    await app.request(`/api/v1/auth/verify-email?token=${token}`, { redirect: 'manual' })
-    const secondAttempt = await app.request(`/api/v1/auth/verify-email?token=${token}`, {
-      redirect: 'manual',
+    const verifyBody = JSON.stringify({ token })
+    await app.request('/api/v1/auth/verify-email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: verifyBody,
     })
-    expect(secondAttempt.headers.get('location')).toContain('verify_error=1')
+    const secondAttempt = await app.request('/api/v1/auth/verify-email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: verifyBody,
+    })
+    expect(secondAttempt.status).toBe(400)
   })
 })
 

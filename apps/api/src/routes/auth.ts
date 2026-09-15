@@ -126,7 +126,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
         throw new ApiError(500, 'Erreur interne', "Impossible de créer le compte.")
       }
 
-      const verifyUrl = `${env.PUBLIC_APP_URL}/api/v1/auth/verify-email?token=${verificationToken}`
+      const verifyUrl = `${env.PUBLIC_APP_URL}/login?token=${verificationToken}`
       const { subject, html } = verificationEmail(input.displayName, verifyUrl)
       await mailer.send(input.email, subject, html)
 
@@ -137,24 +137,29 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
     },
   )
 
-  // GET (et non POST) : ce lien est cliqué depuis la boîte mail, donc suivi
-  // par le navigateur — il redirige vers l'écran de connexion plutôt que de
-  // renvoyer du JSON, pour ne pas exiger un 4ᵉ écran dédié (voir le plan).
-  app.get(
+  // POST, jamais GET : un GET ne doit jamais avoir d'effet de bord — de
+  // nombreuses passerelles anti-hameçonnage pré-visitent automatiquement les
+  // liens reçus par e-mail pour les scanner, ce qui consommerait le jeton à
+  // la place de l'utilisateur si ce GET modifiait la base. Le lien de
+  // l'e-mail pointe vers /login?token=…, une page du front sans effet de
+  // bord ; c'est le JavaScript de cette page, dans un vrai navigateur, qui
+  // déclenche ce POST.
+  app.post(
     '/verify-email',
-    zValidator('query', verifyEmailInputSchema, (result, c) => {
-      if (!result.success) {
-        return c.redirect(`${env.PUBLIC_APP_URL}/login?verify_error=1`, 302)
-      }
+    zValidator('json', verifyEmailInputSchema, (result, c) => {
+      if (!result.success) return problem(c, 400, 'Requête invalide')
     }),
     async (c) => {
-      const { token } = c.req.valid('query')
+      const { token } = c.req.valid('json')
       const tokenHash = hashToken(token)
       const row = await db.query.user.findFirst({
         where: and(eq(user.pendingTokenHash, tokenHash), eq(user.pendingTokenPurpose, 'email_verification')),
       })
-      if (!row || !row.pendingTokenExpiresAt || row.pendingTokenExpiresAt.getTime() < Date.now()) {
-        return c.redirect(`${env.PUBLIC_APP_URL}/login?verify_error=1`, 302)
+      if (!row) {
+        throw new ApiError(400, 'Jeton invalide', 'Ce lien de vérification est invalide ou a déjà été utilisé.')
+      }
+      if (!row.pendingTokenExpiresAt || row.pendingTokenExpiresAt.getTime() < Date.now()) {
+        throw new ApiError(400, 'Jeton expiré', 'Ce lien a expiré — demandez un nouvel e-mail.')
       }
       await db
         .update(user)
@@ -165,7 +170,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
           pendingTokenExpiresAt: null,
         })
         .where(eq(user.id, row.id))
-      return c.redirect(`${env.PUBLIC_APP_URL}/login?verified=1`, 302)
+      return c.json({ message: 'E-mail vérifié — vous pouvez vous connecter.' })
     },
   )
 
@@ -190,7 +195,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
             pendingTokenExpiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
           })
           .where(eq(user.id, row.id))
-        const verifyUrl = `${env.PUBLIC_APP_URL}/api/v1/auth/verify-email?token=${verificationToken}`
+        const verifyUrl = `${env.PUBLIC_APP_URL}/login?token=${verificationToken}`
         const { subject, html } = verificationEmail(row.displayName, verifyUrl)
         await mailer.send(email, subject, html)
       }

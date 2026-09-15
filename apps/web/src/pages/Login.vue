@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, TextField, useToast } from '@climbcontest/ui'
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { ApiError, apiFetch } from '../api/client'
@@ -17,11 +17,36 @@ const formError = ref('')
 const needsVerification = ref(false)
 const resending = ref(false)
 
+// null = pas de jeton dans l'URL ; 'checking' pendant l'appel ; puis le
+// résultat. Volontairement déclenché par CE JavaScript (pas par un GET
+// serveur qui modifierait la base) : un lien d'e-mail est parfois
+// pré-visité automatiquement par des passerelles anti-hameçonnage, ce qui
+// consommerait le jeton à la place de l'utilisateur si le simple chargement
+// de la page suffisait.
+const emailVerification = ref<'checking' | 'success' | 'error' | null>(null)
+
+onMounted(async () => {
+  const token = route.query['token']
+  if (typeof token !== 'string') return
+
+  emailVerification.value = 'checking'
+  await router.replace({ query: { ...route.query, token: undefined } })
+  try {
+    await apiFetch('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) })
+    emailVerification.value = 'success'
+  } catch {
+    emailVerification.value = 'error'
+  }
+})
+
 const banner = computed(() => {
-  if (route.query['verified'] === '1') {
+  if (emailVerification.value === 'checking') {
+    return { text: 'Vérification de votre e-mail…', variant: 'info' as const }
+  }
+  if (emailVerification.value === 'success') {
     return { text: 'E-mail vérifié — vous pouvez vous connecter.', variant: 'success' as const }
   }
-  if (route.query['verify_error'] === '1') {
+  if (emailVerification.value === 'error') {
     return {
       text: 'Ce lien de vérification est invalide ou a expiré.',
       variant: 'error' as const,

@@ -79,5 +79,6 @@ infra/docker    Dockerfile, docker-compose, Caddyfile
 - `pnpm test` couvre les paquets purs (`contracts`, `ui`) sans dépendance
   externe, et les intégrations (`db`, `api`) via Testcontainers (Postgres
   16 éphémère, un conteneur par run).
-- Un test Playwright end-to-end (`e2e/`) couvre la connexion d'un compte
-  déjà activé jusqu'à l'accueil — voir `e2e/README.md` pour le lancer.
+- Deux tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+  activé jusqu'à l'accueil, et inscription → vérification par e-mail (via
+  Mailpit) → connexion — voir `e2e/README.md` pour les lancer.

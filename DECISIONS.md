@@ -442,6 +442,43 @@ SPEC.md § 6.1).
 
 ---
 
+## ADR-020 — Vérification d'e-mail déclenchée par le front en `POST`, jamais par un `GET` serveur
+
+**Date :** 2026-09-15
+**Contexte :** la première implémentation du Lot 1 faisait pointer le lien
+de l'e-mail directement vers `GET /api/v1/auth/verify-email?token=…`, qui
+validait le jeton et redirigeait (302) vers `/login`. En testant, le lien
+ne fonctionnait pas de façon fiable — creusé en session : un `GET` qui a un
+effet de bord (ici, marquer l'e-mail comme vérifié) est visité par des
+acteurs qui ne sont pas l'utilisateur avant même qu'il clique — navigateurs
+qui précharge des liens, extensions de productivité/sécurité, passerelles
+anti-hameçonnage qui « pré-visitent » les liens des e-mails pour les
+scanner. N'importe lequel de ces acteurs consomme alors le jeton à la place
+de l'utilisateur, qui se retrouve avec un lien « déjà utilisé » sans avoir
+rien fait.
+
+**Décision :** le lien de l'e-mail pointe désormais vers `/login?token=…`
+— une page du front, un `GET` sans aucun effet de bord (un scanner qui la
+visite ne déclenche rien). C'est le JavaScript de cette page
+(`apps/web/src/pages/Login.vue`, au montage) qui appelle `POST
+/api/v1/auth/verify-email` avec le jeton, puis retire `token` de l'URL
+(`router.replace`) pour qu'un rechargement ne retente pas l'appel.
+`GET /api/v1/auth/verify-email` n'existe plus.
+
+**Règle générale à retenir pour la suite du projet :** un `GET` ne doit
+jamais avoir d'effet de bord (idempotence HTTP). Toute action qui modifie
+l'état — même déclenchée par un clic sur un lien d'e-mail — passe par un
+appel explicite du client (`POST`/`PATCH`/`DELETE`), jamais par le simple
+chargement d'une page.
+
+**Options écartées :** garder le `GET` côté serveur en le rendant
+idempotent (« déjà vérifié » traité comme un succès plutôt qu'une erreur)
+— atténue le symptôme pour un jeton déjà consommé, mais ne protège pas le
+tout premier clic si c'est un scanner qui l'effectue en premier ; écarté au
+profit de la correction structurelle ci-dessus.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la
