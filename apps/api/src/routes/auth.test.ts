@@ -29,7 +29,7 @@ const env: Env = {
 }
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer('postgres:16-alpine').start()
+  container = await new PostgreSqlContainer('postgres:16.15-alpine').start()
   const client = new pg.Client({ connectionString: container.getConnectionUri() })
   await client.connect()
   await applyPendingMigrations(client)

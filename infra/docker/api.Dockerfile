@@ -43,6 +43,10 @@ ENV NODE_ENV=production
 COPY --from=source /app/node_modules ./node_modules
 COPY --from=source /app/packages ./packages
 COPY --from=source /app/apps/api/package.json ./apps/api/package.json
+# pnpm crée un node_modules propre à chaque paquet du workspace (symlinks
+# vers le store racine) — celui d'apps/api (pg, argon2, dotenv…) doit être
+# copié explicitement, `packages` et le node_modules racine ne suffisent pas.
+COPY --from=source /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 EXPOSE 3000
 CMD ["node", "apps/api/dist/index.js"]

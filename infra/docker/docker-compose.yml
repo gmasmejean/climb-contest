@@ -2,7 +2,7 @@ name: climbcontest
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -18,7 +18,7 @@ services:
       - '${POSTGRES_PORT:-5432}:5432'
 
   mailpit:
-    image: axllent/mailpit:v1
+    image: axllent/mailpit:v1.31.1
     ports:
       - '${MAILPIT_UI_PORT:-8025}:8025'
 
@@ -76,7 +76,7 @@ services:
     command: ['sh', '-c', 'cp -r apps/web/dist/. /output/']
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.4-alpine
     ports:
       - '${HTTP_PORT:-8080}:80'
     volumes:

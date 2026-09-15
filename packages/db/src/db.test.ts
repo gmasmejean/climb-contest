@@ -21,7 +21,7 @@ async function withRawClient<T>(fn: (client: pg.Client) => Promise<T>): Promise<
 }
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer('postgres:16-alpine').start()
+  container = await new PostgreSqlContainer('postgres:16.15-alpine').start()
   await withRawClient((client) => applyPendingMigrations(client))
   handle = createDatabase(container.getConnectionUri())
 }, 180_000)
