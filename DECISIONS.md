@@ -25,6 +25,7 @@ d'utilisateur que CLAUDE.md cible. Moins d'ambiguïté de jugement sous pression
 = moins d'erreurs et de contestations.
 
 **Conséquences :**
+
 - `score_value` perd la branche `hold_number − 0.5`.
 - Le cas de test SPEC.md §9 #3 ("prise 25 touchée non contrôlée → 24.5") est
   retiré (plus aucune situation ne le produit).
@@ -44,10 +45,12 @@ les deux conservés avec `superseded_by IS NULL` — le second `INSERT`
 échouerait en base avant même la création d'un `conflict_group`.
 
 **Décision :**
+
 ```sql
 UNIQUE (round_id, route_id, competitor_id)
   WHERE superseded_by IS NULL AND conflict_group IS NULL
 ```
+
 Une ligne en conflit sort temporairement de la contrainte d'unicité ; elle y
 revient quand l'organisateur tranche (la ligne perdante reçoit
 `superseded_by`).
@@ -88,6 +91,7 @@ mais pas le problème métier ci-dessous (ADR-004), et perd la garantie
 l'utilisateur ajoute le cas symétrique : une voie retirée après des passages.
 
 **Décision :**
+
 - **`hold_count`** : grâce à ADR-003, chaque `ascent` garde le `hold_count`
   valable au moment de sa saisie — un TOP à 14h et un TOP à 16h restent
   comparables même si la voie a changé entre-temps. Mais l'édition de
@@ -113,6 +117,7 @@ dans deux catégories (surclassement). Le prompt initial ajoute : que se
 passe-t-il si un compétiteur change de catégorie en cours de compétition ?
 
 **Décision :**
+
 - **Surclassement** : déjà supporté nativement, sans changement de modèle.
   `competitor.category_id` est la catégorie **d'inscription**, choisie par
   l'organisateur, pas une catégorie dérivée de `birth_year`. Les bornes
@@ -165,6 +170,7 @@ premier des deux qui survient**. Passé ce délai, seule l'organisateur peut
 corriger (Lot 8), avec motif obligatoire et traçage.
 
 **Options écartées :**
+
 - 5 minutes fixes, sans condition sur la saisie suivante — plus simple mais
   arbitraire : un juge qui enchaîne vite peut voir la fenêtre se refermer
   avant de remarquer son erreur.
@@ -223,7 +229,7 @@ comme `DNF`, ce qui contredit la définition usuelle (DNF = abandon pendant/
 après le départ ; DNS = absent, jamais présenté).
 
 **Décision :** clarifier la définition dans SPEC.md et `RULES.md`, sur le
-modèle athlétisme (DNS = *did not start*, DNF = *did not finish*) :
+modèle athlétisme (DNS = _did not start_, DNF = _did not finish_) :
 `DNS` = le compétiteur n'a pas démarré son ascension — qu'il ne se soit
 jamais présenté, ou qu'il se soit présenté puis retiré avant de commencer à
 grimper ; `DNF` = le compétiteur a commencé à grimper et son ascension a été
@@ -298,6 +304,7 @@ contestée). Reste à préciser comment une écriture en base déclenche la
 diffusion SSE.
 
 **Décision :**
+
 - Le pont "écriture `ascent`/`round` → diffusion SSE" passe par
   `LISTEN/NOTIFY` Postgres, pas par un `EventEmitter` Node en mémoire.
 - Ajout de `packages/sync` à l'arborescence (SPEC.md §6.2) : machine à états
@@ -358,6 +365,7 @@ l'application — ce n'est pas un bootstrap mono-club. Les comptes
 supplémentaires d'un même club, eux, sont créés par invitation d'un `owner`.
 
 **Décision :**
+
 - `POST /auth/register` reste ouverte en permanence : elle crée un nouveau
   `club` (nom fourni au formulaire) et son premier `user` (`role = 'owner'`),
   avec `email_verified_at = null` jusqu'à validation du lien reçu par e-mail.
@@ -365,7 +373,7 @@ supplémentaires d'un même club, eux, sont créés par invitation d'un `owner`.
 - `POST /auth/invitations` (réservée aux `owner`, cf. middleware
   `requireOwner`) crée un `user` du même club, `password_hash = null`, avec
   un jeton d'invitation envoyé par e-mail. `POST
-  /auth/invitations/accept` définit le mot de passe et active le compte
+/auth/invitations/accept` définit le mot de passe et active le compte
   (cliquer un lien reçu sur sa propre boîte prouve déjà la possession de
   l'e-mail — pas de double vérification pour ce chemin).
 - Extension de la table `user` (au-delà de `SPEC.md` § 5) : `password_hash`
@@ -379,6 +387,7 @@ supplémentaires d'un même club, eux, sont créés par invitation d'un `owner`.
   délégation plus fin apparaît.
 
 **Options écartées :**
+
 - Bootstrap « premier utilisateur seulement » avec un club unique par
   déploiement — écarté : ne correspond pas au besoin réel (n'importe quel
   club doit pouvoir s'inscrire lui-même).
@@ -410,6 +419,7 @@ plusieurs crans. Testé par `packages/db/src/db.test.ts` (up → down → up,
 vérifie que le jeu de tables revient exactement à zéro puis se recrée).
 
 **Options écartées :**
+
 - Un outil de migration tiers avec support natif du rollback (ex.
   `node-pg-migrate`) — écarté pour ne pas abandonner Drizzle Kit comme
   source de vérité du schéma (diff automatique depuis `schema.ts`).
@@ -476,6 +486,131 @@ idempotent (« déjà vérifié » traité comme un succès plutôt qu'une erreu
 — atténue le symptôme pour un jeton déjà consommé, mais ne protège pas le
 tout premier clic si c'est un scanner qui l'effectue en premier ; écarté au
 profit de la correction structurelle ci-dessus.
+
+---
+
+## ADR-021 — Moteur de cotation (Lot 2) : deux écarts avec l'interface `ScoringEngine` littérale de SPEC.md §4.6
+
+**Date :** 2026-09-15
+**Contexte :** en implémentant `packages/scoring`, deux endroits où
+`SPEC.md` §4.6 (l'interface `ScoringEngine`, donnée telle quelle) contredit
+le reste de la spec, discutés et tranchés avec l'utilisateur avant d'écrire
+le code.
+
+**Décision 1 — `configSchema` n'est pas un vrai `ZodSchema`.** §6.2 dit
+explicitement que `packages/scoring` ne dépend « ni de la base, ni de Zod,
+ni du réseau », alors que §4.6 type littéralement
+`configSchema: ZodSchema`. Le paquet reste à **zéro dépendance de
+production** : `configSchema` est typé structurellement
+(`ConfigSchema<T> = { parse(input: unknown): T }`), un sous-ensemble de
+l'API Zod qu'un vrai schéma Zod satisfait sans que ce paquet importe `zod`.
+Le validateur du moteur `ffme-difficulty-2026` (`config.ts`) est écrit à la
+main, sans aucune librairie.
+**Options écartées :** ajouter `zod` comme dépendance réelle de
+`packages/scoring` — rejeté, contredit littéralement §6.2, qui nomme `Zod`
+explicitement (pas un oubli).
+
+**Décision 2 — le départage par contre-performance (« countback ») n'est
+appliqué qu'une seule fois, dans `rankRound`, jamais dans `rankRoute`.**
+§4.2 liste le countback comme 2ᵉ critère de départage pour le classement
+_d'une voie_, mais §4.6 type `rankRoute(ascents, route)` sans aucun moyen de
+recevoir le classement du tour précédent dont ce départage a besoin. Aucun
+des 25 cas de test de §9 n'exerce ce départage au niveau d'une seule voie
+(seulement au niveau du tour, cas 11/12/18).
+`rankRoute` garde sa signature à 2 paramètres, telle quelle, et ne résout
+que ce qui lui est intrinsèque (chrono, ex aequo vrai). Le countback est
+appliqué une seule fois dans `rankRound(routeRankings, ctx)` — qui a déjà
+`ctx` dans sa signature —, aussi bien pour un tour à une seule voie (où le
+« classement combiné » est simplement celui de l'unique voie, y compris ses
+ex aequo non résolus par `rankRoute`) que pour un tour à plusieurs voies.
+Aucune extension d'interface n'a donc été nécessaire.
+**Un seul niveau de recul (`ctx.previousRoundRanking`) suffit** pour
+satisfaire la récursion demandée par §4.4 (« puis sur le tour d'avant, et
+ainsi de suite ») : chaque `RoundRanking` est déjà calculé avec son propre
+`previousRoundRanking`, donc tout écart résolvable au tour N-1 (via le tour
+N-2, etc.) s'est déjà propagé au moment où le tour N l'utilise. `rankFinal`
+n'a donc plus besoin de départager quoi que ce soit — il assemble les tours
+en paliers (le tour atteint prime toujours sur la performance brute, cas
+20), sans re-comparer les performances entre elles.
+
+**Décisions techniques dérivées (non discutées explicitement, déduites
+directement de la spec) :**
+
+- **Comparaison de la moyenne géométrique par produit d'entiers, pas par
+  racine.** `rang_combiné = (r₁×…×r_k)^(1/k)` est strictement croissante en
+  fonction du produit `r₁×…×r_k` (k fixé) : comparer les produits (entiers,
+  exacts) donne un ordre rigoureusement identique à comparer les racines,
+  sans jamais passer par `Math.pow`/`sqrt` pour trier. `Math.pow` n'est
+  utilisé que pour la valeur _affichée_ (`combinedRank`, arrondie à 2
+  décimales), jamais pour le tri. Répond à la mise en garde de
+  `ROADMAP.md` (`√(1×4)` doit être strictement égal à `√(2×2)`).
+- **Le départage par chrono est détecté par la présence de la donnée**,
+  pas par un flag `competition.timing_enabled` séparé (`rankRoute` n'y a
+  pas accès) : il s'applique quand **tout un groupe à égalité** a un
+  `climb_time_ms` connu ; sinon le groupe reste ex aequo.
+- **Format contest, départage « voies tentées » (non testé par §9)** :
+  interprété comme le nombre de voies avec `score_value > 0` sur
+  l'ensemble des voies du compétiteur (pas seulement les M retenues) — pas
+  le nombre de voies avec `status ≠ 'dns'`, qui aurait nécessité de faire
+  transiter le statut jusqu'à `RouteRankEntry` pour distinguer DNF/DSQ de
+  DNS. « Nombre de tops » compté parmi les M voies retenues dans le total.
+  Signalé explicitement comme hypothèse à valider dans `RULES.md` §6.
+- **`rankRound` valide que chaque compétiteur apparaît dans le classement
+  de **toutes** les voies du tour** (format phases) avant de calculer la
+  moyenne géométrique — lève une erreur explicite sinon, plutôt que de
+  produire silencieusement un classement faux à partir d'ensembles de
+  compétiteurs incohérents entre voies. **Limite assumée** : cette
+  validation ne détecte qu'une incohérence _entre_ les voies passées en
+  paramètre. Elle ne peut pas détecter un compétiteur totalement absent de
+  toutes les voies du tour (jamais même un DNS) — rien dans l'interface
+  `ScoringEngine` (§4.6) ne donne à cette fonction la liste complète des
+  compétiteurs attendus pour comparer. **Précondition côté appelant** :
+  avant d'appeler `rankRound`, le code qui construit les `RouteRanking` à
+  partir de la base doit garantir qu'un `ascent` (au moins DNS) existe pour
+  chaque compétiteur inscrit dans la catégorie, sur chaque voie du tour —
+  sinon ce compétiteur est silencieusement absent du classement. À vérifier
+  explicitement au Lot 3/8 quand ce code sera écrit.
+
+**Relecture post-implémentation (2026-09-15, `/code-review high`)** : trois
+correctifs de fond apportés après une relecture dédiée du lot, tous
+vérifiés par test avant/après :
+
+- **Bug de correction** : `breakTiesByCountback` traitait un compétiteur
+  absent du classement du tour précédent comme "infiniment mauvais"
+  (`Number.POSITIVE_INFINITY`), ce qui le séparait silencieusement des
+  autres membres du groupe au lieu de les laisser ex aequo — contredisant
+  le commentaire de la fonction elle-même. Corrigé : le countback n'est
+  appliqué à un groupe que si **tous** ses membres ont un rang au tour
+  précédent ; sinon le groupe entier reste ex aequo vrai.
+- **Bug de déterminisme** : en format contest, quand plusieurs voies d'un
+  même compétiteur sont à égalité de `score_value` exactement à la limite
+  des M voies retenues, laquelle des voies à égalité est effectivement
+  comptée dépendait de l'ordre du tableau `routeRankings` fourni par
+  l'appelant (tri stable de `Array.prototype.sort`) — deux appels avec les
+  mêmes données mais un ordre de voies différent pouvaient produire un
+  nombre de tops différent, et donc un classement différent. Corrigé : à
+  égalité de `score_value`, la voie effectivement topée (`isTop`) est
+  systématiquement préférée dans la sélection des M meilleures, ce qui
+  rend le résultat indépendant de l'ordre d'entrée.
+- **Performance** : `rankRoundPhases` cherchait le rang de chaque
+  compétiteur par balayage linéaire (`Array.find`) dans chaque
+  `RouteRanking`, soit un coût quadratique en nombre de compétiteurs par
+  voie. Remplacé par une `Map<competitorId, rank>` construite une seule
+  fois par voie. `breakTiesByCountback` reconstruisait aussi sa `Map` du
+  tour précédent à chaque groupe ex aequo au lieu d'une fois par appel de
+  `rankRound` — corrigé de la même façon.
+- **CI** : les seuils de couverture à 100 % de `packages/scoring/vitest.config.ts`
+  n'étaient vérifiés par aucune étape de `.github/workflows/ci.yml` (`pnpm test`
+  n'y passait pas `--coverage`). Corrigé en ajoutant `--coverage` directement
+  au script `test` de `packages/scoring/package.json`, plutôt que de modifier
+  la CI ou les autres paquets — c'est le seul paquet du projet où cette
+  exigence s'applique (voir `ROADMAP.md`).
+- **Style** : les commentaires techniques du paquet étaient rédigés en
+  français, en contradiction avec `CLAUDE.md` (« commentaires techniques :
+  anglais »). Traduits. Les messages d'erreur (destinés à remonter
+  jusqu'à un humain) et les chaînes `it(...)`/`describe(...)` des tests
+  (qui reprennent le vocabulaire français de `SPEC.md` §9) restent en
+  français, cohérent avec le reste du dépôt (voir `packages/contracts`).
 
 ---
 

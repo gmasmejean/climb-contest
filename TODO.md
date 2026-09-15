@@ -20,7 +20,7 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   cadrage du Lot 1 : un visiteur pourrait chercher un club ou une compétition
   sans lien direct. Aucun lot actuel ne le prévoit.
 - **Écran d'acceptation d'invitation.** La route API (`POST
-  /auth/invitations/accept`) existe et est testée, mais `apps/web` n'a pas
+/auth/invitations/accept`) existe et est testée, mais `apps/web` n'a pas
   d'écran pour la consommer ce lot (contrainte des trois écrans de ce lot).
   En pratique, un organisateur invité ne peut activer son compte que via un
   appel API direct tant que cet écran n'existe pas.
@@ -45,3 +45,16 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   script (`pnpm format:check`) mais n'est pas encore une étape de
   `.github/workflows/ci.yml` — le Lot 1 de `ROADMAP.md` n'énumère pas cette
   étape, donc pas ajoutée sans te le demander.
+
+## Depuis le Lot 2
+
+- **`ConfigSchema.parse` (packages/scoring) lève au lieu de renvoyer un
+  résultat `safeParse`-like.** Le reste du dépôt valide aux frontières HTTP
+  avec `zValidator` + `problem()` (RFC 9457), qui attend une forme
+  `{success, data} | {success, error}`. Quand un lot ultérieur (Lot 3 ou 9)
+  branchera la validation de `scoring_config` à la création/édition d'une
+  compétition, il faudra envelopper l'appel à
+  `ffmeDifficulty2026ConfigSchema.parse` dans un `try/catch` explicite pour
+  produire une réponse `problem()` propre plutôt qu'un 500 non géré — ou
+  ajouter une variante `safeParse` à `ConfigSchema<T>` si le besoin se
+  généralise à d'autres moteurs.
