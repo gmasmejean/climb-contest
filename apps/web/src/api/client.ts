@@ -1,0 +1,82 @@
+import type { AuthResponse } from '@climbcontest/contracts'
+
+import { accessToken, clearSession, setSession } from './session'
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly title: string,
+    public readonly detail?: string,
+  ) {
+    super(detail ?? title)
+  }
+}
+
+interface ProblemBody {
+  title: string
+  detail?: string
+}
+
+let refreshPromise: Promise<boolean> | null = null
+
+async function refreshSession(): Promise<boolean> {
+  const response = await fetch('/api/v1/auth/refresh', {
+    method: 'POST',
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    clearSession()
+    return false
+  }
+  const body = (await response.json()) as AuthResponse
+  setSession(body.accessToken, body.user)
+  return true
+}
+
+/** Tente de restaurer la session depuis le cookie de refresh (au démarrage). */
+export async function bootstrapSession(): Promise<boolean> {
+  refreshPromise ??= refreshSession().finally(() => {
+    refreshPromise = null
+  })
+  return refreshPromise
+}
+
+export async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+  allowRetry = true,
+): Promise<T> {
+  const headers = new Headers(options.headers)
+  headers.set('Content-Type', 'application/json')
+  if (accessToken.value) {
+    headers.set('Authorization', `Bearer ${accessToken.value}`)
+  }
+
+  const response = await fetch(`/api/v1${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  })
+
+  if (response.status === 401 && allowRetry) {
+    const refreshed = await refreshSession()
+    if (refreshed) {
+      return apiFetch<T>(path, options, false)
+    }
+  }
+
+  if (!response.ok) {
+    let body: ProblemBody | undefined
+    try {
+      body = (await response.json()) as ProblemBody
+    } catch {
+      body = undefined
+    }
+    throw new ApiError(response.status, body?.title ?? 'Erreur', body?.detail)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+  return (await response.json()) as T
+}
