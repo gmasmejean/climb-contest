@@ -614,6 +614,154 @@ vérifiés par test avant/après :
 
 ---
 
+## ADR-022 — Dossards : `competitor.bib` nullable, attribution automatique séquentielle par catégorie
+
+**Date :** 2026-09-16
+**Contexte :** le Lot 1 avait défini `competitor.bib` en `NOT NULL`
+(`packages/db/src/schema.ts`). C'est incompatible avec ROADMAP.md Lot 3 :
+« attribution des dossards, manuelle ou automatique » suppose qu'un
+compétiteur puisse exister sans dossard, et le contrôle « prêt à
+démarrer ? » doit pouvoir détecter un « compétiteur sans dossard » — un cas
+impossible si la colonne est obligatoire.
+
+**Décision :**
+
+- **`competitor.bib` devient nullable.** Migration
+  `0001_competitor_bib_nullable` (up : `DROP NOT NULL`, down : `SET NOT
+  NULL`), testée dans les deux sens (`packages/db/src/db.test.ts`).
+  L'index unique `(competition_id, bib)` reste inchangé : Postgres ne
+  considère jamais deux `NULL` comme égaux, donc plusieurs compétiteurs
+  sans dossard coexistent sans violation de contrainte.
+- **Attribution automatique** (`POST
+  /competitions/:id/competitors/assign-bibs`) : numérotation séquentielle
+  continue sur toute la compétition, en parcourant les catégories dans
+  leur `display_order` puis les compétiteurs par nom/prénom (locale
+  `fr`). Ne touche que les compétiteurs sans dossard ; les numéros déjà
+  attribués manuellement sont respectés et jamais réutilisés (recherche du
+  plus petit entier libre à chaque affectation).
+
+**Options écartées :** plages de dossards réservées par catégorie (ex.
+100-199 pour U12) — écarté, discuté avec l'utilisateur, préférence pour
+une numérotation continue plus simple à vérifier d'un coup d'œil sur la
+liste des compétiteurs.
+
+---
+
+## ADR-023 — Round implicite du format contest, synchronisé sur `route_category`
+
+**Date :** 2026-09-16
+**Contexte :** SPEC.md §5 « Points d'attention » précise qu'une compétition
+au format contest crée un `round` unique implicite (`type =
+'qualification'`, `display_order = 0`), pour éviter un `round_id`
+nullable sur `ascent`. Le Lot 3 doit décider qui peuple `round_route` pour
+ce round, puisque le format contest n'expose pas d'écran « Tours » à
+l'organisateur.
+
+**Décision :** le round implicite est créé par l'API à la création de la
+compétition (`style = 'onsight'` par défaut — un contest n'a pas la
+notion d'isolement flash/à vue de la spec, ce style est un choix neutre
+sans effet observable en v1). Chaque création ou suppression d'une
+association `route_category` (onglet Voies) fait apparaître ou disparaître
+automatiquement la ligne `round_route` correspondante pour ce round
+(`apps/api/src/lib/contest-round.ts`) — jamais géré manuellement par
+l'organisateur. En format phases, `round` et `round_route` restent
+entièrement pilotés par l'écran « Tours ».
+
+**Conséquence :** le moteur de cotation (Lot 5+) retrouve donc toujours
+ses voies via `round_route`, qu'il s'agisse d'un contest ou de phases,
+sans branche de code spécifique au format à ce niveau.
+
+**Friction notée avec le Lot 2 :** `ffme-difficulty-2026ConfigSchema`
+(ADR-021) exige `routesCounted` quel que soit le format, alors que ce
+nombre n'a de sens que pour un contest (§4.5). Le formulaire de création
+ne le demande pas en format phases ; l'API fournit alors une valeur
+neutre (`{routesCounted: 1}`, jamais utilisée en pratique par
+`rankRound`/`rankFinal` en mode phases) plutôt que d'imposer ce champ à
+l'organisateur. Pas de modification de `packages/scoring` pour ce lot —
+si cette friction devient gênante, `TODO.md` note qu'il faudrait rendre
+`routesCounted` optionnel/ignoré pour un moteur utilisé en phases.
+
+---
+
+## ADR-024 — Format de l'import CSV des compétiteurs
+
+**Date :** 2026-09-16
+**Contexte :** SPEC.md ne fixe pas de format de colonnes pour l'import CSV
+en masse (ROADMAP.md Lot 3). Discuté et tranché avec l'utilisateur.
+
+**Décision :**
+
+- **Colonnes** (en-tête, insensible à la casse et aux accents) :
+  `dossard` (optionnel), `prenom`, `nom`, `categorie` (doit correspondre
+  au libellé exact d'une catégorie existante de la compétition, comparaison
+  insensible à la casse), `annee_naissance` (optionnel), `club`
+  (optionnel), `licence` (optionnel).
+- **Doublon** = même dossard, ou même prénom+nom, que ce soit entre deux
+  lignes du fichier ou avec un compétiteur déjà en base pour cette
+  compétition.
+- **Tout ou rien** : `POST .../competitors/import` prend un `mode`
+  (`preview` | `commit`). Le serveur ré-analyse et revalide intégralement
+  le CSV dans les deux modes — jamais confiance en un aperçu déjà validé
+  côté client. En `commit`, si la moindre ligne est en erreur, rien n'est
+  écrit (422, rapport détaillé renvoyé) ; l'organisateur corrige son
+  fichier et relance un aperçu. L'écriture effective se fait dans une
+  transaction (première utilisation de `db.transaction()` dans
+  `apps/api`).
+- **Écart au format RFC 9457** : la réponse de `.../import` (succès comme
+  échec 422) est le rapport structuré ligne par ligne
+  (`ImportReport`/`ImportRow`, `packages/contracts`), pas un corps
+  `problem+json` — un couple title/detail ne peut pas porter une erreur
+  par ligne. Écart assumé et isolé à cette seule route
+  (`apps/api/src/routes/competitors.ts`).
+
+**Options écartées :** import partiel (écrire les lignes valides, ignorer
+les autres) — écarté par l'utilisateur, qui préfère un fichier propre
+avant toute écriture plutôt que devoir recouper après coup qui a été
+importé ou non.
+
+---
+
+## ADR-025 — Calcul des tranches d'âge du modèle de catégories FFME
+
+**Date :** 2026-09-16
+**Contexte :** SPEC.md §1 et ROADMAP.md Lot 3 demandent un modèle de
+catégories FFME prédéfini (U12 à Vétéran × Homme/Femme) avec des bornes
+`birth_year_min`/`birth_year_max`. Le règlement exact n'était pas dans
+`SPEC.md` ; l'utilisateur en a cité le texte intégralement le 2026-09-16.
+
+**Décision :** calcul automatique, appliqué par `POST
+/competitions/:id/categories/template`
+(`apps/api/src/lib/ffme-categories.ts`), d'après ce texte réglementaire :
+
+> U8 : 6-7 ans, U10 : 8-9, **U12 : 10-11 (poussin)**, **U14 : 12-13
+> (benjamin)**, **U16 : 14-15 (minime)**, **U18 : 16-17 (cadet)**, **U20 :
+> 18-19 (junior)**, **Sénior : 20 à 39 ans**, Vétéran 1 : 40-49, Vétéran 2 :
+> 50 et plus. « Le changement de catégorie pour une saison sportive est
+> déterminé en prenant en référence l'année de naissance et l'année civile
+> débutant au cours de la saison sportive. »
+
+Le modèle applicatif ne propose que U12 à Vétéran (pas U8/U10, conforme au
+glossaire SPEC.md §1), et fusionne Vétéran 1/2 du règlement en une seule
+catégorie « Vétéran » (40 ans et plus) — le seuil des 5 participants pour
+ouvrir un classement Vétéran 2 séparé (règlement) est une règle de
+classement fédéral hors périmètre v1, dans l'esprit d'ADR-006.
+
+**Calcul :** la saison sportive commence le 1ᵉʳ septembre. Année de
+référence `N` = année civile de `competition.starts_on` si le mois est
+janvier–août, sinon année suivante (vérifié sur l'exemple du règlement :
+01/09/2021 et 31/08/2022 donnent tous les deux `N = 2022`). Pour une
+tranche `[âgeMin, âgeMax]` : `birth_year_min = N - âgeMax`,
+`birth_year_max = N - âgeMin` (Vétéran, borne haute ouverte :
+`birth_year_min = null`, `birth_year_max = N - 40`). Ces bornes restent de
+purs indicatifs non bloquants (ADR-005) : l'organisateur peut toujours les
+ajuster à la main après application du modèle.
+
+**Source :** texte du règlement FFME fourni par l'utilisateur en
+conversation le 2026-09-16 — à vérifier auprès de la FFME avant une
+compétition officielle si le règlement a changé depuis.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la
