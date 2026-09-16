@@ -2,7 +2,7 @@
 import { Tabs } from '@climbcontest/ui'
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 
 import { competitionsApi } from '../../api/competitions'
 import CategoriesTab from './tabs/CategoriesTab.vue'
@@ -42,7 +42,13 @@ const tabs = computed(() => {
 
 <template>
   <main class="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-4 py-8">
-    <header>
+    <header class="flex flex-col gap-2">
+      <RouterLink
+        :to="{ name: 'competition-list' }"
+        class="inline-flex min-h-12 w-fit items-center text-sm font-medium text-blue-700 hover:underline"
+      >
+        ← Mes compétitions
+      </RouterLink>
       <h1 class="text-2xl font-bold text-gray-900">{{ competition?.name }}</h1>
       <p class="text-sm text-gray-600">{{ competition?.venue }}</p>
     </header>
