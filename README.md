@@ -19,6 +19,7 @@ docker compose --profile seed run --rm seed   # optionnel : compétition de dém
 ```
 
 Ouvrez ensuite <http://localhost:8080> :
+
 - inscrivez un compte organisateur (l'e-mail de vérification part vers
   Mailpit, jamais un vrai e-mail en local) — interface Mailpit sur
   <http://localhost:8025> ;
@@ -48,16 +49,16 @@ pnpm dev
 
 ## Commandes utiles
 
-| Commande | Effet |
-|---|---|
-| `pnpm typecheck` | `tsc`/`vue-tsc --noEmit` sur tous les paquets |
-| `pnpm lint` | ESLint sur tout le monorepo |
-| `pnpm test` | Vitest sur tous les paquets (Testcontainers pour `db`/`api`) |
-| `pnpm build` | Build de production de chaque paquet/app |
-| `pnpm --filter @climbcontest/db db:generate` | Génère une migration depuis `schema.ts` |
-| `pnpm --filter @climbcontest/db db:migrate` | Applique les migrations en attente |
-| `pnpm --filter @climbcontest/db db:migrate:down` | Annule la dernière migration |
-| `pnpm --filter @climbcontest/db db:seed` | Insère une compétition de démonstration |
+| Commande                                         | Effet                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------ |
+| `pnpm typecheck`                                 | `tsc`/`vue-tsc --noEmit` sur tous les paquets                |
+| `pnpm lint`                                      | ESLint sur tout le monorepo                                  |
+| `pnpm test`                                      | Vitest sur tous les paquets (Testcontainers pour `db`/`api`) |
+| `pnpm build`                                     | Build de production de chaque paquet/app                     |
+| `pnpm --filter @climbcontest/db db:generate`     | Génère une migration depuis `schema.ts`                      |
+| `pnpm --filter @climbcontest/db db:migrate`      | Applique les migrations en attente                           |
+| `pnpm --filter @climbcontest/db db:migrate:down` | Annule la dernière migration                                 |
+| `pnpm --filter @climbcontest/db db:seed`         | Insère une compétition de démonstration                      |
 
 ## Structure du monorepo
 
@@ -69,16 +70,18 @@ apps/web        Vue 3 + Vite — PWA (inscription, connexion, accueil)
 packages/db     Schéma Drizzle, migrations, seed
 packages/contracts   Schémas Zod partagés (entités + payloads d'API)
 packages/ui     Composants Vue partagés (bouton, champ, modale…)
-packages/scoring     Moteur de cotation (Lot 2 — vide pour l'instant)
+packages/scoring     Moteur de cotation FFME (Lot 2) — zéro dépendance, voir RULES.md
 packages/sync   File de synchronisation hors ligne (Lot 6 — vide pour l'instant)
 infra/docker    Dockerfile, docker-compose, Caddyfile
 ```
 
 ## Tests
 
-- `pnpm test` couvre les paquets purs (`contracts`, `ui`) sans dépendance
-  externe, et les intégrations (`db`, `api`) via Testcontainers (Postgres
-  16 éphémère, un conteneur par run).
+- `pnpm test` couvre les paquets purs (`contracts`, `ui`, `scoring`) sans
+  dépendance externe, et les intégrations (`db`, `api`) via Testcontainers
+  (Postgres 16 éphémère, un conteneur par run).
+- `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
+  de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
 - Deux tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
   activé jusqu'à l'accueil, et inscription → vérification par e-mail (via
   Mailpit) → connexion — voir `e2e/README.md` pour les lancer.
