@@ -8,6 +8,13 @@
       "when": 1789486824697,
       "tag": "0000_dear_albert_cleary",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789543642701,
+      "tag": "0001_competitor_bib_nullable",
+      "breakpoints": true
     }
   ]
 }

@@ -173,7 +173,7 @@ export const competitor = pgTable(
     categoryId: uuid('category_id')
       .notNull()
       .references(() => category.id),
-    bib: integer('bib').notNull(),
+    bib: integer('bib'), // ADR-022 : nullable, attribué manuellement ou en masse (Lot 3)
     firstName: text('first_name').notNull(),
     lastName: text('last_name').notNull(),
     birthYear: integer('birth_year'),

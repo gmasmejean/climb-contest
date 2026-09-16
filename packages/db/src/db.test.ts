@@ -79,7 +79,11 @@ describe('migrations', () => {
 
   it('sont réversibles (down puis up ne changent rien au jeu de tables)', async () => {
     await withRawClient(async (client) => {
-      const reverted = await revertLastMigrations(client, 1)
+      // steps volontairement plus grand que le nombre de migrations
+      // appliquées : revertLastMigrations s'arrête dès qu'il n'y en a plus
+      // (LIMIT), donc ce test reste correct sans être mis à jour à chaque
+      // nouvelle migration ajoutée.
+      const reverted = await revertLastMigrations(client, 50)
       expect(reverted.length).toBeGreaterThan(0)
 
       const afterDown = await client.query(
@@ -94,6 +98,31 @@ describe('migrations', () => {
         "select table_name from information_schema.tables where table_schema = 'public' and table_name != '_migrations_applied'",
       )
       expect(afterUp.rows.length).toBe(15)
+    })
+  })
+})
+
+// Doit tourner avant les tests suivants : ils insèrent des compétiteurs avec
+// `bib = null`, ce que le `down` de cette migration (SET NOT NULL) refuserait.
+describe('migration 0001_competitor_bib_nullable (ADR-022)', () => {
+  it('est réversible : le down réapplique NOT NULL, le up la retire', async () => {
+    await withRawClient(async (client) => {
+      const columnNullable = async () => {
+        const result = await client.query<{ is_nullable: string }>(
+          "select is_nullable from information_schema.columns where table_name = 'competitor' and column_name = 'bib'",
+        )
+        return result.rows[0]?.is_nullable === 'YES'
+      }
+
+      expect(await columnNullable()).toBe(true)
+
+      const reverted = await revertLastMigrations(client, 1)
+      expect(reverted).toEqual(['0001_competitor_bib_nullable.sql'])
+      expect(await columnNullable()).toBe(false)
+
+      const applied = await applyPendingMigrations(client)
+      expect(applied).toEqual(['0001_competitor_bib_nullable.sql'])
+      expect(await columnNullable()).toBe(true)
     })
   })
 })
@@ -261,5 +290,40 @@ describe('unicité compétiteur', () => {
         lastName: 'D',
       }),
     ).rejects.toThrow()
+  })
+
+  it('autorise plusieurs compétiteurs sans dossard (bib null) dans la même compétition (ADR-022)', async () => {
+    const { demoClub, demoUser } = await insertClubAndUser()
+    const [demoCompetition] = await handle.db
+      .insert(competition)
+      .values({
+        clubId: demoClub.id,
+        name: 'Comp bib null',
+        venue: 'Salle',
+        startsOn: '2026-01-01',
+        endsOn: '2026-01-01',
+        format: 'contest',
+        scoringEngineId: 'ffme-difficulty-2026',
+        publicSlug: crypto.randomUUID(),
+        createdBy: demoUser.id,
+      })
+      .returning()
+    if (!demoCompetition) throw new Error('competition insert failed')
+    const [demoCategory] = await handle.db
+      .insert(category)
+      .values({ competitionId: demoCompetition.id, label: 'U16 Homme', sex: 'M', displayOrder: 0 })
+      .returning()
+    if (!demoCategory) throw new Error('category insert failed')
+
+    await handle.db.insert(competitor).values([
+      { competitionId: demoCompetition.id, categoryId: demoCategory.id, firstName: 'A', lastName: 'B' },
+      { competitionId: demoCompetition.id, categoryId: demoCategory.id, firstName: 'C', lastName: 'D' },
+    ])
+
+    const rows = await handle.db.query.competitor.findMany({
+      where: (row, { eq }) => eq(row.competitionId, demoCompetition.id),
+    })
+    expect(rows).toHaveLength(2)
+    expect(rows.every((row) => row.bib === null)).toBe(true)
   })
 })
