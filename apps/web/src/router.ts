@@ -24,6 +24,24 @@ const router = createRouter({
       component: () => import('./pages/Home.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/competitions',
+      name: 'competition-list',
+      component: () => import('./pages/competitions/CompetitionList.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/competitions/new',
+      name: 'competition-create',
+      component: () => import('./pages/competitions/CompetitionCreate.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/competitions/:id',
+      name: 'competition-detail',
+      component: () => import('./pages/competitions/CompetitionDetail.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

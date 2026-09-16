@@ -1,0 +1,1 @@
+ALTER TABLE "competitor" ALTER COLUMN "bib" DROP NOT NULL;

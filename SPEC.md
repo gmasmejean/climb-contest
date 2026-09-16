@@ -631,16 +631,32 @@ GET    /competitions/:id
 PATCH  /competitions/:id
 POST   /competitions/:id/status          { status }
 
+GET    /competitions/:id/readiness             contrôle « prêt à démarrer ? » (Lot 3)
+
 GET    /competitions/:id/categories
 POST   /competitions/:id/categories
-POST   /competitions/:id/competitors/import    (CSV, dry-run par défaut)
+POST   /competitions/:id/categories/template   modèle FFME (U12 à Vétéran × H/F)
+PATCH  /competitions/:id/categories/:cid
+DELETE /competitions/:id/categories/:cid       bloqué si des compétiteurs y sont rattachés
+POST   /competitions/:id/categories/reorder    { orderedIds }
+
+POST   /competitions/:id/competitors/import    { csv, mode: 'preview' | 'commit' }
+POST   /competitions/:id/competitors/assign-bibs
 GET    /competitions/:id/competitors
 POST   /competitions/:id/competitors
+PATCH  /competitions/:id/competitors/:cid
+DELETE /competitions/:id/competitors/:cid
 GET    /competitions/:id/routes
 POST   /competitions/:id/routes
-POST   /competitions/:id/routes/:rid/video     (upload ou lien)
-GET    /competitions/:id/rounds
+PATCH  /competitions/:id/routes/:rid
+POST   /competitions/:id/routes/reorder        { orderedIds } — renumérote
+POST   /competitions/:id/routes/:rid/video     (upload ou lien — Lot 9)
+GET    /competitions/:id/rounds                format phases uniquement
 POST   /competitions/:id/rounds
+PATCH  /competitions/:id/rounds/:rid
+POST   /competitions/:id/rounds/reorder        { orderedIds }
+GET    /competitions/:id/rounds/:rid/routes
+PUT    /competitions/:id/rounds/:rid/routes    { assignments: [{routeId, categoryId}] }
 GET    /competitions/:id/judges
 POST   /competitions/:id/judges                → renvoie token + PIN UNE FOIS
 POST   /competitions/:id/judges/:jid/revoke

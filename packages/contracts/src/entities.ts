@@ -29,12 +29,36 @@ import { createSelectSchema } from 'drizzle-zod'
 import { z } from 'zod'
 
 export const clubSchema = createSelectSchema(club)
-export const competitionSchema = createSelectSchema(competition)
-export const categorySchema = createSelectSchema(category)
-export const competitorSchema = createSelectSchema(competitor)
+
+/**
+ * Les colonnes à choix fermé sont des `text` + `CHECK` SQL en base
+ * (ADR-018 : pas d'ENUM Postgres natif), donc invisibles pour l'inférence
+ * automatique de `drizzle-zod` — chacune est affinée explicitement ici vers
+ * l'union littérale réelle plutôt que le `string` généré par défaut
+ * (CLAUDE.md : « si le typage résiste, corrige le modèle »).
+ */
+export const competitionSchema = createSelectSchema(competition, {
+  format: z.enum(['contest', 'phases']),
+  status: z.enum(['draft', 'open', 'running', 'closed', 'archived']),
+})
+export type Competition = z.infer<typeof competitionSchema>
+export const categorySchema = createSelectSchema(category, {
+  sex: z.enum(['M', 'F', 'X']),
+})
+export type Category = z.infer<typeof categorySchema>
+export const competitorSchema = createSelectSchema(competitor, {
+  status: z.enum(['registered', 'present', 'withdrawn', 'disqualified']),
+})
+export type Competitor = z.infer<typeof competitorSchema>
 export const routeSchema = createSelectSchema(route)
+export type Route = z.infer<typeof routeSchema>
 export const routeCategorySchema = createSelectSchema(routeCategory)
-export const roundSchema = createSelectSchema(round)
+export const roundSchema = createSelectSchema(round, {
+  type: z.enum(['qualification', 'semifinal', 'final']),
+  style: z.enum(['flash', 'onsight']),
+  status: z.enum(['draft', 'open', 'closed', 'published']),
+})
+export type Round = z.infer<typeof roundSchema>
 export const roundRouteSchema = createSelectSchema(roundRoute)
 export const judgeSchema = createSelectSchema(judge)
 export const judgeRouteSchema = createSelectSchema(judgeRoute)

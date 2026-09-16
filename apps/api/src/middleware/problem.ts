@@ -1,6 +1,8 @@
 import type { Context } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 
+import { isInvalidTextRepresentation } from '../lib/pg-errors'
+
 export type ProblemStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 429 | 500
 
 export class ApiError extends Error {
@@ -30,6 +32,9 @@ export function errorHandler(err: Error, c: Context): Response | Promise<Respons
   }
   if (err instanceof HTTPException) {
     return problem(c, err.status as ProblemStatus, err.message || 'Erreur')
+  }
+  if (isInvalidTextRepresentation(err)) {
+    return problem(c, 400, 'Identifiant invalide', "Cet identifiant n'a pas le format attendu.")
   }
   console.error(err)
   return problem(c, 500, 'Erreur interne', "Une erreur inattendue s'est produite.")

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue'
+import { computed, useId, useTemplateRef } from 'vue'
 
 const props = withDefaults(
   defineProps<{
     modelValue: string
     label: string
-    type?: 'text' | 'email' | 'password'
+    type?: 'text' | 'email' | 'password' | 'date'
     error?: string | undefined
     hint?: string | undefined
     required?: boolean
@@ -22,11 +22,18 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const id = useId()
 const errorId = computed(() => `${id}-error`)
 const hintId = computed(() => `${id}-hint`)
-const describedBy = computed(() =>
-  [props.error ? errorId.value : null, props.hint ? hintId.value : null]
-    .filter((value): value is string => value !== null)
-    .join(' ') || undefined,
+const describedBy = computed(
+  () =>
+    [props.error ? errorId.value : null, props.hint ? hintId.value : null]
+      .filter((value): value is string => value !== null)
+      .join(' ') || undefined,
 )
+
+const inputRef = useTemplateRef<HTMLInputElement>('input')
+defineExpose({
+  /** Utilisé par les formulaires de saisie rapide (ROADMAP.md Lot 3) qui gardent le focus après ajout. */
+  focus: () => inputRef.value?.focus(),
+})
 </script>
 
 <template>
@@ -37,6 +44,7 @@ const describedBy = computed(() =>
     </label>
     <input
       :id="id"
+      ref="input"
       :type="type"
       :value="modelValue"
       :required="required"
