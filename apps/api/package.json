@@ -14,6 +14,7 @@
   "dependencies": {
     "@climbcontest/contracts": "workspace:*",
     "@climbcontest/db": "workspace:*",
+    "@climbcontest/scoring": "workspace:*",
     "@hono/node-server": "2.1.1",
     "@hono/zod-validator": "0.9.1",
     "argon2": "0.45.1",
@@ -23,12 +24,14 @@
     "hono-rate-limiter": "0.5.4",
     "jose": "6.2.12",
     "nodemailer": "10.0.10",
+    "papaparse": "5.7.0",
     "pg": "8.23.0",
     "pino": "10.3.1",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "12.1.0",
+    "@types/papaparse": "5.5.2",
     "@types/pg": "8.23.1",
     "esbuild": "0.28.2",
     "pino-pretty": "13.1.3",

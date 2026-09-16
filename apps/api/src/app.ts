@@ -9,7 +9,12 @@ import type { Logger } from './lib/logger'
 import type { Mailer } from './lib/mailer'
 import { errorHandler } from './middleware/problem'
 import { createAuthRoutes } from './routes/auth'
+import { createCategoryRoutes } from './routes/categories'
+import { createCompetitionRoutes } from './routes/competitions'
+import { createCompetitorRoutes } from './routes/competitors'
 import { createHealthRoute } from './routes/health'
+import { createRoundRoutes } from './routes/rounds'
+import { createRouteRoutes } from './routes/routes'
 
 export interface AppDeps {
   env: Env
@@ -30,7 +35,10 @@ export function createApp(deps: AppDeps): Hono {
     }),
   )
   if (deps.env.NODE_ENV !== 'test') {
-    app.use('*', loggerMiddleware((message) => deps.logger.info(message)))
+    app.use(
+      '*',
+      loggerMiddleware((message) => deps.logger.info(message)),
+    )
   }
   app.onError(errorHandler)
 
@@ -44,6 +52,13 @@ export function createApp(deps: AppDeps): Hono {
       accessTokenSigner: deps.accessTokenSigner,
     }),
   )
+
+  const scopedDeps = { db: deps.db, accessTokenSigner: deps.accessTokenSigner }
+  app.route('/api/v1/competitions', createCompetitionRoutes(scopedDeps))
+  app.route('/api/v1/competitions/:id/categories', createCategoryRoutes(scopedDeps))
+  app.route('/api/v1/competitions/:id/competitors', createCompetitorRoutes(scopedDeps))
+  app.route('/api/v1/competitions/:id/routes', createRouteRoutes(scopedDeps))
+  app.route('/api/v1/competitions/:id/rounds', createRoundRoutes(scopedDeps))
 
   return app
 }
