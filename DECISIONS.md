@@ -969,6 +969,127 @@ qui aurait échoué.
 
 ---
 
+## ADR-029 — `POST /judge/ascents` : un seul passage par requête, pas de lot batch avant le hors ligne
+
+**Date :** 2026-09-17
+**Contexte :** Lot 5 est en ligne uniquement ; batcher les écritures n'apporte
+aucun bénéfice tant qu'il n'y a pas de file locale à vider.
+
+**Décision :** l'endpoint de création de passage (`POST /judge/ascents`)
+accepte un seul `ascent` par appel. Le Lot 6 introduira `POST
+/judge/ascents/batch` aux côtés de la file de synchronisation hors ligne,
+sans remplacer cet endpoint — les deux coexisteront : saisie isolée en
+ligne, lot au retour de connexion.
+
+**Options écartées :** concevoir dès maintenant un endpoint batch « au cas
+où » — rejeté, contraire à `CLAUDE.md` (« un lot à la fois »).
+
+---
+
+## ADR-030 — Ouverture d'un tour : débloquée au minimum pour le Lot 5, le pilotage complet reste au Lot 8
+
+**Date :** 2026-09-17
+**Contexte :** en démarrant le Lot 5, constat qu'aucun tour ne peut jamais
+atteindre `status = 'open'` dans le code existant — `round.status` vaut
+`'draft'` à la création (tour explicite en format phases, comme round
+implicite en format contest, ADR-023) et aucune route n'expose de
+transition. `ROADMAP.md` attribue explicitement « ouverture/clôture des
+tours, publication des résultats » au Lot 8. Sans déblocage, aucun juge ne
+peut jamais voir un tour ouvert : le Lot 5 ne serait démontrable dans aucun
+navigateur, ce qui contredit « définition de terminé » point 1 de
+`CLAUDE.md`.
+
+**Décision :** débloquer strictement la colonne déjà modélisée depuis le
+Lot 1, sans construire la moindre pièce du tableau de bord Lot 8 (garde-fous
+de transition, alertes, historique, publication des résultats) :
+
+- **Format phases :** `status` ajouté à `updateRoundInputSchema`
+  (`packages/contracts/src/round.ts`), accepté par le `PATCH
+  /competitions/:id/rounds/:roundId` déjà existant — aucune nouvelle route,
+  aucun bouton ajouté à `RoundsTab.vue` (l'organisateur n'a donc pour
+  l'instant aucun moyen dans l'écran de le faire lui-même ; un appel API
+  direct est nécessaire jusqu'au Lot 8).
+- **Format contest :** le round implicite (invisible à l'organisateur,
+  ADR-023, sans écran « Tours » pour l'ouvrir) passe automatiquement à
+  `open` quand `POST /competitions/:id/status` fait passer la compétition à
+  `running` (`apps/api/src/routes/competitions.ts`) — cohérent avec le
+  principe déjà posé par ADR-023 que ce round est de la plomberie
+  automatique, jamais une action organisateur explicite.
+
+**Options écartées :** ajouter un bouton « ouvrir »/« clôturer » dans
+`RoundsTab.vue` pour le format phases — discuté avec l'utilisateur, écarté
+pour ne pas empiéter davantage sur le périmètre UI explicitement attribué au
+Lot 8 ; la vérification manuelle du Lot 5 en navigateur ouvre le tour de
+test par un appel API direct plutôt que par un bouton.
+
+**Conséquence :** le vrai pilotage (garde-fous, alertes, publication) reste
+entièrement à construire au Lot 8, qui devra aussi décider s'il expose une
+transition `open → closed → published` pour le format contest ou si le
+round implicite se referme avec la compétition elle-même — noté dans
+`TODO.md`.
+
+---
+
+## ADR-031 — `ascent.superseded_by` : clé étrangère rendue différable (`DEFERRABLE INITIALLY DEFERRED`)
+
+**Date :** 2026-09-17
+**Contexte :** en implémentant la correction du juge (`POST
+/judge/ascents/last/correct`, Lot 5), premier code du projet à réellement
+chaîner une correction (`ancien.superseded_by = nouveau.id`). Deux
+contraintes non différables du modèle (SPEC.md § 5, ADR-002) se
+contredisent à l'écriture :
+
+- l'index partiel `ascent_active_key` (`UNIQUE (round_id, route_id,
+  competitor_id) WHERE superseded_by IS NULL AND conflict_group IS NULL`)
+  exige que l'ANCIENNE ligne sorte de l'unicité (en lui donnant un
+  `superseded_by`) AVANT que la NOUVELLE n'y entre — sinon les deux se
+  disputent la même clé ;
+- la clé étrangère `ascent_superseded_by_ascent_id_fk` exige que la ligne
+  référencée par `superseded_by` existe déjà — donc que la NOUVELLE ligne
+  soit insérée AVANT que l'ANCIENNE ne la référence.
+
+Chaque contrainte impose l'ordre inverse de l'autre : sans intervention,
+aucun ordre d'écriture ne satisfait les deux à la fois. Un index partiel ne
+peut pas être rendu différable en PostgreSQL (seules les contraintes
+ajoutées via `ADD CONSTRAINT` le peuvent, pas les `CREATE INDEX ... WHERE
+...`) — testé aussi une CTE inscriptible combinant `UPDATE`+`INSERT` en une
+seule requête, dans l'espoir que les contraintes ne soient vérifiées qu'à la
+fin de la requête complète : échoue à l'identique en pratique, PostgreSQL ne
+donne aucune garantie sur la visibilité mutuelle de deux sous-requêtes
+manipulant la même table dans un même `WITH`.
+
+**Décision :** rendre la clé étrangère différable
+(`DEFERRABLE INITIALLY DEFERRED`), seule des deux contraintes qui le
+permette. Migration `packages/db/drizzle/0004_ascent_superseded_by_deferrable.sql`
+(+ `.down.sql`), écrite à la main comme les migrations « down » d'ADR-018 —
+l'API `references()`/`foreignKey()` de Drizzle Kit (version utilisée par ce
+projet) n'expose aucune option `DEFERRABLE`, donc rien à diffuser depuis
+`schema.ts` : cette migration n'apparaît pas dans `drizzle/meta/_journal.json`
+(comme les fichiers `.down.sql`), puisqu'elle ne correspond à aucun
+changement de `schema.ts`. L'ordre d'écriture devient : `UPDATE` de
+l'ancienne ligne (`superseded_by = <id généré côté client pour la
+nouvelle>`, FK vérifiée seulement au `COMMIT`, retire immédiatement la ligne
+de l'index partiel), puis `INSERT` de la nouvelle ligne (n'entre en conflit
+avec rien, l'ancienne est déjà sortie de l'index) — voir
+`apps/api/src/routes/judge-ascents.ts`.
+
+**Risque assumé et noté (TODO.md) :** un futur `drizzle-kit generate` ne
+connaît pas ce `DEFERRABLE` (absent de `schema.ts`) — à vérifier qu'il ne
+choisit pas par erreur le même numéro `0004` si le dossier `drizzle/` n'est
+pas encore synchronisé au moment où quelqu'un le lance.
+
+**Options écartées :**
+
+- CTE inscriptible combinant les deux écritures en une seule requête —
+  testée, ne fonctionne pas (voir ci-dessus).
+- Sortir l'ancienne ligne de l'unicité autrement qu'en pointant
+  `superseded_by` vers la nouvelle (ex. un champ intermédiaire) — rejeté,
+  complique le modèle pour contourner un problème que `DEFERRABLE` résout
+  proprement et durablement (utile aussi au Lot 8, qui chaînera les
+  corrections organisateur de la même façon).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la

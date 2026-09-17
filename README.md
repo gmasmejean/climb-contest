@@ -66,10 +66,12 @@ Voir `SPEC.md` § 6.2. En bref :
 
 ```
 apps/api        Hono — API HTTP, auth organisateur, préparation de compétition
-                (Lot 3), juges et accès juge (Lot 4)
+                (Lot 3), juges et accès juge (Lot 4), saisie des passages par
+                le juge en ligne (Lot 5)
 apps/web        Vue 3 + Vite — PWA (auth, espace organisateur : compétitions,
                 catégories, compétiteurs, voies, tours, juges — Lot 3/4 ;
-                accès juge `/j/<token>` — Lot 4)
+                accès juge `/j/<token>` — Lot 4 ; ses voies, saisie et
+                correction d'un passage — Lot 5)
 packages/db     Schéma Drizzle, migrations, seed
 packages/contracts   Schémas Zod partagés (entités + payloads d'API)
 packages/ui     Composants Vue partagés (bouton, champ, modale…)

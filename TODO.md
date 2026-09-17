@@ -119,3 +119,46 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   SMTP/Mailpit** — `FakeMailer` seulement (même limite que les e-mails
   d'ADR-019). Si le gabarit HTML casse avec un vrai client mail, ça ne sera
   pas détecté avant une compétition réelle.
+
+## Depuis le Lot 5
+
+- **File d'attente hors ligne et durabilité des échecs de synchronisation.**
+  Lot 5 est en ligne uniquement : un échec réseau à la validation d'un
+  passage laisse la ligne dans un état d'erreur *en mémoire seulement* (pas
+  persisté), avec un bouton de réessai manuel. Si l'onglet est fermé ou
+  l'appareil redémarre avant réessai réussi, la saisie est perdue et devra
+  être ressaisie. La durabilité complète (survie à la fermeture d'onglet,
+  file IndexedDB, retries automatiques) est le Lot 6.
+- **Plusieurs tours ouverts simultanément sur la même voie.** Non détecté ni
+  signalé : `GET /judge/routes` et `GET /judge/routes/:routeId` résolvent
+  silencieusement le premier tour ouvert trouvé (`order by display_order`).
+  Assumé hors périmètre par décision explicite pour ce lot.
+- **`POST /judge/ascents/batch`** — endpoint batch pour la synchronisation
+  hors ligne, Lot 6 (voir DECISIONS.md ADR-029).
+- **Motif obligatoire sur les corrections organisateur** (au-delà de la
+  fenêtre du juge) — Lot 8, pas construit ici ; les CHECK
+  `ascent_status_shape_check`/`ascent_recorded_by_check` supportent déjà
+  `recordedByUserId` pour cette saisie de secours, mais aucune route
+  organisateur ne l'utilise encore.
+- **Recherche compétiteur floue/normalisée** (accents, fautes de frappe) sur
+  l'écran voie du juge — filtrage naïf pour ce lot, à revoir si un club
+  signale un vrai problème d'usage.
+- **Vibration/Wake Lock non testés automatiquement** — ni Playwright ni
+  Vitest ne peuvent réellement exercer `navigator.vibrate`/Wake Lock dans un
+  navigateur headless de façon fiable ; vérification manuelle uniquement, à
+  noter comme limite connue de la couverture de test de ce lot.
+- **Migration `0004_ascent_superseded_by_deferrable` absente de
+  `drizzle/meta/_journal.json`** (DECISIONS.md ADR-031) — elle ne correspond
+  à aucun changement de `schema.ts` (Drizzle Kit ne sait pas exprimer
+  `DEFERRABLE`), donc rien à générer. Vérifier qu'un futur `drizzle-kit
+  generate` ne réutilise pas par erreur le numéro `0004` s'il ne scanne pas
+  le contenu réel du dossier `drizzle/` pour choisir le prochain indice.
+- **Ouverture/clôture des tours : seulement débloquée au minimum**
+  (DECISIONS.md ADR-030). Format phases : `status` accepté par le `PATCH
+  .../rounds/:roundId` générique, mais aucun bouton dans `RoundsTab.vue` —
+  un organisateur ne peut pas encore ouvrir un tour depuis l'écran, seulement
+  par un appel API direct. Format contest : le round implicite s'ouvre
+  automatiquement quand la compétition passe à `running`, mais rien ne le
+  referme (le Lot 8 devra décider s'il se clôture avec la compétition ou
+  reste ouvert). Le vrai tableau de bord (garde-fous, alertes, historique,
+  publication des résultats) est entièrement à construire au Lot 8.
