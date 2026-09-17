@@ -9,7 +9,13 @@ import { ref } from 'vue'
 import { accessToken } from './session'
 import { apiFetch, ApiError } from './client'
 
-export type JudgeWithRoutes = JudgeSummary & { routeIds: string[] }
+// `accessUrl`/`pin` ne sont présents que si `competition.judgeCredentialsStored`
+// était actif au moment de l'action qui les a produits (DECISIONS.md ADR-027).
+export type JudgeWithRoutes = JudgeSummary & {
+  routeIds: string[]
+  accessUrl?: string
+  pin?: string
+}
 
 const json = (body: unknown) => JSON.stringify(body)
 
@@ -21,9 +27,9 @@ const json = (body: unknown) => JSON.stringify(body)
  * `CompetitionDetail.vue` (`v-else-if`), ce qui viderait un état local avant
  * même que l'organisateur ait pu télécharger la planche.
  */
-export const revealedJudgeTokens = ref<{ competitionId: string; judgeId: string; accessToken: string }[]>(
-  [],
-)
+export const revealedJudgeTokens = ref<
+  { competitionId: string; judgeId: string; accessToken: string }[]
+>([])
 
 export const judgesApi = {
   list: (competitionId: string) =>
@@ -44,10 +50,11 @@ export const judgesApi = {
     ),
   /**
    * Réponse binaire (PDF), pas JSON — n'utilise pas `apiFetch`. Le serveur
-   * ne connaît un jeton d'accès juge en clair qu'à sa création (SPEC.md § 5),
-   * donc seuls les juges de `judges` (fournis avec le jeton tout juste
-   * révélé, tenu en mémoire par `JudgesTab.vue`) apparaissent en encart
-   * individuel ; les autres ne figurent que via la page QR publique.
+   * inclut automatiquement tout juge dont le jeton est stocké en clair
+   * (DECISIONS.md ADR-027) ; `judges` ne sert qu'à fournir, en plus, le
+   * jeton des juges encore tenus en mémoire par `JudgesTab.vue` pour cette
+   * session mais pas stockés côté serveur (ADR-026). Un juge ni stocké ni
+   * fourni ici ne figure que via la page QR publique de la planche.
    */
   async downloadQrSheet(
     competitionId: string,
