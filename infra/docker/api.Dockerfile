@@ -30,6 +30,8 @@ COPY apps/api apps/api
 COPY apps/web apps/web
 COPY packages/contracts packages/contracts
 COPY packages/db packages/db
+COPY packages/scoring packages/scoring
+COPY packages/sync packages/sync
 COPY packages/ui packages/ui
 
 FROM source AS web-build
