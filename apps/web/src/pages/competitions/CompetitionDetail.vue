@@ -8,6 +8,7 @@ import { competitionsApi } from '../../api/competitions'
 import CategoriesTab from './tabs/CategoriesTab.vue'
 import CompetitorsTab from './tabs/CompetitorsTab.vue'
 import InfosTab from './tabs/InfosTab.vue'
+import JudgesTab from './tabs/JudgesTab.vue'
 import ReadinessTab from './tabs/ReadinessTab.vue'
 import RoundsTab from './tabs/RoundsTab.vue'
 import RoutesTab from './tabs/RoutesTab.vue'
@@ -35,6 +36,7 @@ const tabs = computed(() => {
   if (competition.value?.format === 'phases') {
     base.push({ id: 'rounds', label: 'Tours' })
   }
+  base.push({ id: 'judges', label: 'Juges' })
   base.push({ id: 'readiness', label: 'Prêt à démarrer ?' })
   return base
 })
@@ -61,6 +63,7 @@ const tabs = computed(() => {
       <CompetitorsTab v-else-if="activeTab === 'competitors'" :competition-id="competitionId" />
       <RoutesTab v-else-if="activeTab === 'routes'" :competition-id="competitionId" />
       <RoundsTab v-else-if="activeTab === 'rounds'" :competition-id="competitionId" />
+      <JudgesTab v-else-if="activeTab === 'judges'" :competition="competition" />
       <ReadinessTab v-else-if="activeTab === 'readiness'" :competition-id="competitionId" />
     </div>
   </main>

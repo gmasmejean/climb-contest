@@ -17,6 +17,7 @@ const checkLabels: Record<string, string> = {
   route_without_category: 'Voies affectées à aucune catégorie',
   competitor_without_bib: 'Compétiteurs sans dossard',
   round_without_route: 'Tours sans aucune voie affectée',
+  route_without_judge: 'Voies sans aucun juge assigné',
 }
 </script>
 
@@ -47,10 +48,6 @@ const checkLabels: Record<string, string> = {
           </ul>
         </li>
       </ul>
-
-      <p class="text-xs text-gray-500">
-        L'assignation des juges (Lot 4) ajoutera une condition supplémentaire à ce contrôle.
-      </p>
     </template>
   </div>
 </template>

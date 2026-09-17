@@ -42,6 +42,18 @@ const router = createRouter({
       component: () => import('./pages/competitions/CompetitionDetail.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      // Pas de compte, pas de session organisateur (SPEC.md § 3.2) : ni
+      // `requiresAuth` ni `guestOnly`, ce garde ne les concerne pas.
+      path: '/j/:token',
+      name: 'judge-access',
+      component: () => import('./pages/judge/JudgeAccess.vue'),
+    },
+    {
+      path: '/j/home',
+      name: 'judge-home',
+      component: () => import('./pages/judge/JudgeHome.vue'),
+    },
   ],
 })
 
