@@ -361,6 +361,13 @@ export const ascent = pgTable(
     syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
     deviceId: text('device_id').notNull(),
     // ADR (SPEC.md § 5) : correction par chaînage, jamais d'écrasement.
+    // DECISIONS.md ADR-031 : en base, cette FK est `DEFERRABLE INITIALLY
+    // DEFERRED` (migration `0004_ascent_superseded_by_deferrable`, écrite à
+    // la main — l'API `references()` de Drizzle Kit ne sait pas exprimer
+    // `DEFERRABLE`). Nécessaire pour chaîner une correction : l'ancienne
+    // ligne doit être retirée de `ascent_active_key` (index partiel, jamais
+    // différable) avant que la nouvelle n'y entre, donc avant que la
+    // nouvelle ligne n'existe.
     supersededBy: uuid('superseded_by').references((): AnyPgColumn => ascent.id),
     // ADR-002 : marque une saisie contradictoire, sort temporairement de
     // l'unicité (round_id, route_id, competitor_id).
