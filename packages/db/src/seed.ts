@@ -170,7 +170,9 @@ async function main(): Promise<void> {
           displayName: data.name,
           accessTokenHash: hashToken(accessToken),
           accessTokenPrefix: accessToken.slice(0, 8),
+          accessTokenPlain: accessToken,
           pinHash: await hashPassword(pin),
+          pinPlain: pin,
         })
         .returning()
       if (!createdJudge) throw new Error(`Échec de la création du juge ${data.name}.`)

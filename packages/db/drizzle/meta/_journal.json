@@ -22,6 +22,13 @@
       "when": 1789564144806,
       "tag": "0002_judge_pin_optional",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789637754208,
+      "tag": "0003_judge_credentials_plaintext",
+      "breakpoints": true
     }
   ]
 }

@@ -180,6 +180,42 @@ describe('migration 0002_judge_pin_optional (DECISIONS.md ADR-026)', () => {
   })
 })
 
+describe('migration 0003_judge_credentials_plaintext (DECISIONS.md ADR-027)', () => {
+  it('est réversible : le down retire les colonnes en clair, le up les recrée', async () => {
+    await withRawClient(async (client) => {
+      const columnExists = async (table: string, column: string) => {
+        const result = await client.query(
+          'select column_name from information_schema.columns where table_name = $1 and column_name = $2',
+          [table, column],
+        )
+        return result.rows.length > 0
+      }
+      const allColumnsExist = async () =>
+        (await columnExists('judge', 'access_token_plain')) &&
+        (await columnExists('judge', 'pin_plain')) &&
+        (await columnExists('competition', 'judge_credentials_stored'))
+
+      expect(await allColumnsExist()).toBe(true)
+
+      const reverted: string[] = []
+      while (await allColumnsExist()) {
+        const [name] = await revertLastMigrations(client, 1)
+        if (!name)
+          throw new Error('Plus de migration à annuler avant 0003_judge_credentials_plaintext.')
+        reverted.push(name)
+      }
+      expect(reverted.at(-1)).toBe('0003_judge_credentials_plaintext.sql')
+      expect(await columnExists('judge', 'access_token_plain')).toBe(false)
+      expect(await columnExists('judge', 'pin_plain')).toBe(false)
+      expect(await columnExists('competition', 'judge_credentials_stored')).toBe(false)
+
+      const applied = await applyPendingMigrations(client)
+      expect(applied).toEqual([...reverted].reverse())
+      expect(await allColumnsExist()).toBe(true)
+    })
+  })
+})
+
 describe('contraintes et colonne calculée ascent', () => {
   async function setupAscentFixture() {
     const { demoClub, demoUser } = await insertClubAndUser()

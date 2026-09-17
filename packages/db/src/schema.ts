@@ -108,6 +108,12 @@ export const competition = pgTable(
     // ADR-026) — changer ce réglage n'a aucun effet rétroactif sur les juges
     // déjà créés.
     judgePinRequired: boolean('judge_pin_required').notNull().default(false),
+    // ADR-027 : conserve le PIN/token en clair pour réaffichage organisateur.
+    // Vrai par défaut (ergonomie prioritaire pour les petits clubs). Passer à
+    // faux efface rétroactivement le clair déjà stocké pour cette compétition
+    // (routes/competitions.ts) ; passer à vrai ne s'applique qu'aux actions
+    // futures (création, régénération de PIN).
+    judgeCredentialsStored: boolean('judge_credentials_stored').notNull().default(true),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => user.id),
@@ -284,6 +290,12 @@ export const judge = pgTable('judge', {
   // de la compétition, désactivée par défaut. `pinHash === null` signifie
   // que ce juge est accessible par le lien seul.
   pinHash: text('pin_hash'),
+  // ADR-027 : copie en clair, uniquement si `competition.judge_credentials_stored`
+  // était vrai au moment de l'action (création, ou régénération pour pinPlain).
+  // Sert exclusivement à réafficher l'accès à l'organisateur — jamais utilisée
+  // pour l'authentification, qui reste sur les colonnes *_hash ci-dessus.
+  accessTokenPlain: text('access_token_plain'),
+  pinPlain: text('pin_plain'),
   pinAttempts: integer('pin_attempts').notNull().default(0),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
