@@ -82,12 +82,13 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   l'utilisateur). Si le besoin apparaît (ex. un juge exposé publiquement a
   finalement besoin d'un PIN en cours d'événement), prévoir une action
   dédiée plutôt que de réutiliser « régénérer ».
-- **La planche de QR codes ne peut inclure en encart individuel que les
-  juges créés dans la session en cours** (ADR-026, décision 5) — le serveur
-  ne conserve jamais un jeton d'accès en clair. `JudgesTab.vue` prévient
-  l'organisateur quand la planche est incomplète, mais rien n'automatise
-  aujourd'hui un rappel « pensez à télécharger la planche avant de
-  recharger la page ».
+- ~~La planche de QR codes ne peut inclure en encart individuel que les
+  juges créés dans la session en cours~~ Résolu pour le cas par défaut par
+  ADR-027 : un juge dont le jeton est stocké en clair est inclus
+  automatiquement. Reste vrai uniquement pour une compétition avec
+  `judgeCredentialsStored` désactivé (ADR-026, décision 5) — `JudgesTab.vue`
+  prévient alors l'organisateur, mais rien n'automatise un rappel « pensez à
+  télécharger la planche avant de recharger la page » pour ce cas restant.
 - **La page QR publique de la planche pointe vers `/c/<slug>`, qui n'existe
   pas avant le Lot 7.** Le lien est correct (le `public_slug` existe depuis
   le Lot 1) mais mène à un 404 tant que la page publique n'est pas
@@ -104,3 +105,17 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   concerné — Lot 4 ajoute 4 fichiers de test à `apps/api` avec conteneur
   dédié chacun (10 au total dans ce paquet), ce qui augmente la charge
   simultanée. À surveiller au prochain lot si la CI devient flaky.
+- **`judgeCredentialsStored` (ADR-027) est un réglage par compétition, pas
+  par juge.** Un club qui veut conserver le clair pour la plupart de ses
+  juges mais pas pour un juge particulier (ex. accès affiché publiquement)
+  doit gérer ça à la main (créer ce juge pendant que le réglage est
+  désactivé). Tranché ainsi avec l'utilisateur — pas un oubli, mais noté si
+  le besoin d'un réglage plus fin apparaît.
+- **Pas de test e2e Playwright pour le flux « voir l'accès » / e-mail
+  juge**, contrairement à Lot 1 (`e2e/login.spec.ts`) — couvert par les
+  tests d'intégration API (`judges.test.ts`) et une vérification manuelle en
+  navigateur pendant la session, pas par un test automatisé permanent.
+- **L'e-mail d'accès juge (ADR-028) n'a pas de test avec un vrai serveur
+  SMTP/Mailpit** — `FakeMailer` seulement (même limite que les e-mails
+  d'ADR-019). Si le gabarit HTML casse avec un vrai client mail, ça ne sera
+  pas détecté avant une compétition réelle.

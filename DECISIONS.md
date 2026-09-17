@@ -862,6 +862,113 @@ l'organisateur perd le PIN d'un juge en cours de compétition ?**
 
 ---
 
+## ADR-027 — PIN et token juge conservés en clair, consultables à tout moment (option par compétition, activée par défaut)
+
+**Date :** 2026-09-17
+**Contexte :** demande explicite de l'utilisateur après un premier essai du
+Lot 4 : pour un petit club qui organise des contests sans enjeu important,
+devoir noter le lien et le PIN de chaque juge au moment précis de sa
+création (avant qu'ils ne disparaissent, ADR-026) est peu ergonomique —
+surtout en créant plusieurs juges d'affilée. L'utilisateur demande de les
+conserver en clair par défaut, consultables à tout moment depuis l'écran
+organisateur, avec une option pour revenir au comportement du Lot 4 (haché
+uniquement) si besoin.
+
+**Objection soulevée avant implémentation** : conserver ces secrets en clair
+en base affaiblit la garantie de `SPEC.md` § 5/§ 6.4 (« en base, seuls les
+hachés argon2id ») — une fuite de la base ou d'une sauvegarde mal protégée
+donne alors un accès direct à tous les juges de la compétition, au lieu de
+nécessiter une attaque par force brute coûteuse contre un hash. Objection
+maintenue mais non bloquante : l'utilisateur assume ce compromis pour son
+cas d'usage réel (contests informels), et l'implémentation ci-dessous garde
+deux garde-fous décidés unilatéralement pour limiter le risque résiduel,
+sans redemander :
+
+- masqué par défaut dans la liste des juges (bouton « Voir l'accès », pas
+  affiché en permanence à l'écran) ;
+- désactiver l'option **efface rétroactivement** le clair déjà stocké pour
+  la compétition — sinon le bouton « désactiver » ne protégerait rien pour
+  les juges déjà créés.
+
+**Décision 1 — portée : par compétition, comme `judgePinRequired`.**
+`competition.judge_credentials_stored` (`boolean`, défaut `true`), dans le
+même onglet Juges que le réglage PIN, éditable à tout moment. Option
+écartée : un réglage global au déploiement — l'utilisateur a préféré
+qu'un même club puisse choisir différemment selon la compétition (un
+contest informel vs. une compétition plus officielle).
+
+**Décision 2 — colonnes séparées, jamais utilisées pour l'authentification.**
+`judge.access_token_plain`/`judge.pin_plain` (nullable) s'ajoutent à
+`access_token_hash`/`pin_hash`, qui restent l'unique source de vérité pour
+`POST /judge/auth` et `requireJudge` (`apps/api/src/middleware/judge-auth.ts`,
+`routes/judge-auth.ts` — aucun changement). Les colonnes `*_plain` ne
+servent qu'à réafficher l'accès à l'organisateur
+(`routes/judges.ts#toDetail`). Option écartée : chiffrement réversible du
+hash plutôt qu'une copie en clair séparée — inutile ici, la demande est
+explicitement d'avoir le clair, pas de le retrouver depuis le hash ; une
+colonne séparée est aussi plus simple à effacer sélectivement (décision 4)
+sans toucher au mécanisme d'authentification.
+
+**Décision 3 — fixé par juge à l'action qui le produit, pas par la
+compétition en continu.** Comme pour `judgePinRequired` (ADR-026), la
+conservation en clair suit le réglage de la compétition **au moment de
+l'action** (création ; régénération de PIN, qui suit le réglage _courant_,
+pas celui de la création du juge — c'est une action ponctuelle, pas une
+propriété figée du juge). Changer le réglage n'affecte jamais un juge déjà
+créé pour l'action de création, mais s'applique à la prochaine régénération.
+
+**Décision 4 — désactiver la conservation efface rétroactivement, activer
+ne s'applique qu'aux actions futures.** `PATCH /competitions/:id` avec
+`judgeCredentialsStored: false` met à `NULL`
+`access_token_plain`/`pin_plain` pour tous les juges de la compétition, dans
+la même transaction que la mise à jour du réglage
+(`routes/competitions.ts`). L'inverse (activer) ne peut pas rattraper les
+juges déjà créés : leur clair n'a jamais existé côté serveur, un hash n'est
+pas réversible.
+
+**Décision 5 — un accès révoqué n'a plus de raison de garder son clair.**
+`POST .../judges/:jid/revoke` efface aussi `access_token_plain`/`pin_plain`
+au passage — décision technique dérivée, non redemandée à l'utilisateur :
+un accès mort ne devrait laisser aucun secret inutile traîner en base.
+
+**Conséquence sur la planche de QR codes (ADR-026, Décision 5)** : un juge
+dont le jeton est stocké en clair est désormais inclus automatiquement dans
+`POST .../qrcodes.pdf`, sans que le client ait besoin de le fournir — la
+limitation « seulement les juges de cette session » (ADR-026) ne s'applique
+plus qu'aux juges créés avec `judgeCredentialsStored` désactivé pour cette
+compétition.
+
+---
+
+## ADR-028 — Envoi de l'accès juge par e-mail, sans le PIN
+
+**Date :** 2026-09-17
+**Contexte :** demande explicite de l'utilisateur, dans la continuité de
+ADR-027 : un champ e-mail optionnel à la création d'un juge, qui envoie le
+lien d'accès directement plutôt que de forcer l'organisateur à le
+retransmettre à la main.
+
+**Décision :** `createJudgeInputSchema` accepte un `email` optionnel. Si
+fourni, `POST .../judges` envoie un e-mail (via le `Mailer` existant,
+ADR-019) contenant **uniquement le lien**, jamais le PIN — tranché avec
+l'utilisateur : si la boîte mail du juge est compromise ou l'e-mail mal
+acheminé, les deux facteurs ne doivent pas fuiter ensemble, sinon le PIN
+perd tout son intérêt de second facteur même dans ce flux. Le PIN reste à
+communiquer à part (oralement, ou lu depuis l'écran organisateur via
+« Voir l'accès », ADR-027).
+
+L'envoi est **best-effort, jamais bloquant** : un échec SMTP n'annule pas la
+création du juge (`try/catch` autour de `mailer.send`, `routes/judges.ts`)
+— l'organisateur garde de toute façon l'accès affiché à l'écran. La réponse
+porte un `emailSent: boolean` pour que l'écran organisateur informe
+clairement du résultat plutôt que de laisser croire à un envoi silencieux
+qui aurait échoué.
+
+**Options écartées :** inclure le PIN dans l'e-mail pour plus de confort —
+écartée par l'utilisateur, casse la séparation des deux facteurs.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la

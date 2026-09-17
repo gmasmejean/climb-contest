@@ -93,10 +93,15 @@ Il peut :
 - saisir les voies : numéro, nom optionnel, nombre de prises, catégories
   concernées, secteur/mur, couleur, vidéo d'enchaînement (lien YouTube/Vimeo ou
   fichier téléversé) ;
-- déclarer les juges : nom d'affichage, voies assignées ; le système génère pour
-  chacun un lien d'accès et un QR code, plus un code PIN à 6 chiffres si la
-  compétition l'exige (réglage par compétition, désactivé par défaut — voir
-  §3.2 et `DECISIONS.md` ADR-026) ;
+- déclarer les juges : nom d'affichage, voies assignées, e-mail optionnel (si
+  renseigné, le lien d'accès — jamais le PIN — est envoyé automatiquement,
+  DECISIONS.md ADR-028) ; le système génère pour chacun un lien d'accès et un
+  QR code, plus un code PIN à 6 chiffres si la compétition l'exige (réglage
+  par compétition, désactivé par défaut — voir §3.2 et `DECISIONS.md`
+  ADR-026) ;
+- consulter à tout moment le lien et le PIN d'un juge depuis l'écran
+  organisateur, si la compétition conserve ces accès en clair (réglage par
+  compétition, activé par défaut — voir §6.4 et `DECISIONS.md` ADR-027) ;
 - imprimer une planche de QR codes (juges + accès public) au format A4.
 
 **Piloter le jour J**
@@ -359,6 +364,12 @@ competition
   judge_pin_required (bool)             -- défaut false ; valeur appliquée
                                          -- aux juges créés APRÈS ce réglage,
                                          -- jamais rétroactif (ADR-026)
+  judge_credentials_stored (bool)       -- défaut TRUE ; conserve le PIN/token
+                                         -- en clair pour réaffichage organisateur.
+                                         -- Désactiver efface rétroactivement
+                                         -- le clair déjà stocké ; activer ne
+                                         -- s'applique qu'aux actions futures
+                                         -- (DECISIONS.md ADR-027)
   created_by → user
 
 category
@@ -405,12 +416,21 @@ round_route                             -- quelles voies dans quel tour, pour qu
 judge
   id, competition_id → competition
   display_name
-  access_token_hash                     -- le token en clair n'existe qu'une fois
+  access_token_hash                     -- authentification : source de vérité
   access_token_prefix                   -- 8 car. pour retrouver la ligne
-  pin_hash (nullable)                   -- argon2id ; null = accès par lien
-                                         -- seul (DECISIONS.md ADR-026),
+  access_token_plain (nullable)         -- réaffichage organisateur seulement,
+                                         -- jamais utilisé pour authentifier ;
+                                         -- présent seulement si
+                                         -- competition.judge_credentials_stored
+                                         -- était vrai à la création
+                                         -- (DECISIONS.md ADR-027)
+  pin_hash (nullable)                   -- argon2id, authentification ; null =
+                                         -- accès par lien seul (ADR-026),
                                          -- fixé à la création, jamais changé
                                          -- ensuite par un simple réglage
+  pin_plain (nullable)                  -- même logique que access_token_plain,
+                                         -- suit le réglage ACTUEL à chaque
+                                         -- régénération (ADR-027)
   pin_attempts (int), locked_until (nullable)  -- sans objet si pin_hash null
   revoked_at (nullable)
   last_seen_at (nullable)
@@ -616,6 +636,17 @@ avant d'avoir été acquittée par le serveur. Jamais.
   écrire des passages sur les voies assignées, pour cette compétition,
   jusqu'à la fin de l'événement. L'organisateur peut révoquer un juge à tout
   moment.
+- **Conservation en clair du PIN/token juge (`judge_credentials_stored`,
+  DECISIONS.md ADR-027)** : par défaut, activée — pensé pour un club qui
+  organise des contests sans enjeu important, où retrouver l'accès d'un juge
+  après coup compte plus que la garantie « en base, seuls les hachés »
+  ci-dessus, qui ne s'applique alors qu'à l'authentification elle-même (les
+  colonnes `*_hash` restent la seule source de vérité pour authentifier — les
+  colonnes `*_plain` ne servent qu'au réaffichage organisateur). Masqué par
+  défaut dans l'écran organisateur (action explicite pour le révéler).
+  Désactiver ce réglage efface aussitôt le clair déjà stocké pour la
+  compétition — c'est un choix conscient de l'organisateur, documenté et
+  réversible à la baisse à tout moment.
 - **Public** : `public_slug` non devinable (22 caractères base62). Aucune donnée
   personnelle au-delà de ce qui est affiché : nom, prénom, club, dossard. Pas de
   date de naissance complète, pas de numéro de licence, pas d'e-mail.
@@ -681,17 +712,23 @@ PATCH  /competitions/:id/rounds/:rid
 POST   /competitions/:id/rounds/reorder        { orderedIds }
 GET    /competitions/:id/rounds/:rid/routes
 PUT    /competitions/:id/rounds/:rid/routes    { assignments: [{routeId, categoryId}] }
-GET    /competitions/:id/judges
-POST   /competitions/:id/judges                → renvoie token + PIN (si la
-                                                   compétition l'exige) UNE
-                                                   SEULE FOIS
+GET    /competitions/:id/judges                 accessUrl/pin présents si
+                                                 judge_credentials_stored
+                                                 (ADR-027)
+POST   /competitions/:id/judges                { displayName, routeIds,
+                                                  email? } → renvoie token +
+                                                  PIN (si la compétition
+                                                  l'exige) ; email envoie le
+                                                  lien seul, jamais le PIN
+                                                  (ADR-028)
 POST   /competitions/:id/judges/:jid/revoke
 POST   /competitions/:id/judges/:jid/regenerate-pin   409 si le juge n'a pas
                                                         de PIN (ADR-026)
-POST   /competitions/:id/qrcodes.pdf           un POST, pas un GET : le
-                                                serveur n'a jamais les jetons
-                                                en clair, le client fournit
-                                                ceux qu'il détient encore
+POST   /competitions/:id/qrcodes.pdf           un POST, pas un GET : inclut
+                                                automatiquement les juges dont
+                                                le jeton est stocké en clair
+                                                (ADR-027), plus ceux que le
+                                                client fournit pour les autres
                                                 (ADR-026)
 
 GET    /competitions/:id/dashboard             état temps réel pour l'orga
