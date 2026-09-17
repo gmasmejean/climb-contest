@@ -76,8 +76,16 @@ export const judgeSummarySchema = createSelectSchema(judge)
   .omit({ accessTokenHash: true, pinHash: true, accessTokenPlain: true, pinPlain: true })
   .extend({ hasPin: z.boolean() })
 export type JudgeSummary = z.infer<typeof judgeSummarySchema>
-export const ascentSchema = createSelectSchema(ascent)
-export const ascentEventSchema = createSelectSchema(ascentEvent)
+export const ascentSchema = createSelectSchema(ascent, {
+  modifier: z.enum(['none', 'plus']),
+  status: z.enum(['valid', 'dns', 'dnf', 'dsq']),
+})
+export type Ascent = z.infer<typeof ascentSchema>
+export const ascentEventSchema = createSelectSchema(ascentEvent, {
+  eventType: z.enum(['created', 'corrected', 'voided', 'conflict_resolved']),
+  actorType: z.enum(['judge', 'organizer', 'system']),
+})
+export type AscentEvent = z.infer<typeof ascentEventSchema>
 export const sessionSchema = createSelectSchema(session)
 
 /**
