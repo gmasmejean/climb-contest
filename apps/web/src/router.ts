@@ -54,6 +54,16 @@ const router = createRouter({
       name: 'judge-home',
       component: () => import('./pages/judge/JudgeHome.vue'),
     },
+    {
+      path: '/j/routes/:routeId',
+      name: 'judge-route',
+      component: () => import('./pages/judge/JudgeRoute.vue'),
+    },
+    {
+      path: '/j/routes/:routeId/competitors/:competitorId',
+      name: 'judge-ascent-entry',
+      component: () => import('./pages/judge/JudgeAscentEntry.vue'),
+    },
   ],
 })
 
