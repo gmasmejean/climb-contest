@@ -33,6 +33,9 @@ export const updateCompetitionInputSchema = z
     venue: z.string().trim().min(1).max(200),
     startsOn: z.iso.date(),
     endsOn: z.iso.date(),
+    // Valeur par défaut appliquée aux juges créés APRÈS ce changement —
+    // jamais rétroactif sur les juges déjà créés (DECISIONS.md ADR-026).
+    judgePinRequired: z.boolean(),
   })
   .partial()
   .refine(
@@ -53,6 +56,7 @@ export const readinessCheckIdSchema = z.enum([
   'route_without_category',
   'competitor_without_bib',
   'round_without_route',
+  'route_without_judge',
 ])
 
 export const readinessCheckSchema = z.object({

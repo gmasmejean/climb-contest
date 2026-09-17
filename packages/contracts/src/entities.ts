@@ -62,6 +62,16 @@ export type Round = z.infer<typeof roundSchema>
 export const roundRouteSchema = createSelectSchema(roundRoute)
 export const judgeSchema = createSelectSchema(judge)
 export const judgeRouteSchema = createSelectSchema(judgeRoute)
+
+/**
+ * Vue organisateur exposable au client : jamais `accessTokenHash` ni
+ * `pinHash` (Lot 4). `hasPin` remplace la présence/absence de `pinHash` par
+ * un booléen explicite, sans jamais exposer le hash lui-même.
+ */
+export const judgeSummarySchema = createSelectSchema(judge)
+  .omit({ accessTokenHash: true, pinHash: true })
+  .extend({ hasPin: z.boolean() })
+export type JudgeSummary = z.infer<typeof judgeSummarySchema>
 export const ascentSchema = createSelectSchema(ascent)
 export const ascentEventSchema = createSelectSchema(ascentEvent)
 export const sessionSchema = createSelectSchema(session)
