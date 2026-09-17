@@ -9,7 +9,7 @@ import { fakerFR as faker } from '@faker-js/faker'
 import { eq } from 'drizzle-orm'
 
 import { createDatabase } from './client'
-import { hashPassword, hashToken, randomToken } from './crypto'
+import { hashPassword, hashToken, randomPin, randomToken } from './crypto'
 import {
   category,
   club,
@@ -23,10 +23,6 @@ import {
   routeCategory,
   user,
 } from './schema'
-
-function randomPin(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, '0')
-}
 
 async function main(): Promise<void> {
   const databaseUrl = process.env['DATABASE_URL']
@@ -74,10 +70,12 @@ async function main(): Promise<void> {
         scoringEngineId: 'ffme-difficulty-2026',
         scoringConfig: { routesCounted: 3 },
         publicSlug: randomToken(16),
+        judgePinRequired: true,
         createdBy: owner.id,
       })
       .returning()
-    if (!demoCompetition) throw new Error('Échec de la création de la compétition de démonstration.')
+    if (!demoCompetition)
+      throw new Error('Échec de la création de la compétition de démonstration.')
 
     const categoriesData = [
       { label: 'U16 Homme', sex: 'M' as const, order: 0 },

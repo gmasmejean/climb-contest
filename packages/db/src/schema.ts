@@ -58,9 +58,7 @@ export const user = pgTable(
     // ADR-017 : null = compte inutilisable en connexion (ni vérifié, ni
     // invitation acceptée).
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
-    invitedByUserId: uuid('invited_by_user_id').references(
-      (): AnyPgColumn => user.id,
-    ),
+    invitedByUserId: uuid('invited_by_user_id').references((): AnyPgColumn => user.id),
     pendingTokenHash: text('pending_token_hash'),
     pendingTokenPurpose: text('pending_token_purpose'),
     pendingTokenExpiresAt: timestamp('pending_token_expires_at', { withTimezone: true }),
@@ -106,6 +104,10 @@ export const competition = pgTable(
     status: text('status').notNull().default('draft'),
     publicSlug: text('public_slug').notNull().unique(),
     timingEnabled: boolean('timing_enabled').notNull().default(false),
+    // Valeur par défaut appliquée à la création d'un juge (voir DECISIONS.md
+    // ADR-026) — changer ce réglage n'a aucun effet rétroactif sur les juges
+    // déjà créés.
+    judgePinRequired: boolean('judge_pin_required').notNull().default(false),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => user.id),
@@ -246,19 +248,10 @@ export const round = pgTable(
     ...timestamps,
   },
   (table) => [
-    check(
-      'round_type_check',
-      sql`${table.type} IN ('qualification', 'semifinal', 'final')`,
-    ),
+    check('round_type_check', sql`${table.type} IN ('qualification', 'semifinal', 'final')`),
     check('round_style_check', sql`${table.style} IN ('flash', 'onsight')`),
-    check(
-      'round_status_check',
-      sql`${table.status} IN ('draft', 'open', 'closed', 'published')`,
-    ),
-    uniqueIndex('round_competition_display_order_key').on(
-      table.competitionId,
-      table.displayOrder,
-    ),
+    check('round_status_check', sql`${table.status} IN ('draft', 'open', 'closed', 'published')`),
+    uniqueIndex('round_competition_display_order_key').on(table.competitionId, table.displayOrder),
   ],
 )
 
@@ -287,7 +280,10 @@ export const judge = pgTable('judge', {
   displayName: text('display_name').notNull(),
   accessTokenHash: text('access_token_hash').notNull(),
   accessTokenPrefix: text('access_token_prefix').notNull(),
-  pinHash: text('pin_hash').notNull(),
+  // Nullable depuis le Lot 4 (DECISIONS.md ADR-026) : le PIN est une option
+  // de la compétition, désactivée par défaut. `pinHash === null` signifie
+  // que ce juge est accessible par le lien seul.
+  pinHash: text('pin_hash'),
   pinAttempts: integer('pin_attempts').notNull().default(0),
   lockedUntil: timestamp('locked_until', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
@@ -353,9 +349,7 @@ export const ascent = pgTable(
     syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow(),
     deviceId: text('device_id').notNull(),
     // ADR (SPEC.md § 5) : correction par chaînage, jamais d'écrasement.
-    supersededBy: uuid('superseded_by').references(
-      (): AnyPgColumn => ascent.id,
-    ),
+    supersededBy: uuid('superseded_by').references((): AnyPgColumn => ascent.id),
     // ADR-002 : marque une saisie contradictoire, sort temporairement de
     // l'unicité (round_id, route_id, competitor_id).
     conflictGroup: uuid('conflict_group'),
@@ -363,10 +357,7 @@ export const ascent = pgTable(
   },
   (table) => [
     check('ascent_modifier_check', sql`${table.modifier} IN ('none', 'plus')`),
-    check(
-      'ascent_status_check',
-      sql`${table.status} IN ('valid', 'dns', 'dnf', 'dsq')`,
-    ),
+    check('ascent_status_check', sql`${table.status} IN ('valid', 'dns', 'dnf', 'dsq')`),
     check('ascent_hold_count_check', sql`${table.holdCount} > 0`),
     check(
       'ascent_recorded_by_check',

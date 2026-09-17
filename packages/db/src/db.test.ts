@@ -104,6 +104,12 @@ describe('migrations', () => {
 
 // Doit tourner avant les tests suivants : ils insèrent des compétiteurs avec
 // `bib = null`, ce que le `down` de cette migration (SET NOT NULL) refuserait.
+//
+// Revert un cran à la fois plutôt qu'un nombre de crans fixe : la migration
+// 0001 n'est plus forcément la dernière (voir migration 0002 plus haut), donc
+// on s'arrête dès que son effet (bib redevient NOT NULL) est observé, quel
+// que soit le nombre de migrations ajoutées par-dessus depuis — même
+// philosophie que le test « sont réversibles » ci-dessus.
 describe('migration 0001_competitor_bib_nullable (ADR-022)', () => {
   it('est réversible : le down réapplique NOT NULL, le up la retire', async () => {
     await withRawClient(async (client) => {
@@ -116,13 +122,60 @@ describe('migration 0001_competitor_bib_nullable (ADR-022)', () => {
 
       expect(await columnNullable()).toBe(true)
 
-      const reverted = await revertLastMigrations(client, 1)
-      expect(reverted).toEqual(['0001_competitor_bib_nullable.sql'])
+      const reverted: string[] = []
+      while (await columnNullable()) {
+        const [name] = await revertLastMigrations(client, 1)
+        if (!name)
+          throw new Error('Plus de migration à annuler avant 0001_competitor_bib_nullable.')
+        reverted.push(name)
+      }
+      expect(reverted.at(-1)).toBe('0001_competitor_bib_nullable.sql')
       expect(await columnNullable()).toBe(false)
 
       const applied = await applyPendingMigrations(client)
-      expect(applied).toEqual(['0001_competitor_bib_nullable.sql'])
+      expect(applied).toEqual([...reverted].reverse())
       expect(await columnNullable()).toBe(true)
+    })
+  })
+})
+
+// Doit tourner avant les tests suivants : le down de cette migration remet
+// `judge.pin_hash` en NOT NULL, ce qui casserait toute insertion de juge sans
+// PIN — même stratégie de revert « un cran à la fois » que le bloc 0001
+// ci-dessus.
+describe('migration 0002_judge_pin_optional (DECISIONS.md ADR-026)', () => {
+  it('est réversible : le down remet pin_hash et judge_pin_required, le up les retire', async () => {
+    await withRawClient(async (client) => {
+      const pinHashNullable = async () => {
+        const result = await client.query<{ is_nullable: string }>(
+          "select is_nullable from information_schema.columns where table_name = 'judge' and column_name = 'pin_hash'",
+        )
+        return result.rows[0]?.is_nullable === 'YES'
+      }
+      const judgePinRequiredExists = async () => {
+        const result = await client.query(
+          "select column_name from information_schema.columns where table_name = 'competition' and column_name = 'judge_pin_required'",
+        )
+        return result.rows.length > 0
+      }
+
+      expect(await pinHashNullable()).toBe(true)
+      expect(await judgePinRequiredExists()).toBe(true)
+
+      const reverted: string[] = []
+      while (await pinHashNullable()) {
+        const [name] = await revertLastMigrations(client, 1)
+        if (!name) throw new Error('Plus de migration à annuler avant 0002_judge_pin_optional.')
+        reverted.push(name)
+      }
+      expect(reverted.at(-1)).toBe('0002_judge_pin_optional.sql')
+      expect(await pinHashNullable()).toBe(false)
+      expect(await judgePinRequiredExists()).toBe(false)
+
+      const applied = await applyPendingMigrations(client)
+      expect(applied).toEqual([...reverted].reverse())
+      expect(await pinHashNullable()).toBe(true)
+      expect(await judgePinRequiredExists()).toBe(true)
     })
   })
 })
@@ -316,8 +369,18 @@ describe('unicité compétiteur', () => {
     if (!demoCategory) throw new Error('category insert failed')
 
     await handle.db.insert(competitor).values([
-      { competitionId: demoCompetition.id, categoryId: demoCategory.id, firstName: 'A', lastName: 'B' },
-      { competitionId: demoCompetition.id, categoryId: demoCategory.id, firstName: 'C', lastName: 'D' },
+      {
+        competitionId: demoCompetition.id,
+        categoryId: demoCategory.id,
+        firstName: 'A',
+        lastName: 'B',
+      },
+      {
+        competitionId: demoCompetition.id,
+        categoryId: demoCategory.id,
+        firstName: 'C',
+        lastName: 'D',
+      },
     ])
 
     const rows = await handle.db.query.competitor.findMany({

@@ -3,14 +3,36 @@ import { createHash, randomBytes } from 'node:crypto'
 import { argon2id, hash, verify } from 'argon2'
 
 const BASE62_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+// 256 n'est pas un multiple de 62 : `byte % 62` sur-représenterait légèrement
+// les 8 premiers caractères de l'alphabet (valeurs d'octet 248-255 retombent
+// sur 0-7). On rejette ces octets au lieu d'en prendre le modulo — voir
+// TODO.md « Depuis le Lot 1 », corrigé avant que les jetons d'accès juge du
+// Lot 4 ne s'appuient dessus.
+const BASE62_REJECTION_THRESHOLD = 256 - (256 % BASE62_ALPHABET.length)
 
 /** Jeton secret aléatoire (32 octets par défaut), encodé en base62. */
 export function randomToken(byteLength = 32): string {
   let result = ''
-  for (const byte of randomBytes(byteLength)) {
-    result += BASE62_ALPHABET[byte % BASE62_ALPHABET.length]
+  while (result.length < byteLength) {
+    for (const byte of randomBytes(byteLength - result.length)) {
+      if (byte >= BASE62_REJECTION_THRESHOLD) continue
+      result += BASE62_ALPHABET[byte % BASE62_ALPHABET.length]
+    }
   }
   return result
+}
+
+/** PIN juge à 6 chiffres, tirage uniforme par octet (rejection sampling, même principe que `randomToken`). */
+export function randomPin(): string {
+  const REJECTION_THRESHOLD = 256 - (256 % 10)
+  let digits = ''
+  while (digits.length < 6) {
+    for (const byte of randomBytes(6 - digits.length)) {
+      if (byte >= REJECTION_THRESHOLD) continue
+      digits += String(byte % 10)
+    }
+  }
+  return digits
 }
 
 /**

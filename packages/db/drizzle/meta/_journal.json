@@ -15,6 +15,13 @@
       "when": 1789543642701,
       "tag": "0001_competitor_bib_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789564144806,
+      "tag": "0002_judge_pin_optional",
+      "breakpoints": true
     }
   ]
 }
