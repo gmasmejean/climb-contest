@@ -36,6 +36,10 @@ export const updateCompetitionInputSchema = z
     // Valeur par défaut appliquée aux juges créés APRÈS ce changement —
     // jamais rétroactif sur les juges déjà créés (DECISIONS.md ADR-026).
     judgePinRequired: z.boolean(),
+    // Vrai par défaut. Passer à faux efface rétroactivement le PIN/token en
+    // clair déjà stockés pour les juges de cette compétition ; passer à vrai
+    // ne s'applique qu'aux actions futures (DECISIONS.md ADR-027).
+    judgeCredentialsStored: z.boolean(),
   })
   .partial()
   .refine(

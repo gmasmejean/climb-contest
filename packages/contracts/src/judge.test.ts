@@ -16,6 +16,18 @@ describe('createJudgeInputSchema', () => {
   it('refuse un nom vide', () => {
     expect(createJudgeInputSchema.safeParse({ ...valid, displayName: '  ' }).success).toBe(false)
   })
+
+  it('accepte un e-mail optionnel', () => {
+    expect(
+      createJudgeInputSchema.safeParse({ ...valid, email: 'juge@club-demo.test' }).success,
+    ).toBe(true)
+  })
+
+  it('refuse un e-mail mal formé', () => {
+    expect(createJudgeInputSchema.safeParse({ ...valid, email: 'pas-un-email' }).success).toBe(
+      false,
+    )
+  })
 })
 
 describe('judgeAuthInputSchema', () => {

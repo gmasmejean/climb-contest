@@ -67,9 +67,13 @@ export const judgeRouteSchema = createSelectSchema(judgeRoute)
  * Vue organisateur exposable au client : jamais `accessTokenHash` ni
  * `pinHash` (Lot 4). `hasPin` remplace la présence/absence de `pinHash` par
  * un booléen explicite, sans jamais exposer le hash lui-même.
+ * `accessTokenPlain`/`pinPlain` (ADR-027) sont omis ici aussi : jamais
+ * exposés bruts, seulement recomposés en `accessUrl`/`pin` par
+ * `routes/judges.ts` (`toDetail`), qui contrôle explicitement quand ils sont
+ * inclus dans une réponse.
  */
 export const judgeSummarySchema = createSelectSchema(judge)
-  .omit({ accessTokenHash: true, pinHash: true })
+  .omit({ accessTokenHash: true, pinHash: true, accessTokenPlain: true, pinPlain: true })
   .extend({ hasPin: z.boolean() })
 export type JudgeSummary = z.infer<typeof judgeSummarySchema>
 export const ascentSchema = createSelectSchema(ascent)
