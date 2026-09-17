@@ -3,7 +3,7 @@ import { serve } from '@hono/node-server'
 
 import { createApp } from './app'
 import { loadEnv } from './env'
-import { createAccessTokenSigner } from './lib/jwt'
+import { createAccessTokenSigner, createJudgeTokenSigner } from './lib/jwt'
 import { createLogger } from './lib/logger'
 import { SmtpMailer } from './lib/mailer'
 
@@ -12,8 +12,9 @@ const logger = createLogger(env)
 const { db, close } = createDatabase(env.DATABASE_URL)
 const mailer = new SmtpMailer(env)
 const accessTokenSigner = createAccessTokenSigner(env.JWT_ACCESS_SECRET)
+const judgeTokenSigner = createJudgeTokenSigner(env.JWT_JUDGE_SECRET)
 
-const app = createApp({ env, db, mailer, logger, accessTokenSigner })
+const app = createApp({ env, db, mailer, logger, accessTokenSigner, judgeTokenSigner })
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   logger.info(`API démarrée sur http://localhost:${info.port}`)

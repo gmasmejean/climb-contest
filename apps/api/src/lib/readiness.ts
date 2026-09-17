@@ -1,6 +1,8 @@
 import {
   category,
   competitor,
+  judge,
+  judgeRoute,
   round,
   roundRoute,
   route,
@@ -16,11 +18,6 @@ const ROUND_TYPE_LABELS: Record<string, string> = {
   final: 'Finale',
 }
 
-/**
- * « Voie sans juge assigné » (SPEC.md / ROADMAP.md Lot 3) n'est
- * volontairement pas incluse : les juges n'existent pas avant le Lot 4 —
- * voir TODO.md.
- */
 export async function computeReadiness(
   db: Database,
   competitionId: string,
@@ -61,6 +58,22 @@ export async function computeReadiness(
       ),
     )
 
+  // Une voie assignée uniquement à un juge révoqué compte comme non
+  // couverte — d'où deux requêtes (plutôt qu'un LEFT JOIN filtré, qui
+  // produirait un faux positif dès qu'une voie a plusieurs juges dont un
+  // seul actif) plutôt qu'une jointure unique.
+  const activeAssignments = await db
+    .select({ routeId: judgeRoute.routeId })
+    .from(judgeRoute)
+    .innerJoin(judge, eq(judge.id, judgeRoute.judgeId))
+    .where(and(isNull(judge.revokedAt), isNull(judge.deletedAt)))
+  const assignedRouteIds = new Set(activeAssignments.map((row) => row.routeId))
+  const allRoutes = await db
+    .select({ id: route.id, number: route.number, name: route.name })
+    .from(route)
+    .where(and(eq(route.competitionId, competitionId), isNull(route.deletedAt)))
+  const routesWithoutJudge = allRoutes.filter((row) => !assignedRouteIds.has(row.id))
+
   const checks: ReadinessResponse['checks'] = [
     {
       id: 'category_without_route',
@@ -81,6 +94,14 @@ export async function computeReadiness(
       items: competitorsWithoutBib.map((row) => ({
         id: row.id,
         label: `${row.firstName} ${row.lastName}`,
+      })),
+    },
+    {
+      id: 'route_without_judge',
+      ok: routesWithoutJudge.length === 0,
+      items: routesWithoutJudge.map((row) => ({
+        id: row.id,
+        label: row.name ? `Voie ${row.number} — ${row.name}` : `Voie ${row.number}`,
       })),
     },
   ]

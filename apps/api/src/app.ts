@@ -4,7 +4,7 @@ import { cors } from 'hono/cors'
 import { logger as loggerMiddleware } from 'hono/logger'
 
 import type { Env } from './env'
-import type { AccessTokenSigner } from './lib/jwt'
+import type { AccessTokenSigner, JudgeTokenSigner } from './lib/jwt'
 import type { Logger } from './lib/logger'
 import type { Mailer } from './lib/mailer'
 import { errorHandler } from './middleware/problem'
@@ -13,6 +13,9 @@ import { createCategoryRoutes } from './routes/categories'
 import { createCompetitionRoutes } from './routes/competitions'
 import { createCompetitorRoutes } from './routes/competitors'
 import { createHealthRoute } from './routes/health'
+import { createJudgeAuthRoutes } from './routes/judge-auth'
+import { createJudgeRoutes } from './routes/judges'
+import { createQrCodesRoutes } from './routes/qrcodes'
 import { createRoundRoutes } from './routes/rounds'
 import { createRouteRoutes } from './routes/routes'
 
@@ -22,6 +25,7 @@ export interface AppDeps {
   mailer: Mailer
   logger: Logger
   accessTokenSigner: AccessTokenSigner
+  judgeTokenSigner: JudgeTokenSigner
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -59,6 +63,12 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/api/v1/competitions/:id/competitors', createCompetitorRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id/routes', createRouteRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id/rounds', createRoundRoutes(scopedDeps))
+  app.route('/api/v1/competitions/:id/judges', createJudgeRoutes({ ...scopedDeps, env: deps.env }))
+  app.route('/api/v1/competitions/:id', createQrCodesRoutes({ ...scopedDeps, env: deps.env }))
+  app.route(
+    '/api/v1/judge',
+    createJudgeAuthRoutes({ db: deps.db, judgeTokenSigner: deps.judgeTokenSigner }),
+  )
 
   return app
 }

@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { createApp } from '../app'
 import type { Env } from '../env'
-import { createAccessTokenSigner } from '../lib/jwt'
+import { createAccessTokenSigner, createJudgeTokenSigner } from '../lib/jwt'
 import type { Logger } from '../lib/logger'
 import { FakeMailer } from '../test-utils/fake-mailer'
 import {
@@ -27,6 +27,7 @@ const env: Env = {
   CORS_ORIGIN: 'http://localhost:5173',
   PUBLIC_APP_URL: 'http://localhost:5173',
   JWT_ACCESS_SECRET: 'test-secret-test-secret-test-secret-32',
+  JWT_JUDGE_SECRET: 'test-judge-secret-test-judge-secret-32',
   SMTP_HOST: 'localhost',
   SMTP_PORT: 1025,
   SMTP_SECURE: false,
@@ -55,6 +56,7 @@ beforeEach(() => {
     mailer,
     logger: { info: () => {} } as unknown as Logger,
     accessTokenSigner: createAccessTokenSigner(env.JWT_ACCESS_SECRET),
+    judgeTokenSigner: createJudgeTokenSigner(env.JWT_JUDGE_SECRET),
   })
 })
 
@@ -294,5 +296,38 @@ describe('GET /competitions/:id/readiness', () => {
     const body = (await response.json()) as { checks: { id: string; ok: boolean }[] }
     const byId = Object.fromEntries(body.checks.map((c) => [c.id, c]))
     expect(byId['round_without_route']?.ok).toBe(false)
+  })
+
+  it('signale une voie sans juge assigné, et plus une fois un juge assigné', async () => {
+    const { accessToken } = await registerLoggedInOrganizer(app, mailer)
+    const created = await createTestCompetition(app, accessToken, { format: 'contest' })
+    const routeResponse = await app.request(`/api/v1/competitions/${created.id}/routes`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ number: 1, holdCount: 40 }),
+    })
+    const createdRoute = (await routeResponse.json()) as { id: string }
+
+    const before = await app.request(`/api/v1/competitions/${created.id}/readiness`, {
+      headers: authHeaders(accessToken),
+    })
+    const beforeBody = (await before.json()) as { checks: { id: string; ok: boolean }[] }
+    expect(
+      Object.fromEntries(beforeBody.checks.map((c) => [c.id, c]))['route_without_judge']?.ok,
+    ).toBe(false)
+
+    await app.request(`/api/v1/competitions/${created.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Voie 1', routeIds: [createdRoute.id] }),
+    })
+
+    const after = await app.request(`/api/v1/competitions/${created.id}/readiness`, {
+      headers: authHeaders(accessToken),
+    })
+    const afterBody = (await after.json()) as { checks: { id: string; ok: boolean }[] }
+    expect(
+      Object.fromEntries(afterBody.checks.map((c) => [c.id, c]))['route_without_judge']?.ok,
+    ).toBe(true)
   })
 })

@@ -12,7 +12,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { createApp } from '../app'
 import type { Env } from '../env'
-import { createAccessTokenSigner } from '../lib/jwt'
+import { createAccessTokenSigner, createJudgeTokenSigner } from '../lib/jwt'
 import type { Logger } from '../lib/logger'
 import { FakeMailer } from '../test-utils/fake-mailer'
 import {
@@ -33,6 +33,7 @@ const env: Env = {
   CORS_ORIGIN: 'http://localhost:5173',
   PUBLIC_APP_URL: 'http://localhost:5173',
   JWT_ACCESS_SECRET: 'test-secret-test-secret-test-secret-32',
+  JWT_JUDGE_SECRET: 'test-judge-secret-test-judge-secret-32',
   SMTP_HOST: 'localhost',
   SMTP_PORT: 1025,
   SMTP_SECURE: false,
@@ -61,6 +62,7 @@ beforeEach(() => {
     mailer,
     logger: { info: () => {} } as unknown as Logger,
     accessTokenSigner: createAccessTokenSigner(env.JWT_ACCESS_SECRET),
+    judgeTokenSigner: createJudgeTokenSigner(env.JWT_JUDGE_SECRET),
   })
 })
 

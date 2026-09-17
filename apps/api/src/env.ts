@@ -9,6 +9,9 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().min(1),
   PUBLIC_APP_URL: z.string().min(1),
   JWT_ACCESS_SECRET: z.string().min(32),
+  // Secret distinct du JWT organisateur (Lot 4) : les deux portées ne
+  // doivent jamais se mélanger, même en cas de fuite de l'un des deux.
+  JWT_JUDGE_SECRET: z.string().min(32),
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().positive(),
   SMTP_USER: z.string().optional(),
