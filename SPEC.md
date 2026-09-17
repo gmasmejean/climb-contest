@@ -13,24 +13,24 @@ politique RGPD reste à trancher avant le Lot 9.
 Ce tableau fait autorité. Le code utilise la colonne « Terme code », l'interface
 la colonne « Terme métier ». Aucun synonyme n'est introduit ailleurs.
 
-| Terme métier (FR) | Terme code (EN) | Définition |
-|---|---|---|
-| Club | `club` | Structure organisatrice. Possède des utilisateurs et des compétitions. |
-| Compétition | `competition` | Un événement, à une date, dans un lieu. |
-| Catégorie | `category` | Groupe de compétiteurs comparés entre eux (ex. « U16 Femme »). |
-| Compétiteur | `competitor` | Une personne inscrite, rattachée à exactement une catégorie. |
-| Dossard | `bib` | Numéro porté par le compétiteur, unique dans la compétition. |
-| Voie | `route` | Un itinéraire équipé, numéroté, ouvert pour une ou plusieurs catégories. |
-| Prise | `hold` | Élément de préhension. Numérotée de 1 (bas) à N (haut) sur la voie. |
-| Tour / Manche | `round` | Phase de la compétition : qualification, demi-finale, finale. |
-| Passage | `ascent` | La tentative d'un compétiteur sur une voie, dans un tour. |
-| Juge | `judge` | Personne qui note les passages sur les voies qui lui sont assignées. |
-| Hauteur atteinte | `height` | Résultat d'un passage : numéro de prise + modificateur. |
-| Top | `top` | Le compétiteur a mousquetonné la dégaine finale. |
-| Cotation / Notation | `scoring` | Conversion d'un passage en valeur comparable. |
-| Classement | `ranking` | Ordre des compétiteurs d'une catégorie. |
-| Contre-performance | `countback` | Départage par le résultat d'un tour antérieur. |
-| Ouvreur | `routesetter` | Hors périmètre v1. |
+| Terme métier (FR)   | Terme code (EN) | Définition                                                               |
+| ------------------- | --------------- | ------------------------------------------------------------------------ |
+| Club                | `club`          | Structure organisatrice. Possède des utilisateurs et des compétitions.   |
+| Compétition         | `competition`   | Un événement, à une date, dans un lieu.                                  |
+| Catégorie           | `category`      | Groupe de compétiteurs comparés entre eux (ex. « U16 Femme »).           |
+| Compétiteur         | `competitor`    | Une personne inscrite, rattachée à exactement une catégorie.             |
+| Dossard             | `bib`           | Numéro porté par le compétiteur, unique dans la compétition.             |
+| Voie                | `route`         | Un itinéraire équipé, numéroté, ouvert pour une ou plusieurs catégories. |
+| Prise               | `hold`          | Élément de préhension. Numérotée de 1 (bas) à N (haut) sur la voie.      |
+| Tour / Manche       | `round`         | Phase de la compétition : qualification, demi-finale, finale.            |
+| Passage             | `ascent`        | La tentative d'un compétiteur sur une voie, dans un tour.                |
+| Juge                | `judge`         | Personne qui note les passages sur les voies qui lui sont assignées.     |
+| Hauteur atteinte    | `height`        | Résultat d'un passage : numéro de prise + modificateur.                  |
+| Top                 | `top`           | Le compétiteur a mousquetonné la dégaine finale.                         |
+| Cotation / Notation | `scoring`       | Conversion d'un passage en valeur comparable.                            |
+| Classement          | `ranking`       | Ordre des compétiteurs d'une catégorie.                                  |
+| Contre-performance  | `countback`     | Départage par le résultat d'un tour antérieur.                           |
+| Ouvreur             | `routesetter`   | Hors périmètre v1.                                                       |
 
 ---
 
@@ -82,6 +82,7 @@ périmètre actuel (voir `TODO.md`).
 Il peut :
 
 **Préparer**
+
 - créer une compétition : nom, date(s), lieu, club, format (contest ou phases) ;
 - définir les catégories, soit depuis un modèle prédéfini (FFME jeunes : U12,
   U14, U16, U18, U20, Senior, Vétéran × Homme/Femme), soit en libre ;
@@ -93,10 +94,13 @@ Il peut :
   concernées, secteur/mur, couleur, vidéo d'enchaînement (lien YouTube/Vimeo ou
   fichier téléversé) ;
 - déclarer les juges : nom d'affichage, voies assignées ; le système génère pour
-  chacun un lien d'accès et un QR code, plus un code PIN à 6 chiffres ;
+  chacun un lien d'accès et un QR code, plus un code PIN à 6 chiffres si la
+  compétition l'exige (réglage par compétition, désactivé par défaut — voir
+  §3.2 et `DECISIONS.md` ADR-026) ;
 - imprimer une planche de QR codes (juges + accès public) au format A4.
 
 **Piloter le jour J**
+
 - ouvrir / suspendre / clore la compétition et chaque tour ;
 - voir un tableau de bord temps réel : nombre de passages saisis, voies sans
   aucune saisie depuis X minutes, juges connectés, compétiteurs n'ayant pas
@@ -115,8 +119,14 @@ Pas de compte. Accès en deux temps :
 1. **Le lien** — scan d'un QR code ou saisie d'une URL de la forme
    `/j/<token>`. Le token est un secret long, propre à ce juge et à cette
    compétition.
-2. **Le PIN** — un code à 6 chiffres, communiqué oralement par l'organisateur.
-   Un lien seul, photographié ou retrouvé par terre, ne permet pas de noter.
+2. **Le PIN, optionnel par compétition** — un code à 6 chiffres, communiqué
+   oralement par l'organisateur. L'organisateur choisit, par compétition,
+   si le PIN est exigé pour les juges créés à partir de ce réglage
+   (`judge_pin_required`, désactivé par défaut) — voir DECISIONS.md
+   ADR-026. Quand il est exigé, un lien seul, photographié ou retrouvé par
+   terre, ne permet pas de noter. Quand il ne l'est pas, le lien seul
+   suffit : c'est un compromis assumé par l'organisateur entre sécurité et
+   simplicité d'accès pour ses juges, pas un oubli.
 
 Une fois authentifié, le juge obtient une session de longue durée (durée de vie
 = fin de la compétition + 12 h) stockée sur l'appareil. Il ne ressaisit pas son
@@ -171,11 +181,11 @@ Un classement provisoire peut être affiché pendant un tour, marqué comme tel.
 La performance d'un compétiteur sur une voie est la **hauteur atteinte**,
 exprimée par le numéro de la plus haute prise obtenue, avec un modificateur :
 
-| Notation | Signification |
-|---|---|
-| `n` | Le compétiteur a **contrôlé** la prise n : il s'en est servi pour atteindre ou stabiliser une position, ou pour freiner un mouvement dynamique. |
-| `n+` | Il a contrôlé la prise n **et** amorcé un mouvement de progression contrôlé vers la prise n+1, sans la contrôler. |
-| `TOP` | La dégaine finale est mousquetonnée. Valeur supérieure à toute prise. |
+| Notation | Signification                                                                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `n`      | Le compétiteur a **contrôlé** la prise n : il s'en est servi pour atteindre ou stabiliser une position, ou pour freiner un mouvement dynamique. |
+| `n+`     | Il a contrôlé la prise n **et** amorcé un mouvement de progression contrôlé vers la prise n+1, sans la contrôler.                               |
+| `TOP`    | La dégaine finale est mousquetonnée. Valeur supérieure à toute prise.                                                                           |
 
 > **ADR-001 (Lot 0)** : le modificateur `n−` ("touché sans contrôle") a été
 > écarté. Distinguer "touché sans contrôle" de "contrôlé" est un jugement fin
@@ -295,9 +305,9 @@ interface, pas une fonction :
 
 ```ts
 interface ScoringEngine {
-  readonly id: string                       // 'ffme-difficulty-2026'
-  readonly label: string                    // affiché à l'organisateur
-  readonly configSchema: ZodSchema          // options exposées à la création
+  readonly id: string // 'ffme-difficulty-2026'
+  readonly label: string // affiché à l'organisateur
+  readonly configSchema: ZodSchema // options exposées à la création
 
   scoreAscent(ascent: Ascent, route: Route): ScoreValue
   rankRoute(ascents: Ascent[], route: Route): RouteRanking
@@ -346,6 +356,9 @@ competition
   status ('draft' | 'open' | 'running' | 'closed' | 'archived')
   public_slug (unique)                  -- URL publique, non devinable
   timing_enabled (bool)                 -- chronométrage des passages
+  judge_pin_required (bool)             -- défaut false ; valeur appliquée
+                                         -- aux juges créés APRÈS ce réglage,
+                                         -- jamais rétroactif (ADR-026)
   created_by → user
 
 category
@@ -394,8 +407,11 @@ judge
   display_name
   access_token_hash                     -- le token en clair n'existe qu'une fois
   access_token_prefix                   -- 8 car. pour retrouver la ligne
-  pin_hash                              -- argon2id
-  pin_attempts (int), locked_until (nullable)
+  pin_hash (nullable)                   -- argon2id ; null = accès par lien
+                                         -- seul (DECISIONS.md ADR-026),
+                                         -- fixé à la création, jamais changé
+                                         -- ensuite par un simple réglage
+  pin_attempts (int), locked_until (nullable)  -- sans objet si pin_hash null
   revoked_at (nullable)
   last_seen_at (nullable)
 
@@ -483,23 +499,23 @@ session                                 -- refresh tokens organisateurs
 
 ### 6.1 Stack proposée
 
-| Couche | Choix | Pourquoi |
-|---|---|---|
-| Monorepo | pnpm workspaces + Turborepo | Types partagés client/serveur sans publication de paquets. |
-| Front | Vue 3 + Vite + TypeScript | Écosystème PWA mature (`vite-plugin-pwa`), courbe connue. |
-| État serveur | TanStack Query (Vue) | Cache, revalidation, mutations optimistes — la moitié du travail hors ligne. |
-| Stockage local | Dexie (IndexedDB) | File d'attente de synchronisation et cache des données de voie. |
-| Service worker | Workbox via `vite-plugin-pwa` | Precache de l'app, stratégies par route. |
-| UI | Tailwind + composants maison | Pas de librairie lourde ; les besoins sont spécifiques (pavé numérique, gros boutons). |
-| Back | Hono sur Node 22 | Léger, standard Web (Request/Response), tourne partout — Node, Bun, Deno, edge. |
-| Validation | Zod, schémas partagés | Une seule définition pour le type, la validation et le formulaire. |
-| Base | PostgreSQL 16 | Rien d'exotique. Hébergeable n'importe où. |
-| Accès base | Drizzle ORM + migrations SQL | Typé, proche du SQL, migrations versionnées et réversibles. |
-| Temps réel | SSE (`text/event-stream`) natif Hono | Un flux par compétition, unidirectionnel — c'est exactement le besoin. Reconnexion automatique gratuite, traverse les proxys mieux que WebSocket. |
-| Fichiers | Interface `StorageAdapter` | Implémentations `local-disk` et `s3-compatible`. Aucune dépendance directe à un fournisseur. |
-| Auth orga | JWT maison (jose) + argon2id, refresh en cookie httpOnly | Contrôle total, pas de vendor lock-in. |
-| Tests | Vitest + Playwright | Unitaires sur la cotation, e2e sur les parcours critiques. |
-| Déploiement | Docker Compose (app + Postgres + Caddy) | Fonctionne sur un VPS à 5 €, sur un portable dans la salle, ou chez n'importe quel PaaS. |
+| Couche         | Choix                                                    | Pourquoi                                                                                                                                          |
+| -------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monorepo       | pnpm workspaces + Turborepo                              | Types partagés client/serveur sans publication de paquets.                                                                                        |
+| Front          | Vue 3 + Vite + TypeScript                                | Écosystème PWA mature (`vite-plugin-pwa`), courbe connue.                                                                                         |
+| État serveur   | TanStack Query (Vue)                                     | Cache, revalidation, mutations optimistes — la moitié du travail hors ligne.                                                                      |
+| Stockage local | Dexie (IndexedDB)                                        | File d'attente de synchronisation et cache des données de voie.                                                                                   |
+| Service worker | Workbox via `vite-plugin-pwa`                            | Precache de l'app, stratégies par route.                                                                                                          |
+| UI             | Tailwind + composants maison                             | Pas de librairie lourde ; les besoins sont spécifiques (pavé numérique, gros boutons).                                                            |
+| Back           | Hono sur Node 22                                         | Léger, standard Web (Request/Response), tourne partout — Node, Bun, Deno, edge.                                                                   |
+| Validation     | Zod, schémas partagés                                    | Une seule définition pour le type, la validation et le formulaire.                                                                                |
+| Base           | PostgreSQL 16                                            | Rien d'exotique. Hébergeable n'importe où.                                                                                                        |
+| Accès base     | Drizzle ORM + migrations SQL                             | Typé, proche du SQL, migrations versionnées et réversibles.                                                                                       |
+| Temps réel     | SSE (`text/event-stream`) natif Hono                     | Un flux par compétition, unidirectionnel — c'est exactement le besoin. Reconnexion automatique gratuite, traverse les proxys mieux que WebSocket. |
+| Fichiers       | Interface `StorageAdapter`                               | Implémentations `local-disk` et `s3-compatible`. Aucune dépendance directe à un fournisseur.                                                      |
+| Auth orga      | JWT maison (jose) + argon2id, refresh en cookie httpOnly | Contrôle total, pas de vendor lock-in.                                                                                                            |
+| Tests          | Vitest + Playwright                                      | Unitaires sur la cotation, e2e sur les parcours critiques.                                                                                        |
+| Déploiement    | Docker Compose (app + Postgres + Caddy)                  | Fonctionne sur un VPS à 5 €, sur un portable dans la salle, ou chez n'importe quel PaaS.                                                          |
 
 **Note sur le temps réel :** SSE plutôt que WebSocket est un choix assumé. Le
 flux est à sens unique (serveur → public), SSE se reconnecte tout seul, passe
@@ -558,12 +574,14 @@ Le juge est le seul acteur avec un vrai besoin hors ligne. Public et
 organisateur peuvent exiger le réseau (avec dégradation propre).
 
 **À l'authentification du juge**, l'application télécharge et persiste :
+
 - ses voies, avec leur `hold_count` ;
 - la liste complète des compétiteurs concernés par ses voies ;
 - les tours ouverts et leur configuration ;
 - les passages déjà saisis sur ses voies.
 
 **Pendant la compétition**, chaque saisie :
+
 1. génère un `id` (UUID v7) côté client ;
 2. est écrite dans IndexedDB avec l'état `pending` ;
 3. met à jour l'interface **immédiatement** (optimiste) ;
@@ -586,12 +604,18 @@ avant d'avoir été acquittée par le serveur. Jamais.
 - **Organisateur** : access token JWT court (15 min) en mémoire, refresh token
   opaque en cookie `httpOnly`, `Secure`, `SameSite=Lax`, rotatif avec détection
   de réutilisation. Mots de passe en argon2id.
-- **Juge** : `/j/<token>` → le token est comparé par hachage. Ensuite, PIN à 6
-  chiffres, argon2id, **limité à 5 tentatives puis blocage 15 minutes**,
-  compteur par juge et par IP. Le succès délivre un JWT de portée restreinte :
-  il ne permet que de lire et écrire des passages sur les voies assignées, pour
-  cette compétition, jusqu'à la fin de l'événement. L'organisateur peut révoquer
-  un juge à tout moment.
+- **Juge** : `/j/<token>` → le token est comparé par hachage. Si la
+  compétition exige un PIN pour ce juge (`judge_pin_required` au moment de sa
+  création, ADR-026), PIN à 6 chiffres, argon2id, **limité à 5 tentatives
+  puis blocage 15 minutes**, compteur par juge et par IP ; sinon, une
+  confirmation explicite (jamais le simple chargement de la page, cf.
+  ADR-020) suffit. Le succès délivre un JWT d'identité (juge + compétition),
+  vérifié en base à chaque appel — jamais de portée (voies assignées)
+  embarquée dans le jeton, pour que révocation et réassignation prennent
+  effet immédiatement plutôt qu'à l'expiration. Il ne permet que de lire et
+  écrire des passages sur les voies assignées, pour cette compétition,
+  jusqu'à la fin de l'événement. L'organisateur peut révoquer un juge à tout
+  moment.
 - **Public** : `public_slug` non devinable (22 caractères base62). Aucune donnée
   personnelle au-delà de ce qui est affiché : nom, prénom, club, dossard. Pas de
   date de naissance complète, pas de numéro de licence, pas d'e-mail.
@@ -658,16 +682,30 @@ POST   /competitions/:id/rounds/reorder        { orderedIds }
 GET    /competitions/:id/rounds/:rid/routes
 PUT    /competitions/:id/rounds/:rid/routes    { assignments: [{routeId, categoryId}] }
 GET    /competitions/:id/judges
-POST   /competitions/:id/judges                → renvoie token + PIN UNE FOIS
+POST   /competitions/:id/judges                → renvoie token + PIN (si la
+                                                   compétition l'exige) UNE
+                                                   SEULE FOIS
 POST   /competitions/:id/judges/:jid/revoke
-GET    /competitions/:id/qrcodes.pdf
+POST   /competitions/:id/judges/:jid/regenerate-pin   409 si le juge n'a pas
+                                                        de PIN (ADR-026)
+POST   /competitions/:id/qrcodes.pdf           un POST, pas un GET : le
+                                                serveur n'a jamais les jetons
+                                                en clair, le client fournit
+                                                ceux qu'il détient encore
+                                                (ADR-026)
 
 GET    /competitions/:id/dashboard             état temps réel pour l'orga
 GET    /competitions/:id/conflicts
 POST   /competitions/:id/conflicts/:cid/resolve
 PATCH  /ascents/:id                            correction (motif obligatoire)
 
-POST   /judge/auth                       { token, pin } → JWT juge
+GET    /judge/access/:token              { displayName, pinRequired } — affiché
+                                          avant authentification (Lot 4)
+POST   /judge/auth                       { token, pin? } → JWT juge (`pin`
+                                          omis si la compétition ne l'exige
+                                          pas pour ce juge)
+GET    /judge/me                         identité + voies du juge authentifié
+                                          (Lot 4 ; vérifie la révocation)
 GET    /judge/bootstrap                  tout ce dont le juge a besoin, en un appel
 POST   /judge/ascents/batch              [{ id, ... }] → état par élément
 
@@ -702,11 +740,11 @@ Arbitré pendant le Lot 0 — détail et justification dans `DECISIONS.md` :
 7. ~~Voie modifiée (prises ajoutées) après des passages déjà saisis ?~~
    `hold_count` dénormalisé sur `ascent`, édition bloquée si des passages
    existent — ADR-003, ADR-004.
-9. ~~Mode « secours total » si le serveur est injoignable une heure ?~~ Pas de
+8. ~~Mode « secours total » si le serveur est injoignable une heure ?~~ Pas de
    mode dégradé à construire, on suppose un accès internet le jour J —
    ADR-009.
-10. ~~Vidéos : téléversement direct ou lien externe en v1 ?~~ Déjà tranché par
-    `ROADMAP.md` — lien externe au Lot 3, téléversement au Lot 9.
+9. ~~Vidéos : téléversement direct ou lien externe en v1 ?~~ Déjà tranché par
+   `ROADMAP.md` — lien externe au Lot 3, téléversement au Lot 9.
 
 **Encore ouvert :**
 
@@ -724,31 +762,31 @@ la suite de tests de `packages/scoring`.
 
 > Cas #3 (modificateur `−`) retiré — ADR-001. Cas #6 relibellé DNS — ADR-010.
 
-| # | Situation | `score_value` attendue |
-|---|---|---|
-| 1 | Voie de 40 prises, prise 25 contrôlée | 25 |
-| 2 | Idem, mouvement amorcé vers la 26 | 25.5 |
-| 4 | Top | 41 |
-| 5 | Absent, ne s'est jamais présenté (DNS) | 0 |
-| 6 | Présenté puis retiré avant son ascension (DNS) | 0 |
+| #   | Situation                                      | `score_value` attendue |
+| --- | ---------------------------------------------- | ---------------------- |
+| 1   | Voie de 40 prises, prise 25 contrôlée          | 25                     |
+| 2   | Idem, mouvement amorcé vers la 26              | 25.5                   |
+| 4   | Top                                            | 41                     |
+| 5   | Absent, ne s'est jamais présenté (DNS)         | 0                      |
+| 6   | Présenté puis retiré avant son ascension (DNS) | 0                      |
 
 ### Classement sur une voie
 
-| # | Situation | Attendu |
-|---|---|---|
-| 7 | A=30, B=30+, C=29 | B, A, C |
-| 8 | A=30, B=30, chrono activé, A plus rapide | A, B |
-| 9 | A=30, B=30, pas de chrono, pas de tour précédent | ex aequo 1ᵉʳ, suivant classé 3ᵉ |
-| 10 | Trois tops | tous ex aequo 1ᵉʳˢ |
+| #   | Situation                                        | Attendu                         |
+| --- | ------------------------------------------------ | ------------------------------- |
+| 7   | A=30, B=30+, C=29                                | B, A, C                         |
+| 8   | A=30, B=30, chrono activé, A plus rapide         | A, B                            |
+| 9   | A=30, B=30, pas de chrono, pas de tour précédent | ex aequo 1ᵉʳ, suivant classé 3ᵉ |
+| 10  | Trois tops                                       | tous ex aequo 1ᵉʳˢ              |
 
 ### Tour à deux voies (moyenne géométrique)
 
-| # | Rangs (V1, V2) | Rang combiné | Ordre |
-|---|---|---|---|
-| 11 | A(1,4) B(2,2) | A=2.00, B=2.00 | ex aequo — départage par contre-performance, ou ex aequo véritable s'il s'agit du premier tour |
-| 12 | A(1,9) B(3,3) | A=3.00, B=3.00 | ex aequo |
-| 13 | A(1,1) B(2,2) C(3,3) | 1.00, 2.00, 3.00 | A, B, C |
-| 14 | A(1,4) B(2,3) | A=2.00, B=2.45 | A puis B |
+| #   | Rangs (V1, V2)       | Rang combiné     | Ordre                                                                                          |
+| --- | -------------------- | ---------------- | ---------------------------------------------------------------------------------------------- |
+| 11  | A(1,4) B(2,2)        | A=2.00, B=2.00   | ex aequo — départage par contre-performance, ou ex aequo véritable s'il s'agit du premier tour |
+| 12  | A(1,9) B(3,3)        | A=3.00, B=3.00   | ex aequo                                                                                       |
+| 13  | A(1,1) B(2,2) C(3,3) | 1.00, 2.00, 3.00 | A, B, C                                                                                        |
+| 14  | A(1,4) B(2,3)        | A=2.00, B=2.45   | A puis B                                                                                       |
 
 > Le cas 11 est le piège classique : une moyenne arithmétique donnerait 2.5 et 2
 > et classerait B devant A. La moyenne géométrique les égalise. Si ton
@@ -756,34 +794,34 @@ la suite de tests de `packages/scoring`.
 
 ### Format contest
 
-| # | Situation | Attendu |
-|---|---|---|
-| 15 | M=3, A a grimpé 5 voies (30, 28, 25, 20, 10) | total = 83 |
-| 16 | M=3, B n'a grimpé que 2 voies (40, 35) | total = 75 |
-| 17 | A=83 et B=83, A a 2 tops et B 1 | A devant B |
+| #   | Situation                                    | Attendu    |
+| --- | -------------------------------------------- | ---------- |
+| 15  | M=3, A a grimpé 5 voies (30, 28, 25, 20, 10) | total = 83 |
+| 16  | M=3, B n'a grimpé que 2 voies (40, 35)       | total = 75 |
+| 17  | A=83 et B=83, A a 2 tops et B 1              | A devant B |
 
 ### Phases et contre-performance
 
-| # | Situation | Attendu |
-|---|---|---|
-| 18 | A 8ᵉ en demi, B 3ᵉ en demi, égalité en finale | B devant A |
-| 19 | 10 qualifiés prévus, égalité aux places 10-11 | 11 qualifiés |
-| 20 | A finaliste dernier, B demi-finaliste 1ᵉʳ non qualifié | A devant B au classement final |
+| #   | Situation                                              | Attendu                        |
+| --- | ------------------------------------------------------ | ------------------------------ |
+| 18  | A 8ᵉ en demi, B 3ᵉ en demi, égalité en finale          | B devant A                     |
+| 19  | 10 qualifiés prévus, égalité aux places 10-11          | 11 qualifiés                   |
+| 20  | A finaliste dernier, B demi-finaliste 1ᵉʳ non qualifié | A devant B au classement final |
 
 ### Hors ligne
 
-| # | Situation | Attendu |
-|---|---|---|
-| 21 | Même passage envoyé deux fois (même `id`) | une seule ligne en base, pas d'erreur |
-| 22 | Deux appareils, même (tour, voie, compétiteur), valeurs différentes | les deux conservés, `conflict_group` créé, organisateur alerté |
-| 23 | Onglet fermé avec 12 passages en attente, rouvert plus tard | les 12 remontent |
-| 24 | Passage saisi hors ligne à 14h03, remonté à 15h20 | `recorded_at` = 14h03, `synced_at` = 15h20 |
+| #   | Situation                                                           | Attendu                                                        |
+| --- | ------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 21  | Même passage envoyé deux fois (même `id`)                           | une seule ligne en base, pas d'erreur                          |
+| 22  | Deux appareils, même (tour, voie, compétiteur), valeurs différentes | les deux conservés, `conflict_group` créé, organisateur alerté |
+| 23  | Onglet fermé avec 12 passages en attente, rouvert plus tard         | les 12 remontent                                               |
+| 24  | Passage saisi hors ligne à 14h03, remonté à 15h20                   | `recorded_at` = 14h03, `synced_at` = 15h20                     |
 
 ### Absence sur une voie (tour à plusieurs voies)
 
 > Cas #25 ajouté au Lot 0 (ADR-016) : § 4.3 décrit ce comportement en prose,
 > aucun cas d'origine ne le testait.
 
-| # | Situation | Attendu |
-|---|---|---|
-| 25 | Tour à 2 voies, C et D absents (DNS) sur V2 uniquement, A et B présents sur les deux | C et D reçoivent le même rang sur V2 (le plus défavorable), partagé entre eux — pas deux rangs consécutifs distincts |
+| #   | Situation                                                                            | Attendu                                                                                                              |
+| --- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 25  | Tour à 2 voies, C et D absents (DNS) sur V2 uniquement, A et B présents sur les deux | C et D reçoivent le même rang sur V2 (le plus défavorable), partagé entre eux — pas deux rangs consécutifs distincts |

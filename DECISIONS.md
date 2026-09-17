@@ -628,12 +628,12 @@ impossible si la colonne est obligatoire.
 
 - **`competitor.bib` devient nullable.** Migration
   `0001_competitor_bib_nullable` (up : `DROP NOT NULL`, down : `SET NOT
-  NULL`), testée dans les deux sens (`packages/db/src/db.test.ts`).
+NULL`), testée dans les deux sens (`packages/db/src/db.test.ts`).
   L'index unique `(competition_id, bib)` reste inchangé : Postgres ne
   considère jamais deux `NULL` comme égaux, donc plusieurs compétiteurs
   sans dossard coexistent sans violation de contrainte.
 - **Attribution automatique** (`POST
-  /competitions/:id/competitors/assign-bibs`) : numérotation séquentielle
+/competitions/:id/competitors/assign-bibs`) : numérotation séquentielle
   continue sur toute la compétition, en parcourant les catégories dans
   leur `display_order` puis les compétiteurs par nom/prénom (locale
   `fr`). Ne touche que les compétiteurs sans dossard ; les numéros déjà
@@ -759,6 +759,106 @@ ajuster à la main après application du modèle.
 **Source :** texte du règlement FFME fourni par l'utilisateur en
 conversation le 2026-09-16 — à vérifier auprès de la FFME avant une
 compétition officielle si le règlement a changé depuis.
+
+---
+
+## ADR-026 — Lot 4 : le PIN juge devient une option de la compétition, désactivée par défaut
+
+**Date :** 2026-09-16
+**Contexte :** `ROADMAP.md` Lot 4 et `SPEC.md` § 3.2 imposaient un PIN à 6
+chiffres systématique pour chaque juge (« Un lien seul... ne permet pas de
+noter »). Demande explicite de l'utilisateur en ouverture de ce lot :
+le PIN doit devenir une **option, désactivée par défaut**. Trois points
+précisés en conversation avant l'implémentation.
+
+**Décision 1 — portée du réglage : par compétition, pas par juge.**
+`competition.judge_pin_required` (`boolean`, défaut `false`), éditable à
+tout moment via `PATCH /competitions/:id`. Option écartée : un réglage par
+juge (case à cocher à la création de chaque juge) — plus flexible en
+théorie, mais l'utilisateur a préféré un seul interrupteur, plus simple à
+comprendre d'un coup d'œil dans l'onglet Juges.
+
+**Décision 2 — le réglage n'est qu'une valeur par défaut, jamais
+rétroactive.** Il ne s'applique qu'aux juges créés APRÈS le changement.
+Un juge déjà créé garde l'état qu'il avait à sa création (`judge.pin_hash`
+nullable, seule source de vérité pour CE juge — pas un flag séparé). Option
+écartée : appliquer le changement immédiatement à tous les juges existants
+(générer un PIN pour tous d'un coup si on active, invalider les PIN existants
+si on désactive) — écartée par l'utilisateur, jugée trop perturbante en cours
+de préparation d'une compétition.
+**Conséquence directe** : un juge créé sans PIN n'a pas d'action « ajouter un
+PIN » a posteriori (seulement « régénérer » un PIN qui existe déjà) — sinon
+on retombe dans le cas que cette décision a justement écarté. Si le besoin
+apparaît, noté dans `TODO.md`.
+
+**Décision 3 — écran `/j/<token>` sans PIN : confirmation explicite, jamais
+d'authentification au chargement.** Quand `pinHash` est `null`, la page
+affiche « Bonjour `<nom>` » avec un bouton **« Commencer »** ; c'est le clic
+(un `POST /judge/auth`) qui authentifie, jamais le `GET` initial de la page.
+Décision prise par extension d'ADR-020 (« un `GET` ne doit jamais avoir
+d'effet de bord ») plutôt que redemandée à l'utilisateur : un scanner
+anti-hameçonnage ou un préchargement de navigateur qui visite le lien
+authentifierait le juge à sa place si le simple chargement suffisait.
+
+**Risque assumé, documenté explicitement** : pour une compétition où
+`judge_pin_required = false`, l'invariant énoncé en `SPEC.md` § 3.2 (« un
+lien seul, photographié ou retrouvé par terre, ne permet pas de noter ») est
+rompu par construction — le lien seul suffit. C'est un choix conscient de
+l'utilisateur, pas un oubli ; `SPEC.md` § 3.2 et § 6.4 sont mis à jour pour
+le refléter comme conditionnel plutôt que garanti.
+
+**Décision 4 (dérivée, non discutée explicitement) — JWT juge = identité
+seule, jamais de portée (voies) embarquée.** Le JWT juge (`sub` = judge.id,
+`competitionId`) vit plusieurs jours (fin de compétition + 12h), contrairement
+au JWT organisateur (15 min). Lui faire porter la liste des voies assignées
+aurait rendu une réaffectation ou une révocation invisibles jusqu'à
+expiration — contraire à SPEC.md § 3.2 (« un juge révoqué est déconnecté au
+prochain appel »). `requireJudge` (`apps/api/src/middleware/judge-auth.ts`)
+recharge donc le juge depuis la base à **chaque** appel, et
+`assertJudgeAssignedToRoute` (`apps/api/src/lib/judge-authorization.ts`)
+revérifie l'assignation à la voie en base à chaque fois plutôt que de faire
+confiance à un état capturé à l'authentification.
+
+**Décision 5 (dérivée) — la planche de QR codes ne peut être générée qu'à
+partir des jetons que le client détient encore lui-même.** `judge.access_token_hash`
+est un hash, jamais réversible (SPEC.md § 5) : le serveur ne peut donc
+jamais reconstruire un QR individuel après coup depuis la base. `POST
+.../qrcodes.pdf` (pas un `GET`, ce n'est pas une ressource relisible à
+volonté) prend en entrée les couples `{judgeId, accessToken}` que
+`JudgesTab.vue` garde en mémoire pour la durée de la session (jamais
+persisté), revérifie chaque jeton contre son hash en base avant de l'inclure,
+et n'imprime en encart individuel que les juges ainsi fournis — les autres
+n'apparaissent que via la page QR publique de la planche (celle-ci lit
+`competition.public_slug`, qui n'est pas un secret à usage unique). Un
+organisateur qui veut la planche complète doit donc la télécharger dans la
+même session que la création des juges, ou régénérer un PIN/recréer un juge
+pour le réintégrer à une planche ultérieure.
+
+**Réponse à la question posée par `ROADMAP.md` Lot 4 — que se passe-t-il si
+l'organisateur perd le PIN d'un juge en cours de compétition ?**
+
+- **S'il a un PIN** : `POST .../judges/:jid/regenerate-pin` génère un
+  nouveau PIN (affiché en clair une seule fois, même encart que la
+  création), remet `pin_attempts`/`locked_until` à zéro. Le **jeton** ne
+  change pas : un juge déjà authentifié sur un appareil (JWT déjà émis)
+  n'est pas déconnecté — seule une nouvelle authentification (nouvel
+  appareil, ou après revocation locale du navigateur) a besoin du nouveau
+  PIN.
+- **S'il n'a pas de PIN et que le lien est perdu/compromis** : pas de
+  régénération de token (cf. Décision 2 — pas d'action prévue pour ce cas
+  précis). Seul recours : `POST .../judges/:jid/revoke` puis recréer un
+  juge (nouveau lien, nouveau QR à réimprimer et à redistribuer).
+
+**Options écartées (techniques) :**
+
+- Chiffrement réversible du token plutôt qu'un hash, pour permettre de
+  régénérer la planche à tout moment — écarté, contredit littéralement
+  `SPEC.md` § 5 (« en base, seuls les hachés argon2id »), une exigence de
+  sécurité explicite, pas un détail d'implémentation.
+- `randomToken` (`packages/db/src/crypto.ts`) corrigé à cette occasion
+  (échantillonnage par rejet plutôt que `byte % 62`) — résout l'entrée de
+  `TODO.md` qui demandait explicitement ce correctif avant que les jetons
+  d'accès juge n'en dépendent.
 
 ---
 

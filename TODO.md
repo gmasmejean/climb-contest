@@ -33,11 +33,10 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   dans l'image finale, par simplicité. Un élagage propre (`pnpm deploy`, ou
   une étape finale distincte par service) réduirait significativement sa
   taille — pas fait ce lot.
-- **Génération de jetons aléatoires (`randomToken`) avec un léger biais
-  modulo.** L'encodage base62 par octet (`byte % 62`) introduit un biais
-  statistique négligeable pour un jeton de vérification e-mail, mais à
-  corriger (échantillonnage par rejet) avant que les jetons d'accès juge du
-  Lot 4 ne s'appuient sur le même mécanisme en production.
+- ~~Génération de jetons aléatoires (`randomToken`) avec un léger biais
+  modulo.~~ Résolu au Lot 4 : encodage base62 par échantillonnage par rejet
+  (`packages/db/src/crypto.ts`), avant que les jetons d'accès juge n'en
+  dépendent — voir DECISIONS.md ADR-026.
 - **Le test e2e Playwright ne tourne pas en CI.** Il suppose la pile Docker
   complète démarrée et seedée (`e2e/README.md`) — pas encore automatisé dans
   `.github/workflows/ci.yml`, qui ne construit pas les images pour l'instant.
@@ -56,14 +55,9 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 
 ## Depuis le Lot 3
 
-- **Contrôle « prêt à démarrer ? » incomplet tant que le Lot 4 n'existe
-  pas.** `GET /competitions/:id/readiness` (`apps/api/src/lib/readiness.ts`)
-  ne couvre que 4 des 5 conditions listées par ROADMAP.md Lot 3 : « voie
-  sans juge assigné » est volontairement absente, les juges n'existant pas
-  avant le Lot 4. Le Lot 4 devra ajouter un 5ᵉ `ReadinessCheck` (id
-  `route_without_judge` par exemple) — la structure (`checks: []`) et
-  l'écran (`ReadinessTab.vue`) sont déjà conçus pour l'accueillir sans
-  réécriture.
+- ~~Contrôle « prêt à démarrer ? » incomplet tant que le Lot 4 n'existe
+  pas.~~ Résolu au Lot 4 : 5ᵉ `ReadinessCheck` `route_without_judge` ajouté
+  (`apps/api/src/lib/readiness.ts`).
 - **`ffme-difficulty-2026ConfigSchema` exige `routesCounted` même en
   format phases**, où ce nombre n'a aucun sens métier (voir ADR-023).
   L'API fournit une valeur neutre par défaut plutôt que de modifier
@@ -79,3 +73,34 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   besoin apparaît, appliquer la même protection que les catégories (bloquer
   si un `ascent` existe, ADR-004) plutôt que de permettre une suppression
   libre.
+
+## Depuis le Lot 4
+
+- **Pas de bascule « ajouter un PIN » sur un juge créé sans PIN**, ni
+  l'inverse — seule la régénération d'un PIN déjà existant est possible
+  (DECISIONS.md ADR-026, décision 2, tranchée explicitement avec
+  l'utilisateur). Si le besoin apparaît (ex. un juge exposé publiquement a
+  finalement besoin d'un PIN en cours d'événement), prévoir une action
+  dédiée plutôt que de réutiliser « régénérer ».
+- **La planche de QR codes ne peut inclure en encart individuel que les
+  juges créés dans la session en cours** (ADR-026, décision 5) — le serveur
+  ne conserve jamais un jeton d'accès en clair. `JudgesTab.vue` prévient
+  l'organisateur quand la planche est incomplète, mais rien n'automatise
+  aujourd'hui un rappel « pensez à télécharger la planche avant de
+  recharger la page ».
+- **La page QR publique de la planche pointe vers `/c/<slug>`, qui n'existe
+  pas avant le Lot 7.** Le lien est correct (le `public_slug` existe depuis
+  le Lot 1) mais mène à un 404 tant que la page publique n'est pas
+  construite — assumé, cohérent avec « un lot à la fois ».
+- **`packages/db/src/db.test.ts` et les fichiers `apps/api/src/**/*.test.ts`
+  démarrent chacun leur propre conteneur Postgres (testcontainers).** Sur
+  cette machine de développement (Podman, socket utilisateur), lancer
+  `pnpm test` depuis la racine (parallélisme total de Turbo + workers
+  Vitest) fait parfois échouer un ou deux fichiers avec `Log stream ended`
+  quand une dizaine de conteneurs démarrent simultanément — un problème de
+  ressources locales, pas un bug : chaque suite repasse au vert isolément
+  (`pnpm test` dans le paquet concerné, ou `vitest run --no-file-parallelism`).
+  Pas vérifié si `ubuntu-latest` (CI GitHub Actions, Docker natif) est
+  concerné — Lot 4 ajoute 4 fichiers de test à `apps/api` avec conteneur
+  dédié chacun (10 au total dans ce paquet), ce qui augmente la charge
+  simultanée. À surveiller au prochain lot si la CI devient flaky.
