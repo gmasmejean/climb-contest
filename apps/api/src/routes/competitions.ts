@@ -190,13 +190,29 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
     async (c) => {
       const current = c.get('competition')
       const { status } = c.req.valid('json')
-      const [updated] = await db
-        .update(competition)
-        .set({ status, updatedAt: new Date() })
-        .where(eq(competition.id, current.id))
-        .returning()
-      if (!updated)
-        throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour le statut.')
+
+      const updated = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(competition)
+          .set({ status, updatedAt: new Date() })
+          .where(eq(competition.id, current.id))
+          .returning()
+        if (!row) {
+          throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour le statut.')
+        }
+        // Round implicite du format contest (ADR-023) : invisible pour
+        // l'organisateur, donc sans écran « Tours » pour l'ouvrir lui-même
+        // (contrairement au format phases, Lot 8). Ouvrir la compétition
+        // ouvre mécaniquement son unique round au passage — voir
+        // DECISIONS.md ADR-030.
+        if (row.format === 'contest' && status === 'running') {
+          await tx
+            .update(round)
+            .set({ status: 'open', updatedAt: new Date() })
+            .where(and(eq(round.competitionId, row.id), isNull(round.deletedAt)))
+        }
+        return row
+      })
       return c.json(competitionSchema.parse(updated))
     },
   )

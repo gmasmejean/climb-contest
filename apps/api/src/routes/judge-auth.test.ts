@@ -9,11 +9,7 @@ import type { Env } from '../env'
 import { createAccessTokenSigner, createJudgeTokenSigner } from '../lib/jwt'
 import type { Logger } from '../lib/logger'
 import { FakeMailer } from '../test-utils/fake-mailer'
-import {
-  authHeaders,
-  createTestCompetition,
-  registerLoggedInOrganizer,
-} from '../test-utils/fixtures'
+import { authHeaders, createJudgeFixture } from '../test-utils/fixtures'
 
 let container: StartedPostgreSqlContainer
 let handle: DatabaseHandle
@@ -62,45 +58,12 @@ beforeEach(() => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "ascent", "judge", "judge_route" cascade`,
+    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "ascent", "ascent_event", "judge", "judge_route" cascade`,
   )
 })
 
-async function createJudge(judgePinRequired: boolean) {
-  const { accessToken: organizerToken } = await registerLoggedInOrganizer(app, mailer)
-  // `endsOn` dans le futur : le JWT juge expire à fin de compétition + 12h
-  // (SPEC.md § 3.2) — la date par défaut de createTestCompetition (2026-05-01)
-  // est déjà passée par rapport à « aujourd'hui », ce qui invaliderait
-  // immédiatement le jeton émis dans les tests ci-dessous.
-  const competition = await createTestCompetition(app, organizerToken, {
-    format: 'contest',
-    startsOn: '2099-01-01',
-    endsOn: '2099-01-01',
-  })
-  if (judgePinRequired) {
-    await app.request(`/api/v1/competitions/${competition.id}`, {
-      method: 'PATCH',
-      headers: authHeaders(organizerToken),
-      body: JSON.stringify({ judgePinRequired: true }),
-    })
-  }
-  const routeResponse = await app.request(`/api/v1/competitions/${competition.id}/routes`, {
-    method: 'POST',
-    headers: authHeaders(organizerToken),
-    body: JSON.stringify({ number: 1, holdCount: 40 }),
-  })
-  const route = (await routeResponse.json()) as { id: string }
-  const judgeResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
-    method: 'POST',
-    headers: authHeaders(organizerToken),
-    body: JSON.stringify({ displayName: 'Juge Test', routeIds: [route.id] }),
-  })
-  const created = (await judgeResponse.json()) as {
-    id: string
-    accessToken: string
-    pin?: string
-  }
-  return { organizerToken, competition, route, judge: created }
+function createJudge(judgePinRequired: boolean) {
+  return createJudgeFixture(app, mailer, { judgePinRequired })
 }
 
 describe('GET /judge/access/:token', () => {

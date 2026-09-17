@@ -13,6 +13,7 @@ import { createCategoryRoutes } from './routes/categories'
 import { createCompetitionRoutes } from './routes/competitions'
 import { createCompetitorRoutes } from './routes/competitors'
 import { createHealthRoute } from './routes/health'
+import { createJudgeAscentRoutes } from './routes/judge-ascents'
 import { createJudgeAuthRoutes } from './routes/judge-auth'
 import { createJudgeRoutes } from './routes/judges'
 import { createQrCodesRoutes } from './routes/qrcodes'
@@ -26,6 +27,8 @@ export interface AppDeps {
   logger: Logger
   accessTokenSigner: AccessTokenSigner
   judgeTokenSigner: JudgeTokenSigner
+  /** Seam de test (ADR-007) — jamais fourni en production. */
+  now?: () => Date
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -71,6 +74,14 @@ export function createApp(deps: AppDeps): Hono {
   app.route(
     '/api/v1/judge',
     createJudgeAuthRoutes({ db: deps.db, judgeTokenSigner: deps.judgeTokenSigner }),
+  )
+  app.route(
+    '/api/v1/judge',
+    createJudgeAscentRoutes({
+      db: deps.db,
+      judgeTokenSigner: deps.judgeTokenSigner,
+      now: deps.now,
+    }),
   )
 
   return app

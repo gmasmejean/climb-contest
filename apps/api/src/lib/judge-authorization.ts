@@ -1,5 +1,5 @@
-import { judge, judgeRoute, route, type Database } from '@climbcontest/db'
-import { and, eq, isNull } from 'drizzle-orm'
+import { judge, judgeRoute, round, roundRoute, route, type Database } from '@climbcontest/db'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 
 import { ApiError } from '../middleware/problem'
 
@@ -38,4 +38,49 @@ export async function assertJudgeAssignedToRoute(
   }
 
   return row
+}
+
+export interface OpenRoundForRoute {
+  roundId: string
+  roundType: (typeof round.$inferSelect)['type']
+  // Toutes les catégories que cette voie sert DANS ce tour (round_route
+  // peut lier une même voie à plusieurs catégories pour un même tour).
+  categoryIds: string[]
+}
+
+/**
+ * Résout le tour ouvert qui utilise cette voie, pour cette compétition — au
+ * plus un en pratique (Lot 5 suppose qu'un organisateur n'ouvre jamais deux
+ * tours en même temps sur la même voie ; le cas contraire n'est pas détecté,
+ * voir TODO.md : seul le premier tour trouvé, par `display_order`, est
+ * retenu). `null` si aucun tour ouvert ne référence la voie : état
+ * transitoire normal (tour pas encore ouvert, ou déjà refermé), pas une
+ * erreur.
+ */
+export async function resolveOpenRoundForRoute(
+  db: Database,
+  competitionId: string,
+  routeId: string,
+): Promise<OpenRoundForRoute | null> {
+  const rows = await db
+    .select({ roundId: round.id, roundType: round.type, categoryId: roundRoute.categoryId })
+    .from(roundRoute)
+    .innerJoin(round, eq(round.id, roundRoute.roundId))
+    .where(
+      and(
+        eq(roundRoute.routeId, routeId),
+        eq(round.competitionId, competitionId),
+        eq(round.status, 'open'),
+        isNull(round.deletedAt),
+      ),
+    )
+    .orderBy(asc(round.displayOrder))
+
+  const first = rows[0]
+  if (!first) return null
+  return {
+    roundId: first.roundId,
+    roundType: first.roundType,
+    categoryIds: rows.filter((r) => r.roundId === first.roundId).map((r) => r.categoryId),
+  }
 }
