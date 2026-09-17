@@ -18,11 +18,12 @@ export interface QrCodesRouteDeps {
 }
 
 /**
- * Le serveur ne stocke jamais un jeton d'accès juge en clair (seul le hash,
- * SPEC.md § 5) — la planche ne peut donc être générée qu'à partir des
- * jetons que le client fournit lui-même, tout juste révélés à la création
- * (voir DECISIONS.md ADR-026). D'où un `POST`, pas un `GET` : ce n'est pas
- * une ressource relisible à volonté depuis la base.
+ * Un juge dont le jeton est stocké en clair (`judgeCredentialsStored` actif
+ * à sa création, DECISIONS.md ADR-027) est inclus automatiquement. Pour les
+ * autres, la planche ne peut inclure leur encart qu'à partir du jeton que le
+ * client fournit lui-même, tout juste révélé (ADR-026). D'où un `POST`, pas
+ * un `GET` : ce n'est jamais une ressource relisible à volonté depuis la
+ * base pour CES juges-là.
  */
 export function createQrCodesRoutes(deps: QrCodesRouteDeps): Hono {
   const app = new Hono()
@@ -40,19 +41,16 @@ export function createQrCodesRoutes(deps: QrCodesRouteDeps): Hono {
       const currentCompetition = c.get('competition')
       const input = c.req.valid('json')
 
-      const judgeIds = input.judges.map((j) => j.judgeId)
-      const rows = judgeIds.length
-        ? await db.query.judge.findMany({
-            where: and(
-              inArray(judge.id, judgeIds),
-              eq(judge.competitionId, currentCompetition.id),
-              isNull(judge.deletedAt),
-            ),
-          })
-        : []
-      const rowById = new Map(rows.map((row) => [row.id, row]))
+      const activeJudges = await db.query.judge.findMany({
+        where: and(
+          eq(judge.competitionId, currentCompetition.id),
+          isNull(judge.deletedAt),
+          isNull(judge.revokedAt),
+        ),
+      })
+      const activeById = new Map(activeJudges.map((row) => [row.id, row]))
 
-      const links = rows.length
+      const links = activeJudges.length
         ? await db
             .select({ judgeId: judgeRoute.judgeId, number: route.number, name: route.name })
             .from(judgeRoute)
@@ -61,7 +59,7 @@ export function createQrCodesRoutes(deps: QrCodesRouteDeps): Hono {
               and(
                 inArray(
                   judgeRoute.judgeId,
-                  rows.map((row) => row.id),
+                  activeJudges.map((row) => row.id),
                 ),
                 isNull(route.deletedAt),
               ),
@@ -76,9 +74,27 @@ export function createQrCodesRoutes(deps: QrCodesRouteDeps): Hono {
         routesByJudge.set(link.judgeId, list)
       }
 
-      const entries: JudgeSheetEntry[] = input.judges.map(({ judgeId, accessToken }) => {
-        const row = rowById.get(judgeId)
-        if (!row || row.revokedAt) {
+      // Encart par juge : jeton stocké en clair en base en priorité, sinon
+      // celui fourni par le client (validé contre le hash) pour les juges
+      // qui n'en ont pas.
+      const entries: JudgeSheetEntry[] = []
+      const included = new Set<string>()
+
+      for (const row of activeJudges) {
+        if (!row.accessTokenPlain) continue
+        included.add(row.id)
+        entries.push({
+          displayName: row.displayName,
+          accessUrl: `${env.PUBLIC_APP_URL}/j/${row.accessTokenPlain}`,
+          pinRequired: row.pinHash !== null,
+          routeLabels: routesByJudge.get(row.id) ?? [],
+        })
+      }
+
+      for (const { judgeId, accessToken } of input.judges) {
+        if (included.has(judgeId)) continue
+        const row = activeById.get(judgeId)
+        if (!row) {
           throw new ApiError(
             404,
             'Juge introuvable',
@@ -92,13 +108,14 @@ export function createQrCodesRoutes(deps: QrCodesRouteDeps): Hono {
             'Un des jetons fournis ne correspond plus à ce juge — rechargez la page et réessayez.',
           )
         }
-        return {
+        included.add(judgeId)
+        entries.push({
           displayName: row.displayName,
           accessUrl: `${env.PUBLIC_APP_URL}/j/${accessToken}`,
           pinRequired: row.pinHash !== null,
           routeLabels: routesByJudge.get(row.id) ?? [],
-        }
-      })
+        })
+      }
 
       const pdfBytes = await generateQrSheet({
         competitionName: currentCompetition.name,

@@ -19,7 +19,9 @@ import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
 
 import type { Env } from '../env'
+import { judgeAccessEmail } from '../lib/email-templates'
 import type { AccessTokenSigner } from '../lib/jwt'
+import type { Mailer } from '../lib/mailer'
 import { requireOrganizer } from '../middleware/auth'
 import { requireCompetitionAccess } from '../middleware/competition-access'
 import { ApiError, problem } from '../middleware/problem'
@@ -28,6 +30,7 @@ export interface JudgeRouteDeps {
   db: Database
   accessTokenSigner: AccessTokenSigner
   env: Env
+  mailer: Mailer
 }
 
 async function routeIdsByJudge(db: Database, judgeIds: string[]): Promise<Map<string, string[]>> {
@@ -44,13 +47,24 @@ async function routeIdsByJudge(db: Database, judgeIds: string[]): Promise<Map<st
   return map
 }
 
-function toSummary(row: typeof judge.$inferSelect) {
-  return judgeSummarySchema.parse({ ...row, hasPin: row.pinHash !== null })
+/**
+ * `accessUrl`/`pin` ne sont présents que si `competition.judgeCredentialsStored`
+ * était actif au moment de l'action qui les a produits (création, ou
+ * régénération pour `pin`) — DECISIONS.md ADR-027. Jamais les hachés, jamais
+ * `accessTokenPlain` brut (reconstruit en URL complète ici).
+ */
+function toDetail(row: typeof judge.$inferSelect, env: Env) {
+  const summary = judgeSummarySchema.parse({ ...row, hasPin: row.pinHash !== null })
+  return {
+    ...summary,
+    accessUrl: row.accessTokenPlain ? `${env.PUBLIC_APP_URL}/j/${row.accessTokenPlain}` : undefined,
+    pin: row.pinPlain ?? undefined,
+  }
 }
 
 export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
   const app = new Hono()
-  const { db, accessTokenSigner, env } = deps
+  const { db, accessTokenSigner, env, mailer } = deps
 
   app.use('*', requireOrganizer(accessTokenSigner), requireCompetitionAccess(db))
 
@@ -63,7 +77,9 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
       db,
       rows.map((row) => row.id),
     )
-    return c.json(rows.map((row) => ({ ...toSummary(row), routeIds: routeIds.get(row.id) ?? [] })))
+    return c.json(
+      rows.map((row) => ({ ...toDetail(row, env), routeIds: routeIds.get(row.id) ?? [] })),
+    )
   })
 
   app.post(
@@ -93,8 +109,10 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
       const accessToken = randomToken(32)
       // Le PIN suit le réglage de la compétition AU MOMENT de la création —
       // changer le réglage ensuite n'affecte jamais ce juge (DECISIONS.md
-      // ADR-026).
+      // ADR-026). Même logique pour la conservation en clair (ADR-027).
       const pin = currentCompetition.judgePinRequired ? randomPin() : null
+      const storeCredentials = currentCompetition.judgeCredentialsStored
+      const accessUrl = `${env.PUBLIC_APP_URL}/j/${accessToken}`
 
       const created = await db.transaction(async (tx) => {
         const [row] = await tx
@@ -104,7 +122,9 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
             displayName: input.displayName,
             accessTokenHash: hashToken(accessToken),
             accessTokenPrefix: accessToken.slice(0, 8),
+            accessTokenPlain: storeCredentials ? accessToken : null,
             pinHash: pin ? await hashPassword(pin) : null,
+            pinPlain: storeCredentials ? pin : null,
           })
           .returning()
         if (!row) throw new ApiError(500, 'Erreur interne', 'Impossible de créer le juge.')
@@ -114,12 +134,31 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
         return row
       })
 
+      // Envoi de l'e-mail : au mieux, jamais bloquant — l'organisateur garde
+      // l'accès affiché à l'écran même si la remise échoue (SMTP indisponible,
+      // adresse invalide côté serveur de destination, etc.).
+      let emailSent: boolean | undefined
+      if (input.email) {
+        try {
+          const { subject, html } = judgeAccessEmail(
+            input.displayName,
+            currentCompetition.name,
+            accessUrl,
+          )
+          await mailer.send(input.email, subject, html)
+          emailSent = true
+        } catch {
+          emailSent = false
+        }
+      }
+
       const response: JudgeCreated = {
         id: created.id,
         displayName: created.displayName,
         accessToken,
-        accessUrl: `${env.PUBLIC_APP_URL}/j/${accessToken}`,
+        accessUrl,
         ...(pin ? { pin } : {}),
+        ...(emailSent !== undefined ? { emailSent } : {}),
       }
       return c.json(response, 201)
     },
@@ -140,13 +179,21 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
 
     const [updated] = await db
       .update(judge)
-      .set({ revokedAt: new Date(), updatedAt: new Date() })
+      // Un accès révoqué ne sert plus à rien — on n'a aucune raison de
+      // garder le clair en base au-delà (même logique que la désactivation
+      // du réglage de la compétition, ADR-027).
+      .set({
+        revokedAt: new Date(),
+        accessTokenPlain: null,
+        pinPlain: null,
+        updatedAt: new Date(),
+      })
       .where(eq(judge.id, jid))
       .returning()
     if (!updated) throw new ApiError(500, 'Erreur interne', 'Impossible de révoquer le juge.')
 
     const routeIds = await routeIdsByJudge(db, [jid])
-    return c.json({ ...toSummary(updated), routeIds: routeIds.get(jid) ?? [] })
+    return c.json({ ...toDetail(updated, env), routeIds: routeIds.get(jid) ?? [] })
   })
 
   app.post('/:jid/regenerate-pin', async (c) => {
@@ -170,10 +217,15 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
     }
 
     const pin = randomPin()
+    // Contrairement au choix fait à la création (fixé pour la vie du juge),
+    // la régénération suit le réglage ACTUEL de la compétition — une action
+    // ponctuelle, pas une propriété du juge (DECISIONS.md ADR-027).
+    const pinPlain = currentCompetition.judgeCredentialsStored ? pin : null
     await db
       .update(judge)
       .set({
         pinHash: await hashPassword(pin),
+        pinPlain,
         pinAttempts: 0,
         lockedUntil: null,
         updatedAt: new Date(),

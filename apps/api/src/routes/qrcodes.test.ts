@@ -108,9 +108,40 @@ describe('POST /competitions/:id/qrcodes.pdf', () => {
     expect(response.status).toBe(200)
   })
 
-  it('refuse un jeton fourni qui ne correspond plus au juge (400)', async () => {
+  it('inclut automatiquement un juge dont le jeton est stocké en clair, sans que le client le fournisse (DECISIONS.md ADR-027)', async () => {
+    const { accessToken } = await registerLoggedInOrganizer(app, mailer)
+    // judgeCredentialsStored par défaut (true) : pas besoin de PATCH.
+    const competition = await createTestCompetition(app, accessToken, { format: 'contest' })
+    const routeResponse = await app.request(`/api/v1/competitions/${competition.id}/routes`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ number: 1, holdCount: 40 }),
+    })
+    const route = (await routeResponse.json()) as { id: string }
+    await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Auto', routeIds: [route.id] }),
+    })
+
+    const response = await app.request(`/api/v1/competitions/${competition.id}/qrcodes.pdf`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ judges: [] }),
+    })
+    expect(response.status).toBe(200)
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    expect(bytes.slice(0, 4)).toEqual(new Uint8Array([0x25, 0x50, 0x44, 0x46]))
+  })
+
+  it("refuse un jeton fourni qui ne correspond plus au juge, quand ce juge n'a pas de jeton stocké (400)", async () => {
     const { accessToken } = await registerLoggedInOrganizer(app, mailer)
     const competition = await createTestCompetition(app, accessToken, { format: 'contest' })
+    await app.request(`/api/v1/competitions/${competition.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ judgeCredentialsStored: false }),
+    })
     const routeResponse = await app.request(`/api/v1/competitions/${competition.id}/routes`, {
       method: 'POST',
       headers: authHeaders(accessToken),

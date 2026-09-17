@@ -209,6 +209,47 @@ describe('PATCH /competitions/:id', () => {
     })
     expect(response.status).toBe(400)
   })
+
+  it('désactiver judgeCredentialsStored efface le clair déjà stocké pour les juges existants (DECISIONS.md ADR-027)', async () => {
+    const { accessToken } = await registerLoggedInOrganizer(app, mailer)
+    const created = await createTestCompetition(app, accessToken, { format: 'contest' })
+    const routeResponse = await app.request(`/api/v1/competitions/${created.id}/routes`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ number: 1, holdCount: 40 }),
+    })
+    const route = (await routeResponse.json()) as { id: string }
+    const judgeResponse = await app.request(`/api/v1/competitions/${created.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Clair', routeIds: [route.id] }),
+    })
+    const judgeCreated = (await judgeResponse.json()) as { id: string; accessUrl: string }
+
+    const beforeList = await app.request(`/api/v1/competitions/${created.id}/judges`, {
+      headers: authHeaders(accessToken),
+    })
+    expect(
+      ((await beforeList.json()) as Array<{ id: string; accessUrl?: string }>).find(
+        (j) => j.id === judgeCreated.id,
+      )?.accessUrl,
+    ).toBe(judgeCreated.accessUrl)
+
+    await app.request(`/api/v1/competitions/${created.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ judgeCredentialsStored: false }),
+    })
+
+    const afterList = await app.request(`/api/v1/competitions/${created.id}/judges`, {
+      headers: authHeaders(accessToken),
+    })
+    expect(
+      ((await afterList.json()) as Array<{ id: string; accessUrl?: string }>).find(
+        (j) => j.id === judgeCreated.id,
+      )?.accessUrl,
+    ).toBeUndefined()
+  })
 })
 
 describe('POST /competitions/:id/status', () => {

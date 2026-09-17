@@ -63,7 +63,10 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/api/v1/competitions/:id/competitors', createCompetitorRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id/routes', createRouteRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id/rounds', createRoundRoutes(scopedDeps))
-  app.route('/api/v1/competitions/:id/judges', createJudgeRoutes({ ...scopedDeps, env: deps.env }))
+  app.route(
+    '/api/v1/competitions/:id/judges',
+    createJudgeRoutes({ ...scopedDeps, env: deps.env, mailer: deps.mailer }),
+  )
   app.route('/api/v1/competitions/:id', createQrCodesRoutes({ ...scopedDeps, env: deps.env }))
   app.route(
     '/api/v1/judge',

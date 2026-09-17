@@ -66,14 +66,23 @@ afterEach(async () => {
   )
 })
 
-async function setupCompetitionWithRoute(judgePinRequired = false) {
+async function setupCompetitionWithRoute(
+  options: { judgePinRequired?: boolean; judgeCredentialsStored?: boolean } = {},
+) {
   const { accessToken } = await registerLoggedInOrganizer(app, mailer)
   const competition = await createTestCompetition(app, accessToken, { format: 'contest' })
-  if (judgePinRequired) {
+  if (options.judgePinRequired !== undefined || options.judgeCredentialsStored !== undefined) {
     await app.request(`/api/v1/competitions/${competition.id}`, {
       method: 'PATCH',
       headers: authHeaders(accessToken),
-      body: JSON.stringify({ judgePinRequired: true }),
+      body: JSON.stringify({
+        ...(options.judgePinRequired !== undefined
+          ? { judgePinRequired: options.judgePinRequired }
+          : {}),
+        ...(options.judgeCredentialsStored !== undefined
+          ? { judgeCredentialsStored: options.judgeCredentialsStored }
+          : {}),
+      }),
     })
   }
   const routeResponse = await app.request(`/api/v1/competitions/${competition.id}/routes`, {
@@ -87,7 +96,9 @@ async function setupCompetitionWithRoute(judgePinRequired = false) {
 
 describe('POST /competitions/:id/judges', () => {
   it('crée un juge sans PIN quand la compétition ne l’exige pas (réglage par défaut)', async () => {
-    const { accessToken, competition, route } = await setupCompetitionWithRoute(false)
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: false,
+    })
 
     const response = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
       method: 'POST',
@@ -106,7 +117,9 @@ describe('POST /competitions/:id/judges', () => {
   })
 
   it('crée un juge avec un PIN à 6 chiffres quand la compétition l’exige', async () => {
-    const { accessToken, competition, route } = await setupCompetitionWithRoute(true)
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: true,
+    })
 
     const response = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
       method: 'POST',
@@ -119,7 +132,9 @@ describe('POST /competitions/:id/judges', () => {
   })
 
   it("refuse une voie qui n'appartient pas à cette compétition", async () => {
-    const { accessToken, competition } = await setupCompetitionWithRoute(false)
+    const { accessToken, competition } = await setupCompetitionWithRoute({
+      judgePinRequired: false,
+    })
     const otherCompetition = await createTestCompetition(app, accessToken, { format: 'contest' })
     const otherRouteResponse = await app.request(
       `/api/v1/competitions/${otherCompetition.id}/routes`,
@@ -140,7 +155,9 @@ describe('POST /competitions/:id/judges', () => {
   })
 
   it('refuse un juge sans voie', async () => {
-    const { accessToken, competition } = await setupCompetitionWithRoute(false)
+    const { accessToken, competition } = await setupCompetitionWithRoute({
+      judgePinRequired: false,
+    })
     const response = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
       method: 'POST',
       headers: authHeaders(accessToken),
@@ -152,7 +169,9 @@ describe('POST /competitions/:id/judges', () => {
 
 describe('GET /competitions/:id/judges', () => {
   it('liste les juges avec leur statut PIN et leurs voies assignées', async () => {
-    const { accessToken, competition, route } = await setupCompetitionWithRoute(true)
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: true,
+    })
     await app.request(`/api/v1/competitions/${competition.id}/judges`, {
       method: 'POST',
       headers: authHeaders(accessToken),
@@ -177,11 +196,101 @@ describe('GET /competitions/:id/judges', () => {
     expect(list[0]?.accessTokenHash).toBeUndefined()
     expect(list[0]?.pinHash).toBeUndefined()
   })
+
+  it('expose accessUrl/pin en clair par défaut (DECISIONS.md ADR-027)', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: true,
+    })
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Clair', routeIds: [route.id] }),
+    })
+    const created = (await createResponse.json()) as { id: string; accessUrl: string; pin: string }
+
+    const response = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      headers: authHeaders(accessToken),
+    })
+    const list = (await response.json()) as Array<{
+      id: string
+      accessUrl?: string
+      pin?: string
+    }>
+    const row = list.find((j) => j.id === created.id)
+    expect(row?.accessUrl).toBe(created.accessUrl)
+    expect(row?.pin).toBe(created.pin)
+  })
+
+  it("n'expose rien en clair quand la compétition désactive la conservation", async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: true,
+      judgeCredentialsStored: false,
+    })
+    await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Sans Trace', routeIds: [route.id] }),
+    })
+
+    const response = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      headers: authHeaders(accessToken),
+    })
+    const list = (await response.json()) as Array<{ accessUrl?: string; pin?: string }>
+    expect(list[0]?.accessUrl).toBeUndefined()
+    expect(list[0]?.pin).toBeUndefined()
+  })
+})
+
+describe('e-mail à la création', () => {
+  it('envoie le lien (sans le PIN) quand un e-mail est fourni', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: true,
+    })
+    const response = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        displayName: 'Juge Mail',
+        routeIds: [route.id],
+        email: 'juge-mail@club-demo.test',
+      }),
+    })
+    const created = (await response.json()) as {
+      accessUrl: string
+      pin: string
+      emailSent: boolean
+    }
+    expect(created.emailSent).toBe(true)
+
+    const sentEmail = mailer.sent.find((email) => email.to === 'juge-mail@club-demo.test')
+    expect(sentEmail).toBeDefined()
+    expect(sentEmail?.html).toContain(created.accessUrl)
+    expect(sentEmail?.html).not.toContain(created.pin)
+  })
+
+  it("n'envoie rien quand aucun e-mail n'est fourni", async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    // `setupCompetitionWithRoute` enregistre l'organisateur, ce qui envoie déjà
+    // un e-mail de vérification — on ne compare que ce que la création du
+    // juge ajoute par-dessus.
+    const sentBefore = mailer.sent.length
+
+    const response = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Sans Mail', routeIds: [route.id] }),
+    })
+    const created = (await response.json()) as { emailSent?: boolean }
+    expect(created.emailSent).toBeUndefined()
+    expect(mailer.sent).toHaveLength(sentBefore)
+  })
 })
 
 describe('POST /competitions/:id/judges/:jid/revoke', () => {
   it('révoque un juge', async () => {
-    const { accessToken, competition, route } = await setupCompetitionWithRoute(false)
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: false,
+    })
     const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
       method: 'POST',
       headers: authHeaders(accessToken),
@@ -194,14 +303,17 @@ describe('POST /competitions/:id/judges/:jid/revoke', () => {
       { method: 'POST', headers: authHeaders(accessToken) },
     )
     expect(response.status).toBe(200)
-    const updated = (await response.json()) as { revokedAt: string | null }
+    const updated = (await response.json()) as { revokedAt: string | null; accessUrl?: string }
     expect(updated.revokedAt).toBeTruthy()
+    expect(updated.accessUrl).toBeUndefined()
   })
 })
 
 describe('POST /competitions/:id/judges/:jid/regenerate-pin', () => {
   it('régénère le PIN d’un juge qui en a un', async () => {
-    const { accessToken, competition, route } = await setupCompetitionWithRoute(true)
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: true,
+    })
     const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
       method: 'POST',
       headers: authHeaders(accessToken),
@@ -220,7 +332,9 @@ describe('POST /competitions/:id/judges/:jid/regenerate-pin', () => {
   })
 
   it("refuse de régénérer le PIN d'un juge qui n'en a pas (409)", async () => {
-    const { accessToken, competition, route } = await setupCompetitionWithRoute(false)
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: false,
+    })
     const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
       method: 'POST',
       headers: authHeaders(accessToken),
@@ -233,5 +347,38 @@ describe('POST /competitions/:id/judges/:jid/regenerate-pin', () => {
       { method: 'POST', headers: authHeaders(accessToken) },
     )
     expect(response.status).toBe(409)
+  })
+
+  it('suit le réglage ACTUEL de la compétition, pas celui de la création (ADR-027)', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgePinRequired: true,
+      judgeCredentialsStored: false,
+    })
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge I', routeIds: [route.id] }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+
+    await app.request(`/api/v1/competitions/${competition.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ judgeCredentialsStored: true }),
+    })
+
+    await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}/regenerate-pin`,
+      {
+        method: 'POST',
+        headers: authHeaders(accessToken),
+      },
+    )
+
+    const listResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      headers: authHeaders(accessToken),
+    })
+    const list = (await listResponse.json()) as Array<{ id: string; pin?: string }>
+    expect(list.find((j) => j.id === created.id)?.pin).toMatch(/^\d{6}$/)
   })
 })

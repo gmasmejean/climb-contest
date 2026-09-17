@@ -4,7 +4,7 @@ import {
   createCompetitionInputSchema,
   updateCompetitionInputSchema,
 } from '@climbcontest/contracts'
-import { competition, randomToken, round, type Database } from '@climbcontest/db'
+import { competition, judge, randomToken, round, type Database } from '@climbcontest/db'
 import { getScoringEngine } from '@climbcontest/scoring'
 import { zValidator } from '@hono/zod-validator'
 import { and, desc, eq, isNull } from 'drizzle-orm'
@@ -154,13 +154,28 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
         )
       }
 
-      const [updated] = await db
-        .update(competition)
-        .set({ ...input, updatedAt: new Date() })
-        .where(eq(competition.id, current.id))
-        .returning()
-      if (!updated)
-        throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour la compétition.')
+      const updated = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(competition)
+          .set({ ...input, updatedAt: new Date() })
+          .where(eq(competition.id, current.id))
+          .returning()
+        if (!row) {
+          throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour la compétition.')
+        }
+        // Désactiver la conservation en clair efface rétroactivement ce qui
+        // est déjà stocké — sinon le réglage ne protégerait rien pour les
+        // juges déjà créés (DECISIONS.md ADR-027). L'activer, à l'inverse,
+        // ne s'applique qu'aux actions futures : on ne peut pas retrouver un
+        // clair jamais stocké.
+        if (input.judgeCredentialsStored === false) {
+          await tx
+            .update(judge)
+            .set({ accessTokenPlain: null, pinPlain: null })
+            .where(eq(judge.competitionId, current.id))
+        }
+        return row
+      })
       return c.json(competitionSchema.parse(updated))
     },
   )
