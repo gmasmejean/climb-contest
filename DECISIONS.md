@@ -1090,6 +1090,210 @@ pas encore synchronisé au moment où quelqu'un le lance.
 
 ---
 
+## ADR-032 — Corrections en lot (`POST /judge/ascents/batch`) : `supersedesId` explicite, pas de résolution serveur de « la dernière saisie active »
+
+**Date :** 2026-09-18
+**Contexte :** Lot 6 (hors ligne). L'endpoint `POST /judge/ascents/last/correct`
+(Lot 5) résout sa cible côté serveur (« la dernière saisie active de ce
+juge »). En mode lot, un même appel peut mélanger créations et corrections
+sur plusieurs compétiteurs, dans un ordre d'arrivée réseau qui ne reflète pas
+l'ordre chronologique de saisie — et un lot peut être rejoué après un échec
+partiel. « La dernière saisie active » n'a alors plus de sens univoque.
+
+**Décision :** un item `correct` du lot porte un `supersedesId` **explicite**
+(`packages/contracts/src/judge-ascents-batch.ts`) — le client sait déjà, au
+moment de la saisie, quel `ascent.id` précis il corrige (visible dans Dexie).
+Le serveur (`processCorrectItem`, `apps/api/src/routes/judge-ascents.ts`)
+vérifie que la cible appartient bien au juge courant, n'est pas déjà en
+conflit, et respecte encore la fenêtre de 5 minutes (ADR-007) — mais ne
+tente plus de deviner la cible.
+
+**Conséquence assumée :** le second volet d'ADR-007 (« ou jusqu'à la saisie
+suivante, n'importe quel compétiteur ») n'est plus revérifiable de façon
+fiable côté serveur en mode lot. Le client continue d'appliquer les deux
+règles avant de proposer l'écran de correction (donc un juge ne verra jamais
+l'option de corriger hors fenêtre) ; seul le filet de sécurité serveur se
+limite désormais à la règle des 5 minutes pour ce chemin. `POST
+/judge/ascents/last/correct` (Lot 5) reste inchangé et coexiste (ADR-029).
+
+---
+
+## ADR-033 — Détection de conflit d'`ascent` en lot : `SELECT ... FOR UPDATE` + rattrapage sur violation d'unicité, jamais de `DEFERRABLE`
+
+**Date :** 2026-09-18
+**Contexte :** Lot 6. Un item `create` de lot doit détecter si un autre
+appareil a déjà un passage actif pour le même (tour, voie, compétiteur), et
+si oui, conserver les deux lignes avec un `conflict_group` commun (cas
+SPEC.md §9 #22) plutôt que d'échouer ou d'en écraser une.
+
+**Décision 1 — pas de `DEFERRABLE` nécessaire.** Contrairement à
+`superseded_by` (ADR-031), `conflict_group` ne porte aucune clé étrangère —
+seulement l'index partiel `ascent_active_key` (ADR-002). L'ordre
+`UPDATE` (sort l'ancienne ligne de l'index) puis `INSERT` (la nouvelle, avec
+le même `conflict_group`) fonctionne dans l'ordre naturel, sans contournement.
+
+**Décision 2 — un `SELECT ... FOR UPDATE` préalable ne suffit pas seul.**
+Verrouiller la ligne active du triplet protège contre une course *si une
+ligne existe déjà*. Mais `FOR UPDATE` ne verrouille rien tant qu'aucune ligne
+n'existe : deux lots concurrents insérant chacun le **tout premier** passage
+d'un compétiteur peuvent tous deux passer la vérification (rien à trouver,
+rien à verrouiller) avant qu'aucun n'ait inséré, puis se disputer l'index
+partiel à l'`INSERT` — l'un des deux reçoit une violation d'unicité Postgres.
+Repéré par un test d'intégration utilisant deux requêtes HTTP réellement
+concurrentes (`Promise.all`, pas deux items du même lot traités
+séquentiellement) : `apps/api/src/routes/judge-ascents-batch.test.ts`,
+« cas SPEC.md #22 (course réelle) ».
+
+**Décision 3 — rattrapage par un seul réessai sur `isUniqueViolation`.**
+`processCreateItem` retente une fois `createOrConflict` si l'insertion échoue
+par violation d'unicité (`apps/api/src/lib/pg-errors.ts`). Au second passage,
+le `SELECT` retrouve la ligne désormais commitée par l'autre transaction et
+suit le chemin conflit normal — jamais un `rejected` qui perdrait
+silencieusement la saisie perdante (règle d'or, SPEC.md § 6.3).
+
+**Options écartées :** verrouiller une ligne « factice »/un advisory lock
+Postgres par triplet avant l'insertion — écarté, plus complexe qu'un simple
+réessai sur l'erreur déjà distinguée par `isUniqueViolation`.
+
+---
+
+## ADR-034 — `uuidv7` reste l'unique générateur d'id côté client, `packages/sync` reste sans dépendance
+
+**Date :** 2026-09-18
+**Contexte :** Lot 6. La file de synchronisation a besoin d'identifiants
+uuid v7 (ordonnés dans le temps) pour chaque élément.
+
+**Décision :** `packages/sync` ne génère aucun id lui-même — `enqueue(kind,
+payload, id)` reçoit l'id de l'appelant. `apps/web` continue d'utiliser
+`uuidv7` (déjà dépendance de `apps/web`/`packages/db` depuis le Lot 1/5,
+utilisée dans `JudgeAscentEntry.vue`), sans nouvelle bibliothèque. Cohérent
+avec ADR-014 : `packages/sync` reste à zéro dépendance de production, comme
+`packages/scoring`.
+
+---
+
+## ADR-035 — Gel de l'ACTIVATION du service worker, pas de son installation
+
+**Date :** 2026-09-18
+**Contexte :** ROADMAP.md Lot 6 exige qu'une nouvelle version ne s'installe
+jamais pendant qu'une saisie est en attente. `vite-plugin-pwa` était
+configuré en `registerType: 'autoUpdate'` (Lot 1), qui bascule seul dès
+qu'une mise à jour est prête.
+
+**Décision :** `registerType: 'prompt'` — le plugin n'appelle plus jamais
+`updateSW(true)` de lui-même. `apps/web/src/pwa-update.ts` pilote l'appel
+manuellement via `virtual:pwa-register`, gated sur `packages/sync` : tant que
+la file contient un élément `pending`/`sending`, `updateSW(true)` n'est
+jamais appelé. Nuance assumée dans le nom de l'ADR : le navigateur *installe*
+toujours un nouveau service worker en arrière-plan dès qu'il le détecte (rien
+ne l'en empêche, et ce n'est pas dangereux tant qu'il ne prend pas la main) —
+seule l'**activation** (`skipWaiting` + prise de contrôle + rechargement),
+seul moment qui pourrait interrompre une saisie, est gelée.
+
+**Dépendance ajoutée :** `workbox-window` (`apps/web`, version `7.4.1`,
+alignée sur celle déjà résolue transitivement par `vite-plugin-pwa`) —
+nécessaire pour que `virtual:pwa-register` se résolve à la construction ;
+jusqu'ici jamais importé nulle part dans le code (le Lot 1 configurait
+`VitePWA` sans jamais appeler `registerSW`), donc jamais détecté avant ce lot.
+
+---
+
+## ADR-036 — Une seule base Dexie par appareil, vidée au changement de juge détecté au bootstrap
+
+**Date :** 2026-09-18
+**Contexte :** Lot 6. IndexedDB est l'unique source de vérité côté juge
+(ADR-012). Faut-il une base par juge, ou une base partagée par appareil ?
+
+**Décision :** une seule base (`climbcontest-judge`, `apps/web/src/judge/local-db.ts`),
+cohérente avec `judge-session.ts` qui ne garde qu'un seul jeton actif à la
+fois sur l'appareil (pas de multi-session juge simultanée dans le
+navigateur). `bootstrapJudge()` compare le `judge.id` reçu au `judgeId` déjà
+enregistré dans la table `meta` ; s'ils diffèrent, la base est intégralement
+vidée avant d'écrire le nouveau contenu — un changement de juge sur le même
+appareil (recyclage d'une tablette de club) ne doit jamais mélanger les
+files/caches de deux juges différents.
+
+---
+
+## ADR-037 — `onOnline()`/`onVisible()`/`onStartup()` réinitialisent le repli exponentiel, ne se contentent pas d'appeler `flush()`
+
+**Date :** 2026-09-18
+**Contexte :** Lot 6. Un élément ayant déjà échoué plusieurs fois porte un
+`nextAttemptAt` pouvant aller jusqu'à 30 secondes dans le futur (repli
+exponentiel plafonné, jitter complet). Un simple appel à `flush()` sur le
+retour réseau respecte ce délai — donc un élément peut rester bloqué en
+`pending` plusieurs secondes après un retour réseau **explicite**, contraire
+à SPEC.md § 6.3 (« reprise automatique »). Repéré par un test e2e réel
+(`judge-offline-sync.spec.ts`) qui restait bloqué sur « Synchronisation… »
+plusieurs dizaines de secondes après le retour en ligne.
+
+**Décision :** `SyncEngine.onOnline()`, `onVisible()` et `onStartup()`
+appellent désormais `retryNow()` (`packages/sync/src/engine.ts`), qui remet
+`nextAttemptAt` à `0` pour tout élément `pending` dont le délai n'est pas
+encore écoulé, avant d'appeler `flush()`. Le repli exponentiel continue de
+s'appliquer normalement entre deux déclencheurs explicites — seuls ces trois
+événements (retour réseau, retour au premier plan, démarrage) court-circuitent
+le délai, jamais un flush périodique interne qui n'existe pas.
+
+---
+
+## ADR-038 — Le routeur n'appelle plus `bootstrapSession()` (organisateur) pour les routes juge, et l'échec ne bloque plus jamais la navigation
+
+**Date :** 2026-09-18
+**Contexte :** Lot 6. `router.ts` (Lot 1) appelait `bootstrapSession()`
+(tentative de restauration de la session organisateur via le cookie de
+refresh) une fois, avant la PREMIÈRE navigation, quelle que soit la route
+cible. Cet appel réseau n'était jamais protégé contre un échec de `fetch` au
+niveau transport (coupure réseau totale, pas juste un 401) — une exception
+non interceptée y rejetait toute la navigation, laissant un écran
+**entièrement blanc**, y compris pour un premier chargement hors ligne d'une
+route juge. Repéré en testant manuellement le rechargement hors ligne
+(`page.reload()` en mode avion) d'un écran juge via le vrai navigateur —
+violait directement CLAUDE.md (« aucun écran de juge ne doit dépendre d'une
+requête réseau pour s'afficher »).
+
+**Décision :** `router.beforeEach` (`apps/web/src/router.ts`) n'appelle plus
+`bootstrapSession()` du tout pour un chemin commençant par `/j` (aucune
+session organisateur n'y a de sens, SPEC.md § 3.2). Pour les autres routes,
+l'appel est enveloppé dans un `try/catch` — un échec (réseau ou serveur)
+dégrade proprement (SPEC.md § 6.1 : « public et organisateur… avec
+dégradation propre ») au lieu de faire planter la navigation.
+
+---
+
+## ADR-039 — Confirmations de saisie juge : toast à 2 secondes (au lieu de 5) et pile plafonnée à 3
+
+**Date :** 2026-09-18
+**Contexte :** Lot 6. Une fois la saisie écrite en local sans attente réseau
+(ADR-012), un juge peut enchaîner les confirmations bien plus vite qu'en Lot
+5 (qui imposait une pause naturelle via l'aller-retour réseau). Le composant
+`Toast` (Lot 1, `packages/ui`) rend un empilement vertical sans limite,
+fixé en bas de l'écran — sur 360 px de large, plusieurs confirmations
+successives (durée par défaut 5 s chacune) finissent par recouvrir les
+boutons d'action du compétiteur suivant. Repéré par un test e2e réel
+(10 saisies consécutives) où le bouton « Voir le récapitulatif » devenait
+durablement inatteignable.
+
+**Décision :** deux ajustements minimaux, sans toucher au comportement des
+toasts pour le reste de l'application (organisateur, public) :
+- `JudgeAscentEntry.vue` passe une durée explicite de 2000 ms (au lieu du
+  défaut de 5000 ms) pour ses confirmations de passage/correction ;
+- `useToast.ts` (`packages/ui`) plafonne désormais la pile à 3 notifications
+  visibles simultanément (`MAX_VISIBLE_TOASTS`), en retirant les plus
+  anciennes — un garde-fou général, pas spécifique au juge.
+
+**Également corrigé au passage :** `JudgeAscentEntry.vue::confirm()` capturait
+`mode.value` (`'create' | 'correct'`) **après** l'écriture optimiste
+(`await rowState.submitCreate(...)`), qui fait basculer `mode` de façon
+réactive dès qu'elle atteint Dexie (le compétiteur passe `ascent === null` →
+non-null, la fenêtre de correction s'ouvre) — le texte du toast annonçait
+alors systématiquement « Correction enregistrée ✓ », y compris pour une
+toute première création. `submittedMode` est désormais capturé une seule
+fois, avant le branchement create/correct. Couvert par un test de régression
+(`JudgeAscentEntry.test.ts`).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la

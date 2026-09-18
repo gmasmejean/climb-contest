@@ -162,3 +162,55 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   referme (le Lot 8 devra décider s'il se clôture avec la compétition ou
   reste ouvert). Le vrai tableau de bord (garde-fous, alertes, historique,
   publication des résultats) est entièrement à construire au Lot 8.
+
+## Depuis le Lot 6
+
+- **Alerte organisateur pour les conflits : données seulement, pas d'UI.**
+  Décision explicite avec l'utilisateur avant ce lot : `POST
+  /judge/ascents/batch` garantit que les deux passages en conflit sont
+  conservés avec un `conflict_group` commun, interrogeable (tests
+  d'intégration), mais aucun écran organisateur ne les affiche encore — le
+  vrai tableau de bord d'alerte et de résolution (`GET
+  .../conflicts`, `POST .../conflicts/:id/resolve`) est explicitement Lot 8
+  (cohérent avec ADR-030).
+- **Les endpoints juge à un seul élément (Lot 5, `POST /ascents`, `.../ascents/last/correct`)
+  ne sont plus jamais appelés par le client web** après ce lot — toute saisie
+  passe désormais par Dexie + `packages/sync` + `/ascents/batch`, y compris
+  en ligne (« un lot d'un seul élément » en pratique). Les deux endpoints
+  restent dans l'API (documentés, testés, ADR-029) pour un usage hors du
+  client web, mais deviennent du code serveur non exercé par aucun parcours
+  utilisateur réel — à surveiller pour ne pas le laisser pourrir
+  silencieusement si un futur refactor y touche sans le remarquer.
+- **Test de quota IndexedDB plein : non automatisé.** `fake-indexeddb`
+  (utilisé pour les tests Vitest de `apps/web`) n'expose aucun mécanisme de
+  quota configurable — il ne simule pas de limite de stockage réelle. Un test
+  fiable nécessiterait un vrai navigateur avec un contrôle de quota via CDP
+  (`page.context().newCDPSession()`), non tenté dans ce lot faute de temps.
+  Ce qui est garanti par construction : `enqueue()` propage toute exception
+  Dexie (dont un `QuotaExceededError` réel) à l'appelant plutôt que de
+  l'avaler — mais rien ne vérifie aujourd'hui par un test automatisé que
+  l'écran affiche un message clair dans ce cas précis.
+- **Pas de nombre maximal de tentatives de réessai** dans `packages/sync`
+  (règle d'or : jamais d'abandon silencieux) — un élément `pending` reste
+  éligible indéfiniment. Si un item reste bloqué durablement (ex. bug
+  serveur non détecté), rien n'alerte l'organisateur au-delà du bandeau
+  juge local (« Hors ligne, N saisies en attente » resterait affiché tant
+  que le juge n'est pas revenu en ligne, sans limite de temps).
+- **Un juge révoqué pendant qu'il est hors ligne ne l'apprend qu'à la
+  prochaine tentative de synchronisation** (401 renvoyé par
+  `POST /ascents/batch`, traité comme un échec transport ordinaire — la
+  file retente indéfiniment avec repli exponentiel, sans jamais distinguer
+  ce cas d'une simple coupure réseau). Les écrans juge ne faisant plus aucune
+  lecture réseau (ADR-012), il n'y a plus d'autre point de contact pour
+  détecter une révocation avant ce moment. Pas construit ce lot — noté pour
+  ne pas être surpris si un club signale ce scénario en usage réel.
+- **Un `rejected` (création) n'annule pas l'écriture optimiste déjà faite
+  dans le cache local** (`routeDetails`) — le compétiteur reste affiché
+  « fait » avec un avertissement permanent, plutôt que de réapparaître en
+  « à faire ». Simplification assumée pour ce lot (voir commentaire dans
+  `apps/web/src/judge/useAscentRowState.ts`) : reverter proprement une
+  création rejetée demanderait de restaurer un état « avant » qu'on ne
+  connaît pas encore pour ce cas (contrairement à une correction, qui elle
+  a un état antérieur clair). Si un club rencontre un `rejected` en usage
+  réel, prévoir cette reprise à ce moment-là plutôt que la construire à
+  l'aveugle.
