@@ -115,9 +115,12 @@ test('un juge note un passage, le voit synchronisé, puis le corrige', async ({ 
   await expect(page).toHaveURL(/\/j\/routes\//)
   await expect(page.getByRole('tab', { name: /À faire/ })).toHaveText('À faire (0)')
   await page.getByRole('tab', { name: /Fait/ }).click()
-  await expect(page.getByText('Dossard 47 — Léa Martin')).toBeVisible()
-  await expect(page.getByText('prise 25+')).toBeVisible()
-  await expect(page.getByText('À jour')).toBeVisible()
+  const row = page.getByRole('listitem').filter({ hasText: 'Dossard 47 — Léa Martin' })
+  await expect(row).toBeVisible()
+  await expect(row.getByText('prise 25+')).toBeVisible()
+  // L'indicateur PAR LIGNE (Lot 1) — distinct du bandeau global (Lot 6, qui
+  // affiche aussi « À jour » ailleurs sur l'écran).
+  await expect(row.getByText('À jour')).toBeVisible()
 
   // Correction, dans la fenêtre (ADR-007).
   await page.getByRole('link', { name: 'Corriger' }).click()
