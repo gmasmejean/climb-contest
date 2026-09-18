@@ -1,0 +1,164 @@
+import { describe, expect, it } from 'vitest'
+
+import {
+  publicCategoryQuerySchema,
+  publicCompetitionMetaSchema,
+  publicRankingEntrySchema,
+  publicRankingResponseSchema,
+  publicRouteSchema,
+  publicStreamEventSchema,
+} from './public'
+
+const uuid = '0189dcd5-5311-7d40-8db0-9496a2eef37b'
+const otherUuid = '0189dcd5-5311-7d40-8db0-9496a2eef37c'
+
+describe('publicCategoryQuerySchema', () => {
+  it('refuse un identifiant de catégorie mal formé', () => {
+    expect(publicCategoryQuerySchema.safeParse({ category: 'pas-un-uuid' }).success).toBe(false)
+  })
+})
+
+describe('publicCompetitionMetaSchema', () => {
+  const valid = {
+    competition: {
+      id: uuid,
+      slug: 'abc123',
+      name: 'Coupe du club',
+      venue: 'Salle Roc',
+      startsOn: '2026-05-01',
+      endsOn: '2026-05-01',
+      format: 'contest',
+      status: 'running',
+    },
+    categories: [{ id: uuid, label: 'U16 Femme', displayOrder: 0 }],
+    rounds: [],
+  }
+
+  it('accepte des métadonnées complètes', () => {
+    expect(publicCompetitionMetaSchema.safeParse(valid).success).toBe(true)
+  })
+
+  it("refuse un format de compétition inconnu (garantit qu'on ne dérive pas silencieusement)", () => {
+    const result = publicCompetitionMetaSchema.safeParse({
+      ...valid,
+      competition: { ...valid.competition, format: 'ligue' },
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('publicRouteSchema — aucune donnée organisateur', () => {
+  it('accepte une voie publique sans notes ni videoAssetId', () => {
+    const result = publicRouteSchema.safeParse({
+      id: uuid,
+      number: 3,
+      name: 'Le toit',
+      holdCount: 40,
+      sector: 'Mur nord',
+      color: 'rouge',
+      videoUrl: 'https://youtu.be/abc123',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejette les champs inconnus (aucune fuite de champ organisateur)', () => {
+    const result = publicRouteSchema.safeParse({
+      id: uuid,
+      number: 3,
+      name: null,
+      holdCount: 40,
+      sector: null,
+      color: null,
+      videoUrl: null,
+      notes: 'commentaire interne organisateur',
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('publicRankingEntrySchema — aucune PII au-delà de SPEC.md §6.4', () => {
+  const validEntry = {
+    rank: 1,
+    bib: 47,
+    firstName: 'Léa',
+    lastName: 'Martin',
+    club: 'Club Demo',
+    reachedRoundId: uuid,
+    rounds: [
+      {
+        roundId: uuid,
+        roundType: 'qualification',
+        combinedRank: 1,
+        routes: [
+          {
+            routeId: otherUuid,
+            routeNumber: 1,
+            routeName: null,
+            holdNumber: 25,
+            modifier: 'plus',
+            isTop: false,
+            status: 'valid',
+            routeRank: 1,
+          },
+        ],
+      },
+    ],
+  }
+
+  it('accepte une entrée de classement complète', () => {
+    expect(publicRankingEntrySchema.safeParse(validEntry).success).toBe(true)
+  })
+
+  it("rejette un champ hors liste — jamais d'année de naissance ou de licence", () => {
+    const result = publicRankingEntrySchema.safeParse({
+      ...validEntry,
+      birthYear: 2010,
+      licenseNumber: '123456',
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('publicRankingResponseSchema', () => {
+  it('accepte une réponse « pas encore démarré »', () => {
+    const result = publicRankingResponseSchema.safeParse({
+      categoryId: uuid,
+      started: false,
+      provisional: false,
+      generatedAt: new Date().toISOString(),
+      entries: [],
+    })
+    expect(result.success).toBe(true)
+  })
+})
+
+describe('publicStreamEventSchema', () => {
+  it('accepte les trois types d’événement (SPEC.md §7, corrigé — ROADMAP.md Lot 7)', () => {
+    expect(
+      publicStreamEventSchema.safeParse({
+        type: 'ranking_updated',
+        competitionId: uuid,
+        categoryId: otherUuid,
+      }).success,
+    ).toBe(true)
+    expect(
+      publicStreamEventSchema.safeParse({
+        type: 'round_status_changed',
+        competitionId: uuid,
+        roundId: otherUuid,
+      }).success,
+    ).toBe(true)
+    expect(
+      publicStreamEventSchema.safeParse({
+        type: 'route_updated',
+        competitionId: uuid,
+        routeId: otherUuid,
+      }).success,
+    ).toBe(true)
+  })
+
+  it('rejette un type d’événement inconnu', () => {
+    const result = publicStreamEventSchema.safeParse({ type: 'competitor_updated', competitionId: uuid })
+    expect(result.success).toBe(false)
+  })
+})

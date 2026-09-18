@@ -33,8 +33,9 @@ import { Hono } from 'hono'
 import { uuidv7 } from 'uuidv7'
 
 import type { JudgeTokenSigner } from '../lib/jwt'
-import { isUniqueViolation } from '../lib/pg-errors'
 import { assertJudgeAssignedToRoute, resolveOpenRoundForRoute } from '../lib/judge-authorization'
+import { notifyPublic } from '../lib/notify-public'
+import { isUniqueViolation } from '../lib/pg-errors'
 import { requireJudge } from '../middleware/judge-auth'
 import { ApiError, problem } from '../middleware/problem'
 import { authRateLimiter } from '../middleware/rate-limit'
@@ -324,7 +325,7 @@ async function processCreateItem(
   }
 
   try {
-    return await createOrConflict(db, currentJudge, item, routeRow)
+    return await createOrConflict(db, currentJudge, item, routeRow, competitorRow.categoryId)
   } catch (error) {
     // `SELECT ... FOR UPDATE` ne verrouille RIEN si aucune ligne n'existe
     // encore pour ce triplet — deux lots concurrents insérant chacun le
@@ -347,6 +348,7 @@ async function createOrConflict(
   currentJudge: JudgeRow,
   item: CreateBatchItem,
   routeRow: RouteRow,
+  categoryId: string,
 ): Promise<JudgeAscentBatchResult> {
   return db.transaction(async (tx) => {
     // Verrouille la ligne active du triplet, s'il y en a une, pour se
@@ -431,6 +433,12 @@ async function createOrConflict(
         throw new ApiError(500, 'Erreur interne', 'Impossible de relire le passage en conflit.')
       }
 
+      await notifyPublic(tx, {
+        type: 'ranking_updated',
+        competitionId: currentJudge.competitionId,
+        categoryId,
+      })
+
       return {
         id: item.id,
         status: 'conflict',
@@ -474,6 +482,12 @@ async function createOrConflict(
         status: row.status,
         climbTimeMs: row.climbTimeMs,
       },
+    })
+
+    await notifyPublic(tx, {
+      type: 'ranking_updated',
+      competitionId: currentJudge.competitionId,
+      categoryId,
     })
 
     return { id: item.id, status: 'accepted', ascent: ascentSchema.parse(row) }
@@ -556,6 +570,13 @@ async function processCorrectItem(
     }
   }
 
+  const targetCompetitor = await db.query.competitor.findFirst({
+    where: eq(competitor.id, target.competitorId),
+  })
+  if (!targetCompetitor) {
+    throw new ApiError(404, 'Compétiteur introuvable', "Ce compétiteur n'existe pas.")
+  }
+
   const created = await db.transaction(async (tx) => {
     // Même mécanique que Lot 5 (ADR-031) : la FK sur `superseded_by` est
     // `DEFERRABLE INITIALLY DEFERRED`, donc l'UPDATE peut référencer l'id de
@@ -626,6 +647,12 @@ async function processCorrectItem(
         },
       },
     ])
+
+    await notifyPublic(tx, {
+      type: 'ranking_updated',
+      competitionId: target.competitionId,
+      categoryId: targetCompetitor.categoryId,
+    })
 
     return row
   })
@@ -873,6 +900,12 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
             },
           })
 
+          await notifyPublic(tx, {
+            type: 'ranking_updated',
+            competitionId: currentJudge.competitionId,
+            categoryId: competitorRow.categoryId,
+          })
+
           return row
         })
         return c.json(ascentSchema.parse(created), 201)
@@ -922,6 +955,13 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
             `Le numéro de prise doit être compris entre 1 et ${last.holdCount}.`,
           )
         }
+      }
+
+      const lastCompetitor = await db.query.competitor.findFirst({
+        where: eq(competitor.id, last.competitorId),
+      })
+      if (!lastCompetitor) {
+        throw new ApiError(404, 'Compétiteur introuvable', "Ce compétiteur n'existe pas.")
       }
 
       const created = await db.transaction(async (tx) => {
@@ -1004,6 +1044,12 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
             },
           },
         ])
+
+        await notifyPublic(tx, {
+          type: 'ranking_updated',
+          competitionId: last.competitionId,
+          categoryId: lastCompetitor.categoryId,
+        })
 
         return row
       })

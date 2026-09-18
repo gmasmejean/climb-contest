@@ -68,12 +68,17 @@ Voir `SPEC.md` § 6.2. En bref :
 apps/api        Hono — API HTTP, auth organisateur, préparation de compétition
                 (Lot 3), juges et accès juge (Lot 4), saisie des passages par
                 le juge en ligne (Lot 5) puis par lot hors ligne (Lot 6) —
-                `GET /judge/bootstrap`, `POST /judge/ascents/batch`
+                `GET /judge/bootstrap`, `POST /judge/ascents/batch` ;
+                classement public caché et diffusion temps réel par SSE
+                (Lot 7) — `GET /public/:slug/rankings`,
+                `GET /public/:slug/stream`
 apps/web        Vue 3 + Vite — PWA (auth, espace organisateur : compétitions,
                 catégories, compétiteurs, voies, tours, juges — Lot 3/4 ;
                 accès juge `/j/<token>` — Lot 4 ; ses voies, saisie et
                 correction d'un passage, hors ligne (Dexie + file de
-                synchronisation, bandeau d'état) — Lot 5/6)
+                synchronisation, bandeau d'état) — Lot 5/6 ; page publique
+                `/c/<slug>` et écran de salle `/c/<slug>/salle`, sans
+                authentification, mise à jour en direct — Lot 7)
 packages/db     Schéma Drizzle, migrations, seed
 packages/contracts   Schémas Zod partagés (entités + payloads d'API)
 packages/ui     Composants Vue partagés (bouton, champ, modale…)
@@ -99,6 +104,32 @@ Network → Offline (ou débrancher le wifi), noter des passages, recharger la
 page, revenir en ligne — le bandeau en haut de l'écran juge doit toujours
 refléter honnêtement l'état de la file.
 
+## Page publique et temps réel
+
+`/c/<slug>` (sans authentification) affiche le classement d'une catégorie,
+la liste des voies (avec lecteur vidéo YouTube/Vimeo intégré si
+reconnu), et l'état de chaque tour en format phases. `/c/<slug>/salle` est
+une variante plein écran, gros caractères, qui défile automatiquement d'une
+catégorie à l'autre — à brancher sur le vidéoprojecteur de la salle.
+
+Le classement est recalculé côté serveur et caché
+(`apps/api/src/lib/public-cache.ts`), invalidé par un pont `LISTEN/NOTIFY`
+Postgres (`apps/api/src/lib/realtime-bridge.ts`, DECISIONS.md ADR-043) à
+chaque écriture qui l'affecte. La page suit les mises à jour via SSE
+(`GET /public/:slug/stream`), avec repli en sondage toutes les 30 s si le
+flux échoue.
+
+Pour mesurer la tenue en charge du flux SSE (ROADMAP.md Lot 7, cible 300
+spectateurs simultanés) contre la pile Docker Compose locale, seedée :
+
+```sh
+pnpm loadtest:sse
+LOAD_TEST_CONNECTIONS=500 pnpm loadtest:sse   # personnalise le nombre de connexions
+```
+
+Le script ne mesure pas la mémoire — observer `docker stats` sur le
+conteneur `api` pendant l'exécution.
+
 ## Tests
 
 - `pnpm test` couvre les paquets purs (`contracts`, `ui`, `scoring`, `sync`)
@@ -108,10 +139,12 @@ refléter honnêtement l'état de la file.
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Cinq tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Six tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
   resynchronise dans l'ordre de saisie ; deux appareils saisissent des
   valeurs différentes pour le même passage hors ligne et un conflit est
-  signalé au retour du réseau — voir `e2e/README.md` pour les lancer.
+  signalé au retour du réseau ; un passage noté par le juge apparaît en
+  direct dans le classement public d'un second onglet, sans rechargement —
+  voir `e2e/README.md` pour les lancer.

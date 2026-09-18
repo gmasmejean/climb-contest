@@ -749,7 +749,8 @@ POST   /judge/ascents/batch              [{ id, ... }] → état par élément
 GET    /public/:slug                     métadonnées de la compétition
 GET    /public/:slug/rankings?category=  classement publié
 GET    /public/:slug/routes?category=
-GET    /public/:slug/stream              SSE : ranking_updated, round_status_changed
+GET    /public/:slug/stream              SSE : ranking_updated, round_status_changed,
+                                          route_updated
 ```
 
 `GET /judge/bootstrap` est délibérément un appel unique et gros : le juge le
