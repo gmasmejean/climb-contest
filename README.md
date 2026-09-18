@@ -71,14 +71,20 @@ apps/api        Hono — API HTTP, auth organisateur, préparation de compétiti
                 `GET /judge/bootstrap`, `POST /judge/ascents/batch` ;
                 classement public caché et diffusion temps réel par SSE
                 (Lot 7) — `GET /public/:slug/rankings`,
-                `GET /public/:slug/stream`
+                `GET /public/:slug/stream` ; pilotage jour J (Lot 8) —
+                tableau de bord (`GET .../dashboard`), transitions de tour
+                (`POST .../round-status/:roundId`), conflits
+                (`GET/POST .../conflicts`), correction et saisie de secours
+                (`.../ascents`), statut compétiteur, journal d'activité
 apps/web        Vue 3 + Vite — PWA (auth, espace organisateur : compétitions,
                 catégories, compétiteurs, voies, tours, juges — Lot 3/4 ;
                 accès juge `/j/<token>` — Lot 4 ; ses voies, saisie et
                 correction d'un passage, hors ligne (Dexie + file de
                 synchronisation, bandeau d'état) — Lot 5/6 ; page publique
                 `/c/<slug>` et écran de salle `/c/<slug>/salle`, sans
-                authentification, mise à jour en direct — Lot 7)
+                authentification, mise à jour en direct — Lot 7 ; onglet
+                Pilotage — vue d'ensemble, tours, correction/secours,
+                conflits, journal — Lot 8)
 packages/db     Schéma Drizzle, migrations, seed
 packages/contracts   Schémas Zod partagés (entités + payloads d'API)
 packages/ui     Composants Vue partagés (bouton, champ, modale…)
@@ -129,6 +135,32 @@ LOAD_TEST_CONNECTIONS=500 pnpm loadtest:sse   # personnalise le nombre de connex
 
 Le script ne mesure pas la mémoire — observer `docker stats` sur le
 conteneur `api` pendant l'exécution.
+
+## Pilotage jour J
+
+L'onglet **Pilotage** de l'espace organisateur (`/competitions/:id`, visible
+quel que soit le format) rassemble le suivi en direct de la compétition,
+distinct de la préparation (onglets Catégories/Compétiteurs/Voies/Tours) :
+
+- **Vue d'ensemble** — progression par catégorie et par voie, compétiteurs
+  n'ayant pas encore grimpé, état de chaque juge (dernier signe de vie,
+  nombre de saisies), et les alertes (voie muette depuis 15 min, juge muet
+  depuis 10 min, conflit non résolu, compétiteur sans passage un tour
+  fermé). Rafraîchi par sondage toutes les 8 s (pas de flux temps réel ici,
+  contrairement à la page publique — DECISIONS.md ADR-045) ;
+- **Tours** — ouvrir/fermer/publier (et rouvrir/dépublier), pour les deux
+  formats ; publier est bloqué tant qu'un conflit du tour n'est pas résolu ;
+- **Voies** — corriger n'importe quel passage (motif obligatoire, historique
+  conservé) ou saisir un passage à la place d'un juge (secours) ;
+- **Conflits** — les deux valeurs côte à côte (juge, appareil, heure),
+  choisir l'une ou saisir une troisième valeur ;
+- **Journal** — l'historique complet de la compétition (saisies juge,
+  corrections, conflits tranchés, changements de statut), filtrable et
+  exportable en CSV.
+
+Le statut d'un compétiteur (présent/absent/abandon/disqualifié, motif
+toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
+`DECISIONS.md` (ADR-045 à ADR-049) pour les décisions prises pendant ce lot.
 
 ## Tests
 

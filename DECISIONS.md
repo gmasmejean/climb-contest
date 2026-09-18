@@ -1444,6 +1444,192 @@ lister les trois événements.
 
 ---
 
+## ADR-045 — Lot 8 : trois décisions produit actées avec l'utilisateur avant le codage
+
+**Date :** 2026-09-18
+**Contexte :** `ROADMAP.md` Lot 8 (pilotage jour J) laissait trois points
+ouverts, tranchés avec l'utilisateur avant d'écrire le code.
+
+**Décision 1 — tableau de bord organisateur par polling, pas SSE.**
+`EventSource` ne peut pas porter le header `Authorization` du JWT
+organisateur ; un mécanisme dédié (jeton signé en query param) aurait ajouté
+un nouveau vecteur d'authentification à sécuriser et tester, pour un
+bénéfice marginal (1-2 personnes connectées au tableau de bord, pas 300
+spectateurs comme la page publique, Lot 7). `GET .../dashboard` est donc
+rafraîchi par `useQuery({ refetchInterval: 8000 })` côté client
+(`PilotageOverview.vue`), sans invalidation de cache serveur (contrairement
+au classement public, ADR-013) : le volume de requêtes attendu ne le
+justifie pas.
+
+**Décision 2 — transitions de tour séquentielles, publication bloquée par
+un conflit non résolu.** Graphe : `draft → open`, `open → closed`,
+`closed → (open | published)`, `published → closed` — aucune autre
+transition acceptée (`ROUND_STATUS_TRANSITIONS`,
+`packages/contracts/src/round.ts`, réutilisé tel quel côté client pour
+désactiver les boutons non pertinents et côté serveur pour refuser une
+transition invalide, `lib/round-status.ts`). Publier est bloqué tant qu'un
+`ascent.conflict_group` non résolu existe sur ce tour
+(`roundHasUnresolvedConflicts`) — un classement publié ne doit jamais
+reposer sur une donnée encore contradictoire. Le tour implicite du format
+contest reçoit exactement les mêmes contrôles via le nouvel endpoint format-
+agnostique `POST .../round-status/:roundId` (voir ADR-046) — ça répond au
+TODO explicitement laissé par ADR-040.
+
+**Décision 3 — motif toujours facultatif pour un changement de statut
+compétiteur, y compris « présent ».** `ROADMAP.md` disait littéralement
+« avec motif », mais l'utilisateur a précisé en session que même un statut
+« lourd » (abandon, disqualifié) ne doit pas bloquer sur un motif vide —
+c'est un choix de l'organisateur, pas une contrainte système.
+`changeCompetitorStatusInputSchema.reason` est `optional().nullable()` sans
+exception par valeur de statut.
+
+---
+
+## ADR-046 — Lot 8 : `POST .../round-status/:roundId`, pas `POST .../rounds/:roundId/status` — piège de montage Hono découvert en écrivant le test
+
+**Date :** 2026-09-18
+**Contexte :** en implémentant la route de transition de statut (ADR-045,
+décision 2), le chemin RESTful naturel `POST
+/competitions/:id/rounds/:roundId/status` semblait pouvoir cohabiter avec
+`routes/rounds.ts` (monté sur le même préfixe `/competitions/:id/rounds`,
+réservé au format phases par `requirePhasesFormat()` appliqué en
+`app.use('*', ...)`), du moment que la nouvelle route est enregistrée dans
+un routeur Hono séparé. Le test du format contest (round implicite,
+ADR-023) a immédiatement échoué en 400 « Les tours ne se gèrent que pour
+une compétition au format phases » — l'erreur venant précisément de
+`rounds.ts`, qui ne définit pourtant aucun handler pour `/:roundId/status`.
+
+**Cause :** Hono aplatit le middleware global d'un sous-routeur monté par
+`app.route(prefix, subApp)` sur tout le sous-arbre `prefix + '/*'` au
+moment du montage — ce middleware s'exécute pour **toute** requête dont le
+chemin tombe sous ce préfixe, qu'un handler existe ou non à cet endroit
+précis. Un `throw` dans ce middleware (`requirePhasesFormat()`, qui lève
+plutôt que d'appeler `next()` puis constater un 404) produit donc une
+réponse définitive avant même que Hono ait la moindre chance d'essayer un
+autre routeur enregistré sur un préfixe plus large. Un middleware qui se
+contente d'appeler `next()` sans handler correspondant, lui, laisserait
+Hono retomber proprement sur le routeur suivant — d'où le fait que le
+format **phases** fonctionnait déjà avec l'ancien chemin avant ce correctif
+(le garde-fou n'y jette jamais), masquant le problème jusqu'au test contest.
+
+**Décision :** la route vit à `POST /competitions/:id/round-status/:roundId`
+(`routes/round-status.ts`), un segment qui n'est possédé par aucun routeur
+existant — élimine la collision structurellement plutôt que de retoucher
+`rounds.ts` (dont le garde-fou global reste correct pour son propre usage).
+
+**Options écartées :**
+- Convertir le garde-fou de `rounds.ts` en application route par route
+  plutôt qu'en `app.use('*', ...)` global, pour libérer le chemin RESTful
+  — écarté : touche un fichier stable et déjà testé pour un gain purement
+  esthétique sur l'URL.
+- Ajouter la route dans `rounds.ts` lui-même — écarté, `rounds.ts` est
+  explicitement réservé au format phases (commentaire du fichier) et cette
+  route doit rester format-agnostique.
+
+---
+
+## ADR-047 — Lot 8 : `activity_log` (nouvelle table) pour tours/compétiteurs, fusionné en mémoire avec `ascent_event` à la lecture
+
+**Date :** 2026-09-18
+**Contexte :** `ROADMAP.md` Lot 8, point 7, demande un journal d'activité
+de la compétition, filtrable et exportable. `ascent_event` (Lot 5/6) existe
+déjà mais est scopé à un `ascent` — aucune colonne `competition_id`
+directe, et aucun événement non lié à un passage (changement de statut de
+tour ou de compétiteur) n'a de table où se loger.
+
+**Décision :** une table neuve `activity_log` (migration `0005`,
+`competition_id` direct, `event_type` ∈ `{round_status_changed,
+competitor_status_changed}`, `actor_type` ∈ `{organizer, system}`,
+`entity_id` polymorphe sans FK — même style que `ascent_event.actor_id`),
+plutôt que d'étendre `ascent_event` à des événements sans `ascent_id`
+(aurait rendu la colonne `ascent_id` nullable, cassant l'hypothèse `NOT
+NULL` sur laquelle s'appuient déjà les jointures existantes,
+`lib/activity-log.ts`, `lib/conflicts.ts`).
+`GET .../activity-log` (`fetchActivityLog`) fusionne les deux tables **en
+mémoire** — `activity_log` directement, `ascent_event` jointe à `ascent`
+pour filtrer par compétition — plutôt qu'un vrai `UNION SQL` : les deux
+tables n'ont pas la même forme (`ascent_event` n'a pas de colonne
+`competition_id`), et à l'échelle d'une compétition de club, fusionner et
+trier deux listes déjà petites en JS est plus simple, tout aussi correct,
+et cohérent avec l'absence de pagination serveur déjà actée ailleurs
+(`TODO.md` Lot 3). Le journal inclut délibérément **tous** les
+`ascent_event`, y compris les saisies juge normales (`eventType:
+'created'`) — pas seulement les actions organisateur — pour pouvoir
+répondre à une réclamation sur un résultat trois semaines plus tard, comme
+le demande `ROADMAP.md`.
+
+**Conséquence sur `judge.last_seen_at` (dérivée, voir aussi ADR-048) :**
+sans rapport direct avec `activity_log`, mais découverte dans le même lot
+en construisant l'alerte « juge muet » du tableau de bord — documentée
+séparément.
+
+---
+
+## ADR-048 — Lot 8 : `judge.last_seen_at` devient un vrai battement de cœur, mis à jour par le middleware `requireJudge`
+
+**Date :** 2026-09-18
+**Contexte :** jusqu'ici, `judge.last_seen_at` n'était écrit qu'à la
+connexion (`POST /judge/auth`, Lot 4) — jamais pendant la journée. L'alerte
+« juge muet depuis 10 minutes » du tableau de bord (ROADMAP.md Lot 8) a
+besoin d'un signal qui reflète l'activité réelle, pas seulement le moment
+où le juge a scanné son QR code le matin : un juge connecté à 8h et actif
+toute la journée se serait sinon affiché comme « muet depuis 8h ».
+
+**Décision :** `requireJudge` (`apps/api/src/middleware/judge-auth.ts`) met
+à jour `last_seen_at` à **chaque** appel authentifié réussi (bootstrap,
+batch, etc.) — un seul point d'écriture, plutôt que dupliqué dans chaque
+route juge. Accepte un seam `now: () => Date` optionnel (même convention
+que `JudgeAscentRouteDeps`, ADR-007), fourni par `judge-ascents.ts` qui le
+reçoit déjà de `AppDeps`.
+
+**Risque assumé, non traité ce lot :** `POST /judge/auth` (connexion) et le
+passage automatique du round implicite contest à `open`
+(`routes/competitions.ts`, transition `running`) écrivent encore
+`new Date()` en dur, sans passer par ce seam — sans conséquence
+fonctionnelle en production, mais un test qui fige `now()` pour l'API et
+attend une cohérence stricte avec l'horloge réelle sur CES deux chemins
+précis doit avancer son horloge simulée depuis un point de départ proche du
+« vrai » maintenant, pas une date arbitraire (piège rencontré en écrivant
+`dashboard.test.ts` — voir le commentaire dans ce fichier). Noté dans
+`TODO.md` : uniformiser ces deux écritures sur le seam `now` si un besoin
+de précision plus fort apparaît.
+
+---
+
+## ADR-049 — Lot 8 : réutilisation de la logique de conflit/correction juge (`lib/ascent-write.ts`, `lib/ascent-correction.ts`), extraite de `judge-ascents.ts`
+
+**Date :** 2026-09-18
+**Contexte :** la saisie de secours organisateur et la correction
+organisateur (ROADMAP.md Lot 8, points 2 et 4) ont besoin exactement de la
+même mécanique que la saisie/correction juge : détection de conflit avec
+verrouillage et retry sur violation d'unicité (ADR-033), chaînage
+`superseded_by` sous contrainte différée (ADR-031). La résolution de
+conflit (Lot 8, point 3) a en plus besoin d'une variante « plusieurs lignes
+sources → une ligne gagnante » (2 sources, pas 1).
+
+**Décision :** extraction plutôt que duplication — `createAscentOrConflict`
+(`lib/ascent-write.ts`) et `supersedeToNewAscent`/
+`resolveConflictByChoosing` (`lib/ascent-correction.ts`), généralisées sur
+un acteur (`{kind:'judge', judgeId}` ou `{kind:'organizer', userId}`).
+`judge-ascents.ts` est modifié pour appeler ces fonctions au lieu de les
+inliner — comportement inchangé, vérifié par les suites de tests
+existantes (`judge-ascents.test.ts`, `judge-ascents-batch.test.ts`,
+`judge-ascents-correction.test.ts`), qui servent de filet de
+non-régression avant/après l'extraction. Justification du choix (plutôt
+que « tu ne réécris pas ce qui marche ») : dupliquer une logique de
+concurrence aussi délicate (ADR-033) dans un troisième endroit aurait créé
+un risque réel de divergence future, pire que le risque de l'extraction
+elle-même (couverte par les tests existants).
+
+**Écart assumé à `SPEC.md` §7 :** la spec esquissait `PATCH /ascents/:id`
+hors du préfixe compétition. La correction organisateur vit à
+`PATCH /competitions/:id/ascents/:id` (`routes/organizer-ascents.ts`) pour
+réutiliser `requireCompetitionAccess` comme toutes les autres routes
+organisateur, plutôt que d'inventer une vérification d'accès dédiée pour
+cette seule route.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la

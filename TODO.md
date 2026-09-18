@@ -135,11 +135,10 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   Assumé hors périmètre par décision explicite pour ce lot.
 - **`POST /judge/ascents/batch`** — endpoint batch pour la synchronisation
   hors ligne, Lot 6 (voir DECISIONS.md ADR-029).
-- **Motif obligatoire sur les corrections organisateur** (au-delà de la
-  fenêtre du juge) — Lot 8, pas construit ici ; les CHECK
-  `ascent_status_shape_check`/`ascent_recorded_by_check` supportent déjà
-  `recordedByUserId` pour cette saisie de secours, mais aucune route
-  organisateur ne l'utilise encore.
+- ~~Motif obligatoire sur les corrections organisateur~~ Résolu au Lot 8 :
+  `PATCH /competitions/:id/ascents/:id` (`routes/organizer-ascents.ts`,
+  DECISIONS.md ADR-049), motif requis par le schéma
+  (`correctAscentByOrganizerInputSchema`).
 - **Recherche compétiteur floue/normalisée** (accents, fautes de frappe) sur
   l'écran voie du juge — filtrage naïf pour ce lot, à revoir si un club
   signale un vrai problème d'usage.
@@ -150,29 +149,28 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **Migration `0004_ascent_superseded_by_deferrable` absente de
   `drizzle/meta/_journal.json`** (DECISIONS.md ADR-031) — elle ne correspond
   à aucun changement de `schema.ts` (Drizzle Kit ne sait pas exprimer
-  `DEFERRABLE`), donc rien à générer. Vérifier qu'un futur `drizzle-kit
-  generate` ne réutilise pas par erreur le numéro `0004` s'il ne scanne pas
-  le contenu réel du dossier `drizzle/` pour choisir le prochain indice.
-- **Ouverture/clôture des tours : seulement débloquée au minimum**
-  (DECISIONS.md ADR-030). Format phases : `status` accepté par le `PATCH
-  .../rounds/:roundId` générique, mais aucun bouton dans `RoundsTab.vue` —
-  un organisateur ne peut pas encore ouvrir un tour depuis l'écran, seulement
-  par un appel API direct. Format contest : le round implicite s'ouvre
-  automatiquement quand la compétition passe à `running`, mais rien ne le
-  referme (le Lot 8 devra décider s'il se clôture avec la compétition ou
-  reste ouvert). Le vrai tableau de bord (garde-fous, alertes, historique,
-  publication des résultats) est entièrement à construire au Lot 8.
+  `DEFERRABLE`), donc rien à générer. ~~Vérifier qu'un futur `drizzle-kit
+  generate` ne réutilise pas par erreur le numéro `0004`~~ Arrivé exactement
+  comme prévu au Lot 8 : `drizzle-kit generate` a proposé `0004_lot8_activity_log`
+  (ne voyait pas le fichier `.sql` déjà présent, seulement son propre
+  journal). Renommé à la main en `0005_lot8_activity_log` (fichier `.sql`,
+  `.down.sql`, `meta/0005_snapshot.json`, et l'entrée `idx`/`tag` de
+  `meta/_journal.json`) avant de committer. Le risque reste entier pour la
+  **prochaine** migration générée : toujours vérifier le contenu réel de
+  `drizzle/` après un `db:generate`, pas seulement `_journal.json`.
+- ~~Ouverture/clôture des tours : seulement débloquée au minimum~~ Résolu au
+  Lot 8 : transitions avec garde-fous (`POST
+  .../round-status/:roundId`, DECISIONS.md ADR-045/ADR-046), boutons dans
+  `PilotageRounds.vue` (onglet Pilotage, pas `RoundsTab.vue` — la
+  préparation et le pilotage jour J restent deux écrans séparés), pour les
+  deux formats.
 
 ## Depuis le Lot 6
 
-- **Alerte organisateur pour les conflits : données seulement, pas d'UI.**
-  Décision explicite avec l'utilisateur avant ce lot : `POST
-  /judge/ascents/batch` garantit que les deux passages en conflit sont
-  conservés avec un `conflict_group` commun, interrogeable (tests
-  d'intégration), mais aucun écran organisateur ne les affiche encore — le
-  vrai tableau de bord d'alerte et de résolution (`GET
-  .../conflicts`, `POST .../conflicts/:id/resolve`) est explicitement Lot 8
-  (cohérent avec ADR-030).
+- ~~Alerte organisateur pour les conflits : données seulement, pas d'UI.~~
+  Résolu au Lot 8 : `GET .../conflicts`, `POST .../conflicts/:id/resolve`
+  (`routes/conflicts.ts`), onglet Conflits (`PilotageConflicts.vue`), et
+  alerte dédiée dans `GET .../dashboard`.
 - **Les endpoints juge à un seul élément (Lot 5, `POST /ascents`, `.../ascents/last/correct`)
   ne sont plus jamais appelés par le client web** après ce lot — toute saisie
   passe désormais par Dexie + `packages/sync` + `/ascents/batch`, y compris
@@ -217,12 +215,10 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 
 ## Depuis le Lot 7
 
-- **Un contest reste « provisoire » pour toujours tant que le Lot 8 n'a pas
-  construit la vraie publication.** Décision utilisateur explicite
-  (DECISIONS.md ADR-040) : aucune action de publication n'a été ajoutée ce
-  lot, ni pour le round implicite du contest ni de bouton pour le `PATCH`
-  déjà existant en format phases (ADR-030). Le Lot 8 devra décider comment
-  un contest atteint un jour `published`.
+- ~~Un contest reste « provisoire » pour toujours tant que le Lot 8 n'a pas
+  construit la vraie publication.~~ Résolu au Lot 8 : `POST
+  .../round-status/:roundId` fonctionne pour le tour implicite du contest
+  exactement comme pour un tour phases (DECISIONS.md ADR-045/ADR-046).
 - **Filtre « ascent actif » et liste des statuts de roster dupliqués entre
   `judge-ascents.ts` et `public-ranking.ts`** (`superseded_by IS NULL AND
   conflict_group IS NULL` ; `['registered', 'present']`) — pas de
@@ -247,3 +243,56 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   dans les parcours actuels (aucun lien de l'application ne mène d'une
   compétition publique à une autre sans navigation complète), mais à
   revoir si ce cas d'usage apparaît.
+
+## Depuis le Lot 8
+
+- **Bug pré-existant découvert (pas causé par ce lot, reproduit sur `main`
+  avant le Lot 8) : un rechargement complet du navigateur directement sur
+  une route organisateur profonde (ex. `/competitions/:id`) perd la
+  session**, malgré le cookie de refresh `httpOnly` — l'utilisateur atterrit
+  sur `/` (accueil) au lieu de la page demandée, sans passer par `/login`
+  (donc pas un simple échec d'authentification classique). Découvert en
+  écrivant `e2e/organizer-pilotage.spec.ts` : `page.goto` direct vers
+  `/competitions/:id` échouait de façon déterministe, confirmé identique
+  après avoir revenu tout le code de ce lot (`git stash` vers `main`) puis
+  rejoué le test `judge-conflict.spec.ts` existant, qui échoue pour une
+  raison apparentée (un clic qui devrait naviguer vers `/j/routes/:id` reste
+  sur `/j/home`). Contourné dans le nouveau test en navigant uniquement par
+  clics (comme tous les parcours utilisateurs réels, qui n'atteignent
+  jamais ces routes par un lien externe ou un F5). À investiguer dans une
+  session dédiée : un organisateur qui recharge sa page de compétition en
+  cours de pilotage (raison réaliste : un F5 après un souci réseau) tomberait
+  dessus en usage réel.
+- **`eventType: 'voided'` (`ascent_event`) reste non utilisé.** Aucune
+  action « annuler complètement un passage » distincte de la correction
+  n'a été construite ce lot — une correction vers un statut adapté (DSQ,
+  DNS…) couvre le besoin exprimé par ROADMAP.md. Si un vrai besoin
+  d'annulation (faire disparaître un passage du décompte sans le
+  requalifier) apparaît, prévoir une action dédiée à ce moment-là.
+- **Pas de SSE pour le tableau de bord organisateur, polling à 8 s**
+  (DECISIONS.md ADR-045, décidé avec l'utilisateur). À revisiter si un club
+  signale un tableau de bord perçu comme trop lent en usage réel — le
+  travail d'authentification d'un flux SSE organisateur (jeton signé en
+  query param, `EventSource` ne portant pas de header) resterait à faire.
+- **Alerte « voie sans saisie depuis 15 minutes » : pas de vrai horodatage
+  d'ouverture du tour.** En l'absence de toute saisie, `computeDashboard`
+  utilise `round.updated_at` comme approximation de « depuis l'ouverture »
+  (`lib/dashboard.ts`) — imprécis si le tour a été mis à jour pour une autre
+  raison après son ouverture (répartition des voies, etc.). Un vrai
+  `round.opened_at` séparé résoudrait ça proprement si l'imprécision pose
+  un jour problème en usage réel.
+- **`judge.last_seen_at` mis à jour à chaque appel authentifié** (ADR-048)
+  ajoute une écriture DB par requête juge — négligeable à l'échelle d'un
+  club (quelques juges, quelques requêtes/minute chacun), à surveiller si
+  un jour le volume change d'ordre de grandeur.
+- **`GET .../activity-log` n'est pas paginé**, cohérent avec le reste du
+  dépôt à cette échelle (TODO.md Lot 3) — à revoir si une compétition très
+  active (des centaines de passages sur plusieurs jours) rend la réponse
+  trop grosse.
+- **`e2e/organizer-pilotage.spec.ts` ne couvre que la résolution de
+  conflit par « choix », pas par « nouvelle valeur »**, ni la saisie de
+  secours (couvertes par les tests d'intégration API,
+  `conflicts.test.ts`/`organizer-ascents.test.ts`, mais pas par un parcours
+  navigateur complet) — pas fait par manque de temps dans ce lot, le
+  scénario choisi couvre déjà tout le reste du pilotage (tours, correction,
+  publication, reflet public).
