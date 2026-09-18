@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Six tests à ce jour :
+Sept tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -23,7 +23,14 @@ Six tests à ce jour :
 - `public-live-ranking.spec.ts` — un juge note un passage, un second onglet
   resté ouvert sur la page publique (`/c/<slug>`, sans authentification) le
   voit apparaître dans le classement SANS rechargement, porté par le flux
-  SSE (`ROADMAP.md` Lot 7).
+  SSE (`ROADMAP.md` Lot 7) ;
+- `organizer-pilotage.spec.ts` — un organisateur résout un conflit de
+  saisie (« choisir cette valeur »), corrige le passage retenu, ferme puis
+  publie le tour depuis l'onglet Pilotage — le classement public reflète la
+  valeur finale, sans marquage « provisoire » (`ROADMAP.md` Lot 8). Amorcé
+  par API (compétition/juge/conflit), navigue uniquement par clics UI
+  jamais un `page.goto` direct vers une route organisateur profonde,
+  voir `TODO.md` § Lot 8 pour le bug pré-existant que ça contourne.
 
 ## Projets
 

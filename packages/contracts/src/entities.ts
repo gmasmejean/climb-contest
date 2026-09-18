@@ -10,6 +10,7 @@
  * d'inscription avant ce correctif).
  */
 import {
+  activityLog,
   ascent,
   ascentEvent,
   category,
@@ -87,6 +88,13 @@ export const ascentEventSchema = createSelectSchema(ascentEvent, {
 })
 export type AscentEvent = z.infer<typeof ascentEventSchema>
 export const sessionSchema = createSelectSchema(session)
+
+/** Lot 8 — journal d'activité compétition (hors passage, voir ascentEventSchema). */
+export const activityLogSchema = createSelectSchema(activityLog, {
+  eventType: z.enum(['round_status_changed', 'competitor_status_changed']),
+  actorType: z.enum(['organizer', 'system']),
+})
+export type ActivityLog = z.infer<typeof activityLogSchema>
 
 /**
  * Vue organisateur exposable au client : jamais le hash de mot de passe ni

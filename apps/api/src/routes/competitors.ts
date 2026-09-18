@@ -1,16 +1,18 @@
 import {
+  changeCompetitorStatusInputSchema,
   competitorSchema,
   createCompetitorInputSchema,
   importCompetitorsInputSchema,
   updateCompetitorInputSchema,
 } from '@climbcontest/contracts'
-import { ascent, category, competitor, type Database } from '@climbcontest/db'
+import { activityLog, ascent, category, competitor, type Database } from '@climbcontest/db'
 import { zValidator } from '@hono/zod-validator'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
 
 import { buildImportReport } from '../lib/competitor-import'
 import type { AccessTokenSigner } from '../lib/jwt'
+import { notifyPublic } from '../lib/notify-public'
 import { isUniqueViolation } from '../lib/pg-errors'
 import { requireOrganizer } from '../middleware/auth'
 import { requireCompetitionAccess } from '../middleware/competition-access'
@@ -154,6 +156,74 @@ export function createCompetitorRoutes(deps: CompetitorRouteDeps): Hono {
         }
         throw error
       }
+    },
+  )
+
+  /**
+   * Lot 8 (ROADMAP.md, DECISIONS.md) : présent/absent/abandon/disqualifié,
+   * motif toujours facultatif (décision utilisateur explicite). Distinct du
+   * PATCH générique ci-dessus, qui n'accepte volontairement pas `status`
+   * (packages/contracts/src/competitor.ts).
+   */
+  app.patch(
+    '/:competitorId/status',
+    zValidator('json', changeCompetitorStatusInputSchema, (result, c) => {
+      if (!result.success)
+        return problem(c, 400, 'Requête invalide', result.error.issues[0]?.message)
+    }),
+    async (c) => {
+      const organizer = c.get('organizer')
+      const competitionId = c.get('competition').id
+      const competitorId = c.req.param('competitorId')
+      const { status, reason } = c.req.valid('json')
+
+      const existing = await db.query.competitor.findFirst({
+        where: and(
+          eq(competitor.id, competitorId),
+          eq(competitor.competitionId, competitionId),
+          isNull(competitor.deletedAt),
+        ),
+      })
+      if (!existing)
+        throw new ApiError(404, 'Compétiteur introuvable', "Ce compétiteur n'existe pas.")
+
+      if (existing.status === status) {
+        return c.json(competitorSchema.parse(existing))
+      }
+
+      const updated = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(competitor)
+          .set({ status, updatedAt: new Date() })
+          .where(eq(competitor.id, competitorId))
+          .returning()
+        if (!row)
+          throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour le statut.')
+
+        await tx.insert(activityLog).values({
+          competitionId,
+          eventType: 'competitor_status_changed',
+          actorType: 'organizer',
+          actorId: organizer.sub,
+          entityId: competitorId,
+          payload: { from: existing.status, to: status },
+          reason: reason ?? null,
+        })
+
+        // Un changement de statut peut faire entrer/sortir ce compétiteur du
+        // classement (public-ranking.ts filtre déjà par statut) — toujours
+        // notifier, même sans passage existant : moins cher qu'une requête
+        // pour vérifier, et sans conséquence si rien n'a de fait changé.
+        await notifyPublic(tx, {
+          type: 'ranking_updated',
+          competitionId,
+          categoryId: existing.categoryId,
+        })
+
+        return row
+      })
+
+      return c.json(competitorSchema.parse(updated))
     },
   )
 

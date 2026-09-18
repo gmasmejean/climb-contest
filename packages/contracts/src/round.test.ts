@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { createRoundInputSchema, setRoundRoutesInputSchema } from './round'
+import {
+  changeRoundStatusInputSchema,
+  createRoundInputSchema,
+  ROUND_STATUS_TRANSITIONS,
+  setRoundRoutesInputSchema,
+  updateRoundInputSchema,
+} from './round'
 
 describe('createRoundInputSchema', () => {
   it('accepte un tour de qualification sans nombre de qualifiés', () => {
@@ -20,6 +26,43 @@ describe('createRoundInputSchema', () => {
       qualifyingCount: -1,
     })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('updateRoundInputSchema', () => {
+  it('refuse le champ status — un seul chemin d’écriture, changeRoundStatusInputSchema (Lot 8)', () => {
+    const result = updateRoundInputSchema.safeParse({ status: 'open' })
+    // `.partial()` sans `status` dans sa forme : le champ est simplement
+    // ignoré (strip), pas rejeté — mais il ne doit plus être PERSISTÉ par la
+    // route qui l'utilise, ce que ce test ne peut pas vérifier seul.
+    expect(result.success).toBe(true)
+    expect(result.success && 'status' in result.data).toBe(false)
+  })
+})
+
+describe('changeRoundStatusInputSchema', () => {
+  it('accepte chaque valeur de statut', () => {
+    for (const status of ['draft', 'open', 'closed', 'published'] as const) {
+      expect(changeRoundStatusInputSchema.safeParse({ status }).success).toBe(true)
+    }
+  })
+
+  it('refuse un statut inconnu', () => {
+    expect(changeRoundStatusInputSchema.safeParse({ status: 'archived' }).success).toBe(false)
+  })
+})
+
+describe('ROUND_STATUS_TRANSITIONS', () => {
+  it('est séquentiel, avec réouverture et dépublication possibles', () => {
+    expect(ROUND_STATUS_TRANSITIONS.draft).toEqual(['open'])
+    expect(ROUND_STATUS_TRANSITIONS.open).toEqual(['closed'])
+    expect(ROUND_STATUS_TRANSITIONS.closed).toEqual(['open', 'published'])
+    expect(ROUND_STATUS_TRANSITIONS.published).toEqual(['closed'])
+  })
+
+  it('n’autorise jamais de sauter directement à published depuis draft ou open', () => {
+    expect(ROUND_STATUS_TRANSITIONS.draft).not.toContain('published')
+    expect(ROUND_STATUS_TRANSITIONS.open).not.toContain('published')
   })
 })
 

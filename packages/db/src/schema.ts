@@ -13,6 +13,7 @@ import {
   boolean,
   check,
   date,
+  index,
   integer,
   jsonb,
   numeric,
@@ -415,3 +416,38 @@ export const ascentEvent = pgTable('ascent_event', {
   reason: text('reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+/**
+ * Lot 8 — journal d'activité de la compétition (ROADMAP.md), pour tout ce
+ * qui n'est pas un passage (déjà couvert par `ascent_event`) : changements
+ * de statut d'un tour ou d'un compétiteur. `GET .../activity-log` fusionne
+ * ces lignes avec `ascent_event` (jointe à `ascent` pour filtrer par
+ * compétition) au moment de la lecture — voir DECISIONS.md.
+ */
+export const activityLog = pgTable(
+  'activity_log',
+  {
+    id: id(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competition.id),
+    eventType: text('event_type').notNull(),
+    actorType: text('actor_type').notNull(),
+    // Référence polymorphe (user.id, ou null pour 'system') : pas de FK,
+    // même choix que ascent_event.actorId.
+    actorId: uuid('actor_id'),
+    // round.id ou competitor.id selon eventType — pas de FK (polymorphe).
+    entityId: uuid('entity_id').notNull(),
+    payload: jsonb('payload').notNull(),
+    reason: text('reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'activity_log_event_type_check',
+      sql`${table.eventType} IN ('round_status_changed', 'competitor_status_changed')`,
+    ),
+    check('activity_log_actor_type_check', sql`${table.actorType} IN ('organizer', 'system')`),
+    index('activity_log_competition_id_idx').on(table.competitionId),
+  ],
+)

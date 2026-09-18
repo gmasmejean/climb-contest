@@ -1,5 +1,7 @@
 import type {
   Category,
+  ChangeCompetitorStatusInput,
+  ChangeRoundStatusInput,
   ChangeStatusInput,
   Competition,
   Competitor,
@@ -80,6 +82,11 @@ export const competitorsApi = {
     apiFetch<undefined>(`/competitions/${competitionId}/competitors/${competitorId}`, {
       method: 'DELETE',
     }),
+  changeStatus: (competitionId: string, competitorId: string, input: ChangeCompetitorStatusInput) =>
+    apiFetch<Competitor>(`/competitions/${competitionId}/competitors/${competitorId}/status`, {
+      method: 'PATCH',
+      body: json(input),
+    }),
   /** 422 (aperçu invalide) est un rapport exploitable, pas une erreur générique. */
   importPreview: (competitionId: string, csv: string) =>
     apiFetch<ImportReport>(
@@ -128,6 +135,11 @@ export const roundsApi = {
   update: (competitionId: string, roundId: string, input: UpdateRoundInput) =>
     apiFetch<Round>(`/competitions/${competitionId}/rounds/${roundId}`, {
       method: 'PATCH',
+      body: json(input),
+    }),
+  changeStatus: (competitionId: string, roundId: string, input: ChangeRoundStatusInput) =>
+    apiFetch<Round>(`/competitions/${competitionId}/round-status/${roundId}`, {
+      method: 'POST',
       body: json(input),
     }),
   reorder: (competitionId: string, orderedIds: string[]) =>

@@ -9,6 +9,7 @@ import CategoriesTab from './tabs/CategoriesTab.vue'
 import CompetitorsTab from './tabs/CompetitorsTab.vue'
 import InfosTab from './tabs/InfosTab.vue'
 import JudgesTab from './tabs/JudgesTab.vue'
+import PilotageTab from './tabs/PilotageTab.vue'
 import ReadinessTab from './tabs/ReadinessTab.vue'
 import RoundsTab from './tabs/RoundsTab.vue'
 import RoutesTab from './tabs/RoutesTab.vue'
@@ -38,6 +39,7 @@ const tabs = computed(() => {
   }
   base.push({ id: 'judges', label: 'Juges' })
   base.push({ id: 'readiness', label: 'Prêt à démarrer ?' })
+  base.push({ id: 'pilotage', label: 'Pilotage' })
   return base
 })
 </script>
@@ -65,6 +67,7 @@ const tabs = computed(() => {
       <RoundsTab v-else-if="activeTab === 'rounds'" :competition-id="competitionId" />
       <JudgesTab v-else-if="activeTab === 'judges'" :competition="competition" />
       <ReadinessTab v-else-if="activeTab === 'readiness'" :competition-id="competitionId" />
+      <PilotageTab v-else-if="activeTab === 'pilotage'" :competition="competition" />
     </div>
   </main>
 </template>

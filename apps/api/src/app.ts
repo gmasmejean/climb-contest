@@ -14,13 +14,17 @@ import { createAuthRoutes } from './routes/auth'
 import { createCategoryRoutes } from './routes/categories'
 import { createCompetitionRoutes } from './routes/competitions'
 import { createCompetitorRoutes } from './routes/competitors'
+import { createConflictsRoutes } from './routes/conflicts'
+import { createDashboardRoutes } from './routes/dashboard'
 import { createHealthRoute } from './routes/health'
 import { createJudgeAscentRoutes } from './routes/judge-ascents'
 import { createJudgeAuthRoutes } from './routes/judge-auth'
 import { createJudgeRoutes } from './routes/judges'
+import { createOrganizerAscentRoutes } from './routes/organizer-ascents'
 import { createPublicRoutes } from './routes/public'
 import { createQrCodesRoutes } from './routes/qrcodes'
 import { createRoundRoutes } from './routes/rounds'
+import { createRoundStatusRoutes } from './routes/round-status'
 import { createRouteRoutes } from './routes/routes'
 
 export interface AppDeps {
@@ -98,6 +102,10 @@ export function createApp(deps: AppDeps): Hono {
     createJudgeRoutes({ ...scopedDeps, env: deps.env, mailer: deps.mailer }),
   )
   app.route('/api/v1/competitions/:id', createQrCodesRoutes({ ...scopedDeps, env: deps.env }))
+  app.route('/api/v1/competitions/:id', createRoundStatusRoutes(scopedDeps))
+  app.route('/api/v1/competitions/:id', createConflictsRoutes(scopedDeps))
+  app.route('/api/v1/competitions/:id', createDashboardRoutes({ ...scopedDeps, now: deps.now }))
+  app.route('/api/v1/competitions/:id/ascents', createOrganizerAscentRoutes(scopedDeps))
   app.route(
     '/api/v1/judge',
     createJudgeAuthRoutes({ db: deps.db, judgeTokenSigner: deps.judgeTokenSigner }),

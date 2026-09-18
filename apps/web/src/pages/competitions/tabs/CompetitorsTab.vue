@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { createCompetitorInputSchema } from '@climbcontest/contracts'
-import { Button, NumberField, Select, TextField, useToast } from '@climbcontest/ui'
+import { createCompetitorInputSchema, type Competitor } from '@climbcontest/contracts'
+import { Badge, Button, Modal, NumberField, Select, TextField, useToast } from '@climbcontest/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, reactive, ref } from 'vue'
 
@@ -135,6 +135,56 @@ const { mutate: saveEdit, isPending: isSaving } = useMutation({
   },
 })
 
+// --- Statut jour J (Lot 8) — motif toujours facultatif, décision utilisateur ---
+const STATUS_LABELS: Record<Competitor['status'], string> = {
+  registered: 'Inscrit',
+  present: 'Présent',
+  withdrawn: 'Abandon',
+  disqualified: 'Disqualifié',
+}
+const STATUS_TONES: Record<Competitor['status'], 'neutral' | 'success' | 'warning' | 'danger'> = {
+  registered: 'neutral',
+  present: 'success',
+  withdrawn: 'warning',
+  disqualified: 'danger',
+}
+const statusOptions = (Object.keys(STATUS_LABELS) as Array<Competitor['status']>).map((value) => ({
+  value,
+  label: STATUS_LABELS[value],
+}))
+
+const statusTargetId = ref<string | null>(null)
+const statusForm = reactive<{ status: Competitor['status']; reason: string }>({
+  status: 'registered',
+  reason: '',
+})
+function startStatusChange(competitor: Competitor): void {
+  statusTargetId.value = competitor.id
+  statusForm.status = competitor.status
+  statusForm.reason = ''
+}
+function closeStatusChange(): void {
+  statusTargetId.value = null
+}
+const { mutate: changeStatus, isPending: isChangingStatus } = useMutation({
+  mutationFn: () =>
+    competitorsApi.changeStatus(props.competitionId, statusTargetId.value ?? '', {
+      status: statusForm.status,
+      reason: statusForm.reason.trim() || undefined,
+    }),
+  onSuccess: async () => {
+    statusTargetId.value = null
+    await refresh()
+    toast.show('Statut mis à jour.', 'success')
+  },
+  onError: (error) => {
+    toast.show(
+      error instanceof ApiError ? (error.detail ?? error.title) : 'Changement de statut impossible.',
+      'error',
+    )
+  },
+})
+
 const confirmingDeleteId = ref<string | null>(null)
 const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
   mutationFn: (id: string) => competitorsApi.remove(props.competitionId, id),
@@ -202,10 +252,15 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
         </template>
         <template v-else>
           <div>
-            <span class="font-medium text-gray-900"
-              >{{ competitor.bib ?? '—' }} — {{ competitor.firstName }}
-              {{ competitor.lastName }}</span
-            >
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-medium text-gray-900"
+                >{{ competitor.bib ?? '—' }} — {{ competitor.firstName }}
+                {{ competitor.lastName }}</span
+              >
+              <Badge :tone="STATUS_TONES[competitor.status]">{{
+                STATUS_LABELS[competitor.status]
+              }}</Badge>
+            </div>
             <p class="text-sm text-gray-600">{{ categoryLabel(competitor.categoryId) }}</p>
           </div>
           <div class="flex gap-2">
@@ -219,6 +274,7 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
               <Button variant="secondary" @click="confirmingDeleteId = null">Annuler</Button>
             </template>
             <template v-else>
+              <Button variant="secondary" @click="startStatusChange(competitor)">Statut</Button>
               <Button variant="secondary" @click="startEdit(competitor)">Modifier</Button>
               <Button variant="secondary" @click="confirmingDeleteId = competitor.id"
                 >Retirer</Button
@@ -229,5 +285,18 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
       </li>
       <li v-if="filtered.length === 0" class="text-gray-600">Aucun compétiteur.</li>
     </ul>
+
+    <Modal :open="statusTargetId !== null" title="Statut du compétiteur" @close="closeStatusChange">
+      <form class="flex flex-col gap-4" @submit.prevent="changeStatus()">
+        <Select v-model="statusForm.status" label="Statut" :options="statusOptions" required />
+        <TextField v-model="statusForm.reason" label="Motif (optionnel)" />
+        <div class="flex gap-2">
+          <Button type="submit" :disabled="isChangingStatus">
+            {{ isChangingStatus ? 'Enregistrement…' : 'Enregistrer' }}
+          </Button>
+          <Button type="button" variant="secondary" @click="closeStatusChange">Annuler</Button>
+        </div>
+      </form>
+    </Modal>
   </div>
 </template>

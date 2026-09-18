@@ -11,7 +11,6 @@ import { and, asc, eq, isNull, max } from 'drizzle-orm'
 import { Hono, type Context, type Next } from 'hono'
 
 import type { AccessTokenSigner } from '../lib/jwt'
-import { notifyPublic } from '../lib/notify-public'
 import { requireOrganizer } from '../middleware/auth'
 import { requireCompetitionAccess } from '../middleware/competition-access'
 import { ApiError, problem } from '../middleware/problem'
@@ -109,37 +108,12 @@ export function createRoundRoutes(deps: RoundRouteDeps): Hono {
       })
       if (!existing) throw new ApiError(404, 'Tour introuvable', "Ce tour n'existe pas.")
 
-      const updated = await db.transaction(async (tx) => {
-        const [row] = await tx
-          .update(round)
-          .set({ ...input, updatedAt: new Date() })
-          .where(eq(round.id, roundId))
-          .returning()
-        if (!row) throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour le tour.')
-
-        // Un changement de statut affecte l'affichage public : marquage
-        // « provisoire », état de chaque tour (ROADMAP.md Lot 7). Un
-        // `ranking_updated` par catégorie concernée accompagne toujours le
-        // `round_status_changed` — c'est le seul événement dont l'invalidation
-        // de cache (app.ts) a besoin, jamais `round_status_changed` seul.
-        if (input.status !== undefined && input.status !== existing.status) {
-          await notifyPublic(tx, {
-            type: 'round_status_changed',
-            competitionId,
-            roundId,
-          })
-          const categoryLinks = await tx
-            .select({ categoryId: roundRoute.categoryId })
-            .from(roundRoute)
-            .where(eq(roundRoute.roundId, roundId))
-          const categoryIds = new Set(categoryLinks.map((link) => link.categoryId))
-          for (const categoryId of categoryIds) {
-            await notifyPublic(tx, { type: 'ranking_updated', competitionId, categoryId })
-          }
-        }
-
-        return row
-      })
+      const [updated] = await db
+        .update(round)
+        .set({ ...input, updatedAt: new Date() })
+        .where(eq(round.id, roundId))
+        .returning()
+      if (!updated) throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour le tour.')
       return c.json(roundSchema.parse(updated))
     },
   )
