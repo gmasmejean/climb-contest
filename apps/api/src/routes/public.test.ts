@@ -292,8 +292,15 @@ describe('GET /public/:slug/rankings', () => {
       )
       expect(((await beforePublish.json()) as PublicRankingBody).provisional).toBe(true)
 
-      await app.request(`/api/v1/competitions/${fixture.competition.id}/rounds/${roundId}`, {
-        method: 'PATCH',
+      // Lot 8 : transition séquentielle — un tour ouvert doit être fermé
+      // avant de pouvoir être publié (DECISIONS.md).
+      await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
+        method: 'POST',
+        headers: authHeaders(fixture.organizerToken),
+        body: JSON.stringify({ status: 'closed' }),
+      })
+      await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
+        method: 'POST',
         headers: authHeaders(fixture.organizerToken),
         body: JSON.stringify({ status: 'published' }),
       })

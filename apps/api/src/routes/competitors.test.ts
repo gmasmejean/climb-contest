@@ -68,7 +68,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "ascent" cascade`,
+    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "ascent", "activity_log" cascade`,
   )
 })
 
@@ -386,5 +386,81 @@ describe('POST /competitions/:id/competitors/assign-bibs', () => {
     expect(byName['Zoé Aaaa']).toBe(1) // dossard manuel inchangé
     expect(byName['Théo Dupuis']).toBe(2) // catégorie 1, dossard 1 déjà pris → 2
     expect(byName['Alix Bernard']).toBe(3) // catégorie 2, après la catégorie 1
+  })
+})
+
+describe('PATCH /competitions/:id/competitors/:competitorId/status', () => {
+  async function createCompetitor(accessToken: string, competitionId: string, categoryId: string) {
+    const response = await app.request(`/api/v1/competitions/${competitionId}/competitors`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ categoryId, firstName: 'Léa', lastName: 'Martin' }),
+    })
+    return (await response.json()) as { id: string; status: string }
+  }
+
+  it('change de statut sans motif — toujours facultatif (décision utilisateur Lot 8)', async () => {
+    const { accessToken, competition, category } = await setupCompetitionWithCategory()
+    const competitor = await createCompetitor(accessToken, competition.id, category.id)
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/competitors/${competitor.id}/status`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ status: 'present' }),
+      },
+    )
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { status: string }).status).toBe('present')
+  })
+
+  it('accepte un motif quand il est fourni', async () => {
+    const { accessToken, competition, category } = await setupCompetitionWithCategory()
+    const competitor = await createCompetitor(accessToken, competition.id, category.id)
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/competitors/${competitor.id}/status`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ status: 'disqualified', reason: 'Chute non contrôlée sur prise à risque.' }),
+      },
+    )
+    expect(response.status).toBe(200)
+  })
+
+  it('écrit une entrée dans le journal d’activité', async () => {
+    const { accessToken, competition, category } = await setupCompetitionWithCategory()
+    const competitor = await createCompetitor(accessToken, competition.id, category.id)
+
+    await app.request(`/api/v1/competitions/${competition.id}/competitors/${competitor.id}/status`, {
+      method: 'PATCH',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ status: 'withdrawn', reason: 'Blessure avant le départ.' }),
+    })
+
+    const response = await app.request(`/api/v1/competitions/${competition.id}/activity-log`, {
+      headers: authHeaders(accessToken),
+    })
+    const body = (await response.json()) as {
+      entries: { type: string; payload: Record<string, unknown>; reason: string | null }[]
+    }
+    const entry = body.entries.find((e) => e.type === 'competitor_status_changed')
+    expect(entry?.payload).toMatchObject({ from: 'registered', to: 'withdrawn' })
+    expect(entry?.reason).toBe('Blessure avant le départ.')
+  })
+
+  it('404 pour un compétiteur inconnu', async () => {
+    const { accessToken, competition } = await setupCompetitionWithCategory()
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/competitors/${crypto.randomUUID()}/status`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ status: 'present' }),
+      },
+    )
+    expect(response.status).toBe(404)
   })
 })

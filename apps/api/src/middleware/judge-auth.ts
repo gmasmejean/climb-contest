@@ -20,7 +20,7 @@ declare module 'hono' {
  * claims pour la révocation (SPEC.md § 3.2 : « un juge révoqué est
  * déconnecté au prochain appel »). Voir DECISIONS.md ADR-026.
  */
-export function requireJudge(signer: JudgeTokenSigner, db: Database) {
+export function requireJudge(signer: JudgeTokenSigner, db: Database, now: () => Date = () => new Date()) {
   return async (c: Context, next: Next) => {
     const header = c.req.header('authorization')
     const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined
@@ -53,6 +53,12 @@ export function requireJudge(signer: JudgeTokenSigner, db: Database) {
       )
     }
     c.set('judge', row)
+    // Lot 8 : « dernier signe de vie » du juge pour le tableau de bord —
+    // avant, seule la connexion (routes/judge-auth.ts) le mettait à jour, ce
+    // qui aurait affiché un juge actif toute la journée comme « muet depuis
+    // 8h ». Un seul point d'écriture, ici, plutôt que dupliqué dans
+    // bootstrap/batch.
+    await db.update(judge).set({ lastSeenAt: now() }).where(eq(judge.id, row.id))
     await next()
   }
 }

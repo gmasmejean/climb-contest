@@ -24,14 +24,19 @@ import {
   round,
   roundRoute,
   route,
-  routeCategory,
   type Database,
 } from '@climbcontest/db'
 import { zValidator } from '@hono/zod-validator'
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
-import { uuidv7 } from 'uuidv7'
 
+import { createAscentOrConflict, type AscentWriteResult } from '../lib/ascent-write'
+import {
+  activeAscentsFor,
+  categoryLabelsByRoute,
+  expectedCompetitors,
+} from '../lib/ascent-progress'
+import { supersedeToNewAscent } from '../lib/ascent-correction'
 import type { JudgeTokenSigner } from '../lib/jwt'
 import { assertJudgeAssignedToRoute, resolveOpenRoundForRoute } from '../lib/judge-authorization'
 import { notifyPublic } from '../lib/notify-public'
@@ -50,67 +55,10 @@ export interface JudgeAscentRouteDeps {
 /** ADR-007 : fenêtre de correction du juge — 5 minutes après la saisie initiale. */
 const CORRECTION_WINDOW_MS = 5 * 60 * 1000
 
-const EXPECTED_COMPETITOR_STATUSES = ['registered', 'present'] as const
-
-type CompetitorRow = typeof competitor.$inferSelect
 type AscentRow = typeof ascent.$inferSelect
 type JudgeRow = typeof judge.$inferSelect
 type CompetitionRow = typeof competition.$inferSelect
 type RouteRow = typeof route.$inferSelect
-
-async function categoryLabelsByRoute(
-  db: Database,
-  routeIds: string[],
-): Promise<Map<string, { id: string; label: string }[]>> {
-  if (routeIds.length === 0) return new Map()
-  const links = await db
-    .select({ routeId: routeCategory.routeId, id: category.id, label: category.label })
-    .from(routeCategory)
-    .innerJoin(category, eq(category.id, routeCategory.categoryId))
-    .where(inArray(routeCategory.routeId, routeIds))
-  const map = new Map<string, { id: string; label: string }[]>()
-  for (const link of links) {
-    const list = map.get(link.routeId) ?? []
-    list.push({ id: link.id, label: link.label })
-    map.set(link.routeId, list)
-  }
-  return map
-}
-
-async function expectedCompetitors(
-  db: Database,
-  competitionId: string,
-  categoryIds: string[],
-): Promise<CompetitorRow[]> {
-  if (categoryIds.length === 0) return []
-  return db.query.competitor.findMany({
-    where: and(
-      eq(competitor.competitionId, competitionId),
-      inArray(competitor.categoryId, categoryIds),
-      inArray(competitor.status, [...EXPECTED_COMPETITOR_STATUSES]),
-      isNull(competitor.deletedAt),
-    ),
-  })
-}
-
-async function activeAscentsFor(
-  db: Database,
-  roundId: string,
-  routeId: string,
-  competitorIds: string[],
-): Promise<Map<string, AscentRow>> {
-  if (competitorIds.length === 0) return new Map()
-  const rows = await db.query.ascent.findMany({
-    where: and(
-      eq(ascent.roundId, roundId),
-      eq(ascent.routeId, routeId),
-      inArray(ascent.competitorId, competitorIds),
-      isNull(ascent.supersededBy),
-      isNull(ascent.conflictGroup),
-    ),
-  })
-  return new Map(rows.map((row) => [row.competitorId, row]))
-}
 
 /**
  * La dernière saisie active du juge, tous compétiteurs et voies confondus —
@@ -203,29 +151,17 @@ async function buildRouteDetail(
   })
 }
 
-interface CreateContentShape {
-  roundId: string
-  routeId: string
-  competitorId: string
-  holdNumber: number | null
-  modifier: 'none' | 'plus'
-  isTop: boolean
-  status: 'valid' | 'dns' | 'dnf'
-  climbTimeMs?: number | null | undefined
-}
-
-/** Un rejeu sûr (retry après coupure) doit porter EXACTEMENT le même contenu. */
-function matchesCreateContent(row: AscentRow, item: CreateContentShape): boolean {
-  return (
-    row.roundId === item.roundId &&
-    row.routeId === item.routeId &&
-    row.competitorId === item.competitorId &&
-    row.holdNumber === item.holdNumber &&
-    row.modifier === item.modifier &&
-    row.isTop === item.isTop &&
-    row.status === item.status &&
-    row.climbTimeMs === (item.climbTimeMs ?? null)
-  )
+function toBatchResult(id: string, result: AscentWriteResult): JudgeAscentBatchResult {
+  if (result.status === 'conflict') {
+    return {
+      id,
+      status: 'conflict',
+      conflictGroup: result.conflictGroup,
+      existing: ascentSchema.parse(result.existing),
+      incoming: ascentSchema.parse(result.incoming),
+    }
+  }
+  return { id, status: result.status, ascent: ascentSchema.parse(result.ascent) }
 }
 
 interface CorrectContentShape {
@@ -258,240 +194,24 @@ type CorrectBatchItem = Extract<JudgeAscentBatchItemInput, { kind: 'correct' }>
 /**
  * Traite un item `create` de `POST /ascents/batch` (Lot 6, SPEC.md § 6.3).
  * Chaque item est traité dans sa PROPRE transaction — jamais un tout-ou-rien
- * de lot (§ « Traitement serveur » du plan de ce lot).
+ * de lot. La détection de conflit et la retenue sur violation d'unicité
+ * vivent dans `lib/ascent-write.ts` (Lot 8 : partagées avec la saisie de
+ * secours organisateur).
  */
 async function processCreateItem(
   db: Database,
   currentJudge: JudgeRow,
   item: CreateBatchItem,
-  retriesLeft = 1,
 ): Promise<JudgeAscentBatchResult> {
   const routeRow = await assertJudgeAssignedToRoute(db, currentJudge, item.routeId)
-
-  if (item.status === 'valid' && !item.isTop) {
-    if (item.holdNumber === null || item.holdNumber > routeRow.holdCount) {
-      throw new ApiError(
-        400,
-        'Prise invalide',
-        `Le numéro de prise doit être compris entre 1 et ${routeRow.holdCount}.`,
-      )
-    }
-  }
-
-  // Idempotence par id (cas SPEC.md #21) : un rejeu sûr du même item porte
-  // exactement le même contenu.
-  const existingById = await db.query.ascent.findFirst({ where: eq(ascent.id, item.id) })
-  if (existingById) {
-    if (matchesCreateContent(existingById, item)) {
-      return { id: item.id, status: 'duplicate', ascent: ascentSchema.parse(existingById) }
-    }
-    throw new ApiError(
-      409,
-      'Identifiant déjà utilisé',
-      'Cet identifiant de passage est déjà utilisé pour un autre passage.',
-    )
-  }
-
-  const competitorRow = await db.query.competitor.findFirst({
-    where: and(
-      eq(competitor.id, item.competitorId),
-      eq(competitor.competitionId, currentJudge.competitionId),
-      isNull(competitor.deletedAt),
-    ),
-  })
-  if (!competitorRow) {
-    throw new ApiError(404, 'Compétiteur introuvable', "Ce compétiteur n'existe pas.")
-  }
-
-  const liveTriple = await db.query.roundRoute.findFirst({
-    where: and(
-      eq(roundRoute.roundId, item.roundId),
-      eq(roundRoute.routeId, item.routeId),
-      eq(roundRoute.categoryId, competitorRow.categoryId),
-    ),
-  })
-  const openRoundRow = liveTriple
-    ? await db.query.round.findFirst({
-        where: and(
-          eq(round.id, item.roundId),
-          eq(round.competitionId, currentJudge.competitionId),
-          eq(round.status, 'open'),
-          isNull(round.deletedAt),
-        ),
-      })
-    : null
-  if (!liveTriple || !openRoundRow) {
-    throw new ApiError(404, 'Tour introuvable', "Ce tour n'est pas ouvert pour cette voie.")
-  }
-
-  try {
-    return await createOrConflict(db, currentJudge, item, routeRow, competitorRow.categoryId)
-  } catch (error) {
-    // `SELECT ... FOR UPDATE` ne verrouille RIEN si aucune ligne n'existe
-    // encore pour ce triplet — deux lots concurrents insérant chacun le
-    // tout premier passage d'un compétiteur peuvent donc passer la
-    // vérification en même temps et se disputer l'index partiel
-    // `ascent_active_key` (ADR-002) à l'INSERT. Ce n'est pas une erreur :
-    // c'est exactement le conflit (cas SPEC.md #22) qu'il faut détecter,
-    // simplement révélé un instant plus tard qu'espéré — on rejoue une fois
-    // pour laisser le `SELECT` retrouver la ligne désormais commitée par
-    // l'autre transaction et suivre le chemin conflit normal.
-    if (isUniqueViolation(error) && retriesLeft > 0) {
-      return processCreateItem(db, currentJudge, item, retriesLeft - 1)
-    }
-    throw error
-  }
-}
-
-async function createOrConflict(
-  db: Database,
-  currentJudge: JudgeRow,
-  item: CreateBatchItem,
-  routeRow: RouteRow,
-  categoryId: string,
-): Promise<JudgeAscentBatchResult> {
-  return db.transaction(async (tx) => {
-    // Verrouille la ligne active du triplet, s'il y en a une, pour se
-    // protéger d'une course entre deux lots concurrents (deux appareils qui
-    // synchronisent au même instant).
-    const [activeRow] = await tx
-      .select()
-      .from(ascent)
-      .where(
-        and(
-          eq(ascent.roundId, item.roundId),
-          eq(ascent.routeId, item.routeId),
-          eq(ascent.competitorId, item.competitorId),
-          isNull(ascent.supersededBy),
-          isNull(ascent.conflictGroup),
-        ),
-      )
-      .for('update')
-
-    if (activeRow) {
-      if (matchesCreateContent(activeRow, item)) {
-        // Même résultat déjà enregistré sous un autre id (ex. deux juges
-        // assignés à la même voie confirment indépendamment le même TOP) —
-        // rien à ajouter, pas un conflit au sens de SPEC.md § 6.3.
-        return { id: item.id, status: 'duplicate', ascent: ascentSchema.parse(activeRow) }
-      }
-
-      // Conflit réel (cas SPEC.md #22) : un autre appareil a déjà un passage
-      // actif différent pour ce triplet. `conflict_group` ne porte aucune FK
-      // (contrairement à `superseded_by`, ADR-031) — pas de contournement
-      // `DEFERRABLE` nécessaire : l'UPDATE puis l'INSERT s'exécutent dans
-      // l'ordre naturel (DECISIONS.md ADR-033).
-      const conflictGroupId = uuidv7()
-      await tx
-        .update(ascent)
-        .set({ conflictGroup: conflictGroupId, updatedAt: new Date() })
-        .where(eq(ascent.id, activeRow.id))
-
-      const [inserted] = await tx
-        .insert(ascent)
-        .values({
-          id: item.id,
-          competitionId: currentJudge.competitionId,
-          roundId: item.roundId,
-          routeId: item.routeId,
-          competitorId: item.competitorId,
-          holdNumber: item.holdNumber,
-          holdCount: routeRow.holdCount,
-          modifier: item.modifier,
-          isTop: item.isTop,
-          status: item.status,
-          climbTimeMs: item.climbTimeMs ?? null,
-          recordedByJudgeId: currentJudge.id,
-          recordedByUserId: null,
-          recordedAt: new Date(item.recordedAt),
-          deviceId: item.deviceId,
-          conflictGroup: conflictGroupId,
-        })
-        .returning()
-      if (!inserted)
-        throw new ApiError(500, 'Erreur interne', 'Impossible d’enregistrer le passage.')
-
-      await tx.insert(ascentEvent).values({
-        ascentId: inserted.id,
-        eventType: 'created',
-        actorType: 'judge',
-        actorId: currentJudge.id,
-        payload: {
-          holdNumber: inserted.holdNumber,
-          modifier: inserted.modifier,
-          isTop: inserted.isTop,
-          status: inserted.status,
-          climbTimeMs: inserted.climbTimeMs,
-          conflictGroup: conflictGroupId,
-        },
-      })
-
-      const refreshedExisting = await tx.query.ascent.findFirst({
-        where: eq(ascent.id, activeRow.id),
-      })
-      if (!refreshedExisting) {
-        throw new ApiError(500, 'Erreur interne', 'Impossible de relire le passage en conflit.')
-      }
-
-      await notifyPublic(tx, {
-        type: 'ranking_updated',
-        competitionId: currentJudge.competitionId,
-        categoryId,
-      })
-
-      return {
-        id: item.id,
-        status: 'conflict',
-        conflictGroup: conflictGroupId,
-        existing: ascentSchema.parse(refreshedExisting),
-        incoming: ascentSchema.parse(inserted),
-      }
-    }
-
-    const [row] = await tx
-      .insert(ascent)
-      .values({
-        id: item.id,
-        competitionId: currentJudge.competitionId,
-        roundId: item.roundId,
-        routeId: item.routeId,
-        competitorId: item.competitorId,
-        holdNumber: item.holdNumber,
-        holdCount: routeRow.holdCount,
-        modifier: item.modifier,
-        isTop: item.isTop,
-        status: item.status,
-        climbTimeMs: item.climbTimeMs ?? null,
-        recordedByJudgeId: currentJudge.id,
-        recordedByUserId: null,
-        recordedAt: new Date(item.recordedAt),
-        deviceId: item.deviceId,
-      })
-      .returning()
-    if (!row) throw new ApiError(500, 'Erreur interne', 'Impossible d’enregistrer le passage.')
-
-    await tx.insert(ascentEvent).values({
-      ascentId: row.id,
-      eventType: 'created',
-      actorType: 'judge',
-      actorId: currentJudge.id,
-      payload: {
-        holdNumber: row.holdNumber,
-        modifier: row.modifier,
-        isTop: row.isTop,
-        status: row.status,
-        climbTimeMs: row.climbTimeMs,
-      },
-    })
-
-    await notifyPublic(tx, {
-      type: 'ranking_updated',
-      competitionId: currentJudge.competitionId,
-      categoryId,
-    })
-
-    return { id: item.id, status: 'accepted', ascent: ascentSchema.parse(row) }
-  })
+  const result = await createAscentOrConflict(
+    db,
+    { kind: 'judge', judgeId: currentJudge.id },
+    item,
+    routeRow,
+    currentJudge.competitionId,
+  )
+  return toBatchResult(item.id, result)
 }
 
 /**
@@ -577,84 +297,20 @@ async function processCorrectItem(
     throw new ApiError(404, 'Compétiteur introuvable', "Ce compétiteur n'existe pas.")
   }
 
-  const created = await db.transaction(async (tx) => {
-    // Même mécanique que Lot 5 (ADR-031) : la FK sur `superseded_by` est
-    // `DEFERRABLE INITIALLY DEFERRED`, donc l'UPDATE peut référencer l'id de
-    // la nouvelle ligne avant qu'elle n'existe.
-    await tx
-      .update(ascent)
-      .set({ supersededBy: item.id, updatedAt: new Date() })
-      .where(eq(ascent.id, target.id))
-
-    const [row] = await tx
-      .insert(ascent)
-      .values({
-        id: item.id,
-        competitionId: target.competitionId,
-        roundId: target.roundId,
-        routeId: target.routeId,
-        competitorId: target.competitorId,
-        holdNumber: item.holdNumber,
-        holdCount: target.holdCount,
-        modifier: item.modifier,
-        isTop: item.isTop,
-        status: item.status,
-        climbTimeMs: item.climbTimeMs ?? null,
-        recordedByJudgeId: currentJudge.id,
-        recordedByUserId: null,
-        recordedAt: target.recordedAt,
-        deviceId: target.deviceId,
-      })
-      .returning()
-    if (!row) throw new ApiError(500, 'Erreur interne', 'Impossible d’enregistrer la correction.')
-
-    await tx.insert(ascentEvent).values([
-      {
-        ascentId: target.id,
-        eventType: 'corrected',
-        actorType: 'judge',
-        actorId: currentJudge.id,
-        payload: {
-          correctedInto: row.id,
-          previous: {
-            holdNumber: target.holdNumber,
-            modifier: target.modifier,
-            isTop: target.isTop,
-            status: target.status,
-            climbTimeMs: target.climbTimeMs,
-          },
-          next: {
-            holdNumber: row.holdNumber,
-            modifier: row.modifier,
-            isTop: row.isTop,
-            status: row.status,
-            climbTimeMs: row.climbTimeMs,
-          },
-        },
-      },
-      {
-        ascentId: row.id,
-        eventType: 'created',
-        actorType: 'judge',
-        actorId: currentJudge.id,
-        payload: {
-          correctedFrom: target.id,
-          holdNumber: row.holdNumber,
-          modifier: row.modifier,
-          isTop: row.isTop,
-          status: row.status,
-          climbTimeMs: row.climbTimeMs,
-        },
-      },
-    ])
-
-    await notifyPublic(tx, {
-      type: 'ranking_updated',
-      competitionId: target.competitionId,
-      categoryId: targetCompetitor.categoryId,
-    })
-
-    return row
+  const created = await supersedeToNewAscent(db, {
+    sources: [target],
+    newId: item.id,
+    content: {
+      holdNumber: item.holdNumber,
+      modifier: item.modifier,
+      isTop: item.isTop,
+      status: item.status,
+      climbTimeMs: item.climbTimeMs,
+    },
+    actor: { kind: 'judge', judgeId: currentJudge.id },
+    categoryId: targetCompetitor.categoryId,
+    eventType: 'corrected',
+    reason: null,
   })
 
   return { id: item.id, status: 'accepted', ascent: ascentSchema.parse(created) }
@@ -665,7 +321,7 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
   const { db, judgeTokenSigner } = deps
   const now = deps.now ?? (() => new Date())
 
-  app.use('*', requireJudge(judgeTokenSigner, db))
+  app.use('*', requireJudge(judgeTokenSigner, db, now))
 
   app.get('/routes', async (c) => {
     const currentJudge = c.get('judge')
@@ -964,94 +620,20 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
         throw new ApiError(404, 'Compétiteur introuvable', "Ce compétiteur n'existe pas.")
       }
 
-      const created = await db.transaction(async (tx) => {
-        // Ordre obligatoire : l'ancienne ligne doit sortir de l'index unique
-        // actif (ADR-002 : `WHERE superseded_by IS NULL …`, jamais
-        // différable — c'est un index partiel, pas une contrainte) AVANT que
-        // la nouvelle n'y entre. Ça ne marche que parce que la contrainte de
-        // clé étrangère `ascent_superseded_by_ascent_id_fk` a été rendue
-        // `DEFERRABLE INITIALLY DEFERRED` (migration
-        // `0004_ascent_superseded_by_deferrable`) : sans ça, cet `UPDATE`
-        // échouerait immédiatement en référençant `input.id`, qui n'existe
-        // pas encore. Elle n'est vérifiée qu'au COMMIT, une fois l'`INSERT`
-        // ci-dessous passé.
-        await tx
-          .update(ascent)
-          .set({ supersededBy: input.id, updatedAt: new Date() })
-          .where(eq(ascent.id, last.id))
-
-        const [row] = await tx
-          .insert(ascent)
-          .values({
-            id: input.id,
-            competitionId: last.competitionId,
-            roundId: last.roundId,
-            routeId: last.routeId,
-            competitorId: last.competitorId,
-            holdNumber: input.holdNumber,
-            holdCount: last.holdCount,
-            modifier: input.modifier,
-            isTop: input.isTop,
-            status: input.status,
-            climbTimeMs: input.climbTimeMs ?? null,
-            recordedByJudgeId: currentJudge.id,
-            recordedByUserId: null,
-            // Une correction rectifie une saisie déjà survenue : l'heure de
-            // l'événement ne change pas, seule sa valeur est rectifiée.
-            recordedAt: last.recordedAt,
-            deviceId: last.deviceId,
-          })
-          .returning()
-        if (!row)
-          throw new ApiError(500, 'Erreur interne', 'Impossible d’enregistrer la correction.')
-
-        await tx.insert(ascentEvent).values([
-          {
-            ascentId: last.id,
-            eventType: 'corrected',
-            actorType: 'judge',
-            actorId: currentJudge.id,
-            payload: {
-              correctedInto: row.id,
-              previous: {
-                holdNumber: last.holdNumber,
-                modifier: last.modifier,
-                isTop: last.isTop,
-                status: last.status,
-                climbTimeMs: last.climbTimeMs,
-              },
-              next: {
-                holdNumber: row.holdNumber,
-                modifier: row.modifier,
-                isTop: row.isTop,
-                status: row.status,
-                climbTimeMs: row.climbTimeMs,
-              },
-            },
-          },
-          {
-            ascentId: row.id,
-            eventType: 'created',
-            actorType: 'judge',
-            actorId: currentJudge.id,
-            payload: {
-              correctedFrom: last.id,
-              holdNumber: row.holdNumber,
-              modifier: row.modifier,
-              isTop: row.isTop,
-              status: row.status,
-              climbTimeMs: row.climbTimeMs,
-            },
-          },
-        ])
-
-        await notifyPublic(tx, {
-          type: 'ranking_updated',
-          competitionId: last.competitionId,
-          categoryId: lastCompetitor.categoryId,
-        })
-
-        return row
+      const created = await supersedeToNewAscent(db, {
+        sources: [last],
+        newId: input.id,
+        content: {
+          holdNumber: input.holdNumber,
+          modifier: input.modifier,
+          isTop: input.isTop,
+          status: input.status,
+          climbTimeMs: input.climbTimeMs,
+        },
+        actor: { kind: 'judge', judgeId: currentJudge.id },
+        categoryId: lastCompetitor.categoryId,
+        eventType: 'corrected',
+        reason: null,
       })
 
       return c.json(ascentSchema.parse(created), 201)

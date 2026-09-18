@@ -190,8 +190,10 @@ export async function createJudgeFixture(
       body: JSON.stringify({ assignments: [{ routeId: route.id, categoryId: category.id }] }),
     })
     if (openRound) {
-      await app.request(`/api/v1/competitions/${competition.id}/rounds/${round.id}`, {
-        method: 'PATCH',
+      // Lot 8 : le statut d'un tour ne se change plus via le PATCH générique
+      // (garde-fous de transition, DECISIONS.md) — voir routes/round-status.ts.
+      await app.request(`/api/v1/competitions/${competition.id}/round-status/${round.id}`, {
+        method: 'POST',
         headers: authHeaders(organizerToken),
         body: JSON.stringify({ status: 'open' }),
       })
