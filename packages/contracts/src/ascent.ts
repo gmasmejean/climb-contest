@@ -8,7 +8,7 @@ import { ascentSchema } from './entities'
  * une valeur de colonne valide, mais n'est jamais proposée au juge (Lot 5,
  * voir DECISIONS.md) — seul l'organisateur (Lot 8) pourra l'écrire.
  */
-const ascentShapeFields = {
+export const ascentShapeFields = {
   holdNumber: z.number().int().min(1).nullable(),
   modifier: z.enum(['none', 'plus']),
   isTop: z.boolean(),
@@ -67,7 +67,7 @@ export const correctLastAscentInputSchema = z
   })
 export type CorrectLastAscentInput = z.infer<typeof correctLastAscentInputSchema>
 
-const judgeRouteCategorySchema = z.object({
+export const judgeRouteCategorySchema = z.object({
   id: z.uuid(),
   label: z.string(),
 })
@@ -109,6 +109,10 @@ export const judgeRouteDetailSchema = z.object({
     number: z.number(),
     name: z.string().nullable(),
     holdCount: z.number(),
+    // Lot 6 : nécessaire pour que `GET /judge/bootstrap` remplace aussi
+    // `GET /routes` côté client (SPEC.md § 6.3 — plus aucune lecture réseau
+    // après le bootstrap initial), qui exposait déjà cette information.
+    categories: z.array(judgeRouteCategorySchema),
   }),
   round: z
     .object({ id: z.uuid(), type: z.enum(['qualification', 'semifinal', 'final']) })
