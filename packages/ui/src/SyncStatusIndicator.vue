@@ -2,11 +2,13 @@
 import { computed } from 'vue'
 
 /**
- * Indicateur visuel seul — la logique de synchronisation hors ligne arrive
- * au Lot 6 (`packages/sync`). Voir ROADMAP.md Lot 1, point 7.
+ * Indicateur visuel seul. `conflict` ajouté au Lot 6 (`packages/sync`) : une
+ * saisie dont un autre appareil a enregistré une valeur différente pour le
+ * même passage — l'organisateur tranche (SPEC.md § 6.3, Lot 8). Voir
+ * ROADMAP.md Lot 1, point 7.
  */
 const props = defineProps<{
-  status: 'offline' | 'pending' | 'syncing' | 'synced'
+  status: 'offline' | 'pending' | 'syncing' | 'synced' | 'conflict'
   pendingCount?: number
 }>()
 
@@ -22,6 +24,8 @@ const label = computed(() => {
       return 'Synchronisation…'
     case 'synced':
       return 'À jour'
+    case 'conflict':
+      return 'Conflit — organisateur alerté'
   }
   return ''
 })
@@ -32,7 +36,7 @@ const label = computed(() => {
     role="status"
     class="inline-flex min-h-12 items-center gap-2 rounded-full px-4 text-sm font-medium"
     :class="{
-      'bg-red-100 text-red-800': status === 'offline',
+      'bg-red-100 text-red-800': status === 'offline' || status === 'conflict',
       'bg-amber-100 text-amber-800': status === 'pending' || status === 'syncing',
       'bg-green-100 text-green-800': status === 'synced',
     }"
@@ -40,7 +44,7 @@ const label = computed(() => {
     <span
       class="h-2.5 w-2.5 rounded-full"
       :class="{
-        'bg-red-600': status === 'offline',
+        'bg-red-600': status === 'offline' || status === 'conflict',
         'animate-pulse bg-amber-600': status === 'pending' || status === 'syncing',
         'bg-green-600': status === 'synced',
       }"

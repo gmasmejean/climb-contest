@@ -13,4 +13,9 @@ describe('SyncStatusIndicator', () => {
     const wrapper = mount(SyncStatusIndicator, { props: { status: 'synced' } })
     expect(wrapper.text()).toBe('À jour')
   })
+
+  it('affiche un conflit (Lot 6)', () => {
+    const wrapper = mount(SyncStatusIndicator, { props: { status: 'conflict' } })
+    expect(wrapper.text()).toBe('Conflit — organisateur alerté')
+  })
 })
