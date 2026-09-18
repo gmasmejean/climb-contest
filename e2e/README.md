@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Cinq tests à ce jour :
+Six tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -19,7 +19,11 @@ Cinq tests à ce jour :
   même juge) saisissent des valeurs différentes pour le même passage hors
   ligne, se resynchronisent en même temps : les deux valeurs sont
   conservées, un conflit est signalé avec les deux valeurs à l'appareil
-  perdant (cas SPEC.md § 9 #22, `ROADMAP.md` Lot 6).
+  perdant (cas SPEC.md § 9 #22, `ROADMAP.md` Lot 6) ;
+- `public-live-ranking.spec.ts` — un juge note un passage, un second onglet
+  resté ouvert sur la page publique (`/c/<slug>`, sans authentification) le
+  voit apparaître dans le classement SANS rechargement, porté par le flux
+  SSE (`ROADMAP.md` Lot 7).
 
 ## Projets
 

@@ -4,13 +4,14 @@ import {
   createCompetitionInputSchema,
   updateCompetitionInputSchema,
 } from '@climbcontest/contracts'
-import { competition, judge, randomToken, round, type Database } from '@climbcontest/db'
+import { competition, judge, randomToken, round, roundRoute, type Database } from '@climbcontest/db'
 import { getScoringEngine } from '@climbcontest/scoring'
 import { zValidator } from '@hono/zod-validator'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
 
 import type { AccessTokenSigner } from '../lib/jwt'
+import { notifyPublic } from '../lib/notify-public'
 import { computeReadiness } from '../lib/readiness'
 import { requireCompetitionAccess } from '../middleware/competition-access'
 import { requireOrganizer } from '../middleware/auth'
@@ -206,10 +207,26 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
         // ouvre mécaniquement son unique round au passage — voir
         // DECISIONS.md ADR-030.
         if (row.format === 'contest' && status === 'running') {
-          await tx
+          const [implicitRound] = await tx
             .update(round)
             .set({ status: 'open', updatedAt: new Date() })
             .where(and(eq(round.competitionId, row.id), isNull(round.deletedAt)))
+            .returning()
+          if (implicitRound) {
+            await notifyPublic(tx, {
+              type: 'round_status_changed',
+              competitionId: row.id,
+              roundId: implicitRound.id,
+            })
+            const categoryLinks = await tx
+              .select({ categoryId: roundRoute.categoryId })
+              .from(roundRoute)
+              .where(eq(roundRoute.roundId, implicitRound.id))
+            const categoryIds = new Set(categoryLinks.map((link) => link.categoryId))
+            for (const categoryId of categoryIds) {
+              await notifyPublic(tx, { type: 'ranking_updated', competitionId: row.id, categoryId })
+            }
+          }
         }
         return row
       })

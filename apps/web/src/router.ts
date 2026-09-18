@@ -51,6 +51,17 @@ const router = createRouter({
       component: () => import('./pages/judge/JudgeAccess.vue'),
     },
     {
+      // Page publique (ROADMAP.md Lot 7) : ni auth ni brouillon, comme `/j`.
+      path: '/c/:slug',
+      name: 'public-competition',
+      component: () => import('./pages/public/PublicCompetition.vue'),
+    },
+    {
+      path: '/c/:slug/salle',
+      name: 'public-room-screen',
+      component: () => import('./pages/public/PublicRoomScreen.vue'),
+    },
+    {
       // `JudgeLayout` monte le bandeau de synchronisation UNE SEULE FOIS
       // (Lot 6, ROADMAP.md point 6) pour les trois écrans juge authentifiés.
       path: '/j',
@@ -85,7 +96,9 @@ router.beforeEach(async (to) => {
   // chargement hors ligne (onglet fermé/rouvert en mode avion, Lot 6), un
   // `fetch` qui échoue par manque de réseau (pas juste un 401) rejetterait
   // sinon la navigation ENTIÈRE avant même d'atteindre la garde ci-dessous.
-  if (!bootstrapped && !to.path.startsWith('/j')) {
+  // La page publique (`/c`, Lot 7) n'a pas non plus de session organisateur
+  // — même logique, étendue par extension d'ADR-038.
+  if (!bootstrapped && !to.path.startsWith('/j') && !to.path.startsWith('/c')) {
     bootstrapped = true
     try {
       await bootstrapSession()

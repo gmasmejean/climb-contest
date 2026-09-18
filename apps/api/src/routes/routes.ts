@@ -11,6 +11,7 @@ import { Hono } from 'hono'
 
 import { addContestRoundRoute, removeContestRoundRoute } from '../lib/contest-round'
 import type { AccessTokenSigner } from '../lib/jwt'
+import { notifyPublic } from '../lib/notify-public'
 import { isUniqueViolation } from '../lib/pg-errors'
 import { requireOrganizer } from '../middleware/auth'
 import { requireCompetitionAccess } from '../middleware/competition-access'
@@ -212,6 +213,16 @@ export function createRouteRoutes(deps: RouteRouteDeps): Hono {
                 await removeContestRoundRoute(tx, currentCompetition.id, routeId, categoryId)
             }
           }
+
+          // Métadonnées seules (nom, secteur, vidéo…) — jamais `holdCount`
+          // une fois qu'un passage existe (ADR-004), donc jamais de
+          // ré-calcul de classement à notifier ici, seulement l'affichage
+          // de la liste des voies publique (ROADMAP.md Lot 7).
+          await notifyPublic(tx, {
+            type: 'route_updated',
+            competitionId: currentCompetition.id,
+            routeId,
+          })
 
           return row
         })

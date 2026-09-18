@@ -1294,6 +1294,156 @@ fois, avant le branchement create/correct. Couvert par un test de régression
 
 ---
 
+## ADR-040 — Lot 7 : deux décisions produit actées avec l'utilisateur avant le codage
+
+**Date :** 2026-09-18
+**Contexte :** `ROADMAP.md` Lot 7 (page publique et temps réel) suppose deux
+mécanismes qui n'existaient pas encore dans le dépôt à ce stade.
+
+**Décision 1 — le format contest reste « provisoire » en permanence, jusqu'au
+Lot 8, sans aucune action ajoutée ce lot.** `ROADMAP.md` demande un marquage
+« provisoire » tant qu'un tour n'est pas `published`. Or rien ne permet à ce
+jour de faire passer le round implicite d'un contest à `published` :
+ADR-030 avait déjà laissé ce choix explicitement au Lot 8 (« le Lot 8 devra
+décider s'il expose une transition open → closed → published… »), et même
+le format phases n'a qu'un `PATCH` sans bouton organisateur. Deux options
+soumises à l'utilisateur : (a) étendre le `PATCH` existant au round
+implicite du contest et ajouter un unique bouton « Publier les résultats »
+(léger empiètement sur le Lot 8, dans l'esprit d'ADR-030) ; (b) ne rien
+ajouter, un contest reste « provisoire » pour toujours jusqu'au Lot 8.
+**Choix : (b).** Zéro nouvelle route de mutation, zéro bouton organisateur
+dans ce lot — uniquement de la lecture de `round.status` déjà en base
+(`apps/api/src/lib/public-ranking.ts`). Un contest reste donc systématiquement
+`provisional: true` tant que le Lot 8 n'a pas construit la vraie publication.
+
+**Décision 2 — le détail « dépliable » par voie montre TOUS les tours
+participés, pas seulement le dernier atteint.** `FinalRankEntry`
+(`packages/scoring`) ne porte qu'un `reachedRoundId` — un seul tour par
+compétiteur. Deux lectures possibles de SPEC.md §3.3 (« le détail des voies
+par compétiteur ») : montrer uniquement le tour atteint (plus simple,
+correspond directement à ce que renvoie le moteur), ou l'historique complet
+(qualif + demi + finale, chacun avec ses voies). **Choix : l'historique
+complet**, pour que le spectateur voie le parcours entier d'un grimpeur, pas
+seulement sa dernière performance — cohérent avec le fait que le classement
+final se départage justement sur les tours précédents (§4.4).
+Implémentation : `assembleCategoryRanking` (`apps/api/src/lib/public-ranking.ts`)
+inclut, pour chaque compétiteur, tous les tours dont le classement contient
+son id — ce qui correspond exactement, par construction du roster en
+cascade (qualifiés du tour précédent), à « tous les tours jusqu'à celui
+atteint inclus », sans logique supplémentaire.
+
+---
+
+## ADR-041 — Lot 7 : synthèse DNS pour satisfaire la précondition de `rankRound`, écrite à l'endroit prévu par ADR-021
+
+**Date :** 2026-09-18
+**Contexte :** `rankRound` (format phases, `packages/scoring`) exige que
+chaque compétiteur apparaisse dans le classement de CHAQUE voie du tour, y
+compris en DNS — sinon il lève une erreur (« Incohérence entre les voies du
+tour »). ADR-021 avait anticipé ce besoin sans l'implémenter, en le
+renvoyant « au Lot 3/8 ». Aucune route de l'API n'appelait `rankRoute`/
+`rankRound`/`rankFinal` avant ce lot — Lot 7 est donc, mécaniquement, le
+premier appelant réel, pas un empiètement volontaire sur un autre lot.
+
+**Décision :** `apps/api/src/lib/public-ranking.ts` calcule, pour chaque
+tour contribuant au classement d'une catégorie, le roster attendu (la
+catégorie entière au premier tour ; les qualifiés du tour précédent
+ensuite, via `getQualifiers`), puis complète les lignes réelles de chaque
+voie avec des `Ascent` DNS synthétiques (`mergeRosterWithDnsPlaceholders`)
+pour tout membre du roster absent sur cette voie précise — jamais écrites
+en base, affichage/calcul seulement. Cette synthèse n'existe que pour le
+format phases : le format contest (`rankRoundContest`) n'a pas cette
+contrainte de cohérence et combine librement des ensembles de compétiteurs
+différents d'une voie à l'autre (`realAscentsOnly`, sans synthèse).
+
+**Options écartées :** construire cette synthèse dans `packages/scoring`
+lui-même — écarté, ce paquet reste volontairement sans accès à un « roster
+attendu » externe (SPEC.md §4.6 : `rankRound` ne reçoit que des
+`RouteRanking`, pas la liste des compétiteurs inscrits) ; la précondition
+reste, comme documentée par ADR-021, une responsabilité de l'appelant.
+
+---
+
+## ADR-042 — Lot 7 : clarification d'ADR-013 — « SQL explicite » signifie le builder Drizzle, pas `db.query` relationnel
+
+**Date :** 2026-09-18
+**Contexte :** ADR-013 exige que la requête alimentant le classement public
+soit écrite « en SQL explicite, via `sql\`\`\`` de Drizzle, pas via l'API
+relationnelle ». En pratique, `apps/api/src/lib/public-ranking.ts` utilise
+le query builder de Drizzle (`db.select({...}).from(...).where(...)`), pas
+un littéral `sql\`\`\`` à la main.
+
+**Décision :** ce choix respecte l'intention réelle d'ADR-013 — éviter
+`db.query.X.findMany({ with: {...} })` (l'API *relationnelle*, qui peut
+générer du N+1 invisible), pas interdire le query builder ordinaire, qui
+compile déjà en une seule requête SQL plate et lisible (CLAUDE.md : « pas
+d'ORM magique… les requêtes de classement sont écrites et lisibles »).
+C'est exactement le style déjà en usage dans `apps/api/src/lib/readiness.ts`
+et `apps/api/src/lib/judge-authorization.ts`, écrits avant ADR-013. Un
+littéral `sql\`\`\`` à la main aurait ajouté un risque d'erreur (liaison
+d'un tableau dans une clause `IN`) sans bénéfice réel ici. La seule requête
+véritablement « chemin chaud » de ce lot (l'agrégat de classement) reste
+néanmoins un `SELECT` unique par voie/tour, sans jointure relationnelle
+imbriquée.
+
+---
+
+## ADR-043 — Lot 7 : pont `LISTEN/NOTIFY`, canal unique, invalidation de cache pilotée côté abonné
+
+**Date :** 2026-09-18
+**Contexte :** ADR-014 posait le principe (`LISTEN/NOTIFY`, pas un
+`EventEmitter` en mémoire) sans détailler la forme exacte. Deux besoins
+distincts partagent le même flux d'événements : la diffusion SSE aux
+spectateurs et l'invalidation du cache de classement (`lib/public-cache.ts`).
+
+**Décision 1 — canal unique** (`climbcontest_public_events`), payload JSON
+= pointeur léger (`PublicStreamEvent`, `packages/contracts/src/public.ts`),
+jamais un dump de données — le client SSE réagit en invalidant/relisant la
+requête concernée (même chemin que le chargement initial et le repli en
+sondage), pas en consommant un état poussé.
+
+**Décision 2 — l'invalidation de cache est pilotée par le côté `LISTEN`
+(`realtimeBridge.subscribeAll`, câblé une seule fois dans `app.ts`), jamais
+par les routes d'écriture elles-mêmes.** Une route d'écriture
+(`judge-ascents.ts`, `rounds.ts`, `routes.ts`, `competitions.ts`) appelle
+`notifyPublic(tx, …)` — jamais `cache.invalidateCategory(...)` directement.
+**Justification :** reste correct si l'API tourne un jour en plusieurs
+workers (TODO.md) — chaque worker écoute son propre `NOTIFY` et invalide son
+propre cache en mémoire, sans qu'aucune route d'écriture ait besoin de
+connaître tous les caches des autres processus.
+
+**Décision 3 — `notifyPublic` est toujours appelé avec `tx` (le client de
+transaction), jamais `db`, dans les transactions déjà existantes.**
+Postgres ne délivre un `NOTIFY` émis en transaction qu'au `COMMIT` — jamais
+si la transaction échoue. C'est cette garantie native, vérifiée par un test
+d'intégration dédié (`lib/realtime-bridge.test.ts`, « ne délivre RIEN pour
+un NOTIFY émis dans une transaction annulée »), qui empêche un événement
+fantôme pour une écriture qui a échoué — pas du code applicatif à
+maintenir.
+
+**Options écartées :** un canal par compétition — écarté, complexifie le
+`LISTEN` (autant de commandes que de compétitions actives) pour un bénéfice
+nul, le filtrage par `competitionId` se fait déjà en mémoire côté
+`EventEmitter`.
+
+---
+
+## ADR-044 — Correction de SPEC.md §7 : `route_updated` manquait à la liste des événements SSE
+
+**Date :** 2026-09-18
+**Contexte :** SPEC.md §7 documentait `GET /public/:slug/stream` avec
+seulement 2 des 3 événements — `ranking_updated`, `round_status_changed` —
+alors que `ROADMAP.md` Lot 7, point 2, en demande explicitement un
+troisième, `route_updated` (une voie éditée par l'organisateur — vidéo,
+nom… — doit rafraîchir la liste des voies publique sans que le spectateur
+recharge la page).
+
+**Décision :** correction de spec, pas une décision d'architecture
+(CLAUDE.md : « SPEC.md n'est pas sacrée »). SPEC.md §7 mis à jour pour
+lister les trois événements.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la

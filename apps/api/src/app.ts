@@ -7,6 +7,8 @@ import type { Env } from './env'
 import type { AccessTokenSigner, JudgeTokenSigner } from './lib/jwt'
 import type { Logger } from './lib/logger'
 import type { Mailer } from './lib/mailer'
+import { createPublicRankingCache, type PublicRankingCache } from './lib/public-cache'
+import { createNoopRealtimeBridge, type RealtimeBridge } from './lib/realtime-bridge'
 import { errorHandler } from './middleware/problem'
 import { createAuthRoutes } from './routes/auth'
 import { createCategoryRoutes } from './routes/categories'
@@ -16,6 +18,7 @@ import { createHealthRoute } from './routes/health'
 import { createJudgeAscentRoutes } from './routes/judge-ascents'
 import { createJudgeAuthRoutes } from './routes/judge-auth'
 import { createJudgeRoutes } from './routes/judges'
+import { createPublicRoutes } from './routes/public'
 import { createQrCodesRoutes } from './routes/qrcodes'
 import { createRoundRoutes } from './routes/rounds'
 import { createRouteRoutes } from './routes/routes'
@@ -29,10 +32,34 @@ export interface AppDeps {
   judgeTokenSigner: JudgeTokenSigner
   /** Seam de test (ADR-007) — jamais fourni en production. */
   now?: () => Date
+  /**
+   * Lot 7 : facultatifs, avec un défaut inoffensif (cache mémoire tout
+   * neuf, pont temps réel qui ne se connecte jamais à Postgres) — toutes
+   * les suites de test déjà existantes qui construisent `createApp({...})`
+   * sans s'intéresser au Lot 7 continuent de fonctionner à l'identique.
+   * `index.ts` (production) et les tests dédiés au Lot 7 injectent un vrai
+   * `createRealtimeBridge`.
+   */
+  publicRankingCache?: PublicRankingCache
+  realtimeBridge?: RealtimeBridge
 }
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono()
+  const publicRankingCache = deps.publicRankingCache ?? createPublicRankingCache()
+  const realtimeBridge = deps.realtimeBridge ?? createNoopRealtimeBridge()
+  // Invalidation de cache pilotée par le côté LISTEN, pas par les routes
+  // d'écriture elles-mêmes (ADR-014) : reste correct si l'API tourne un
+  // jour en plusieurs workers, et évite à chaque route d'écriture de
+  // connaître le cache. `route_updated`/`round_status_changed` n'ont pas
+  // besoin d'entrée ici : un changement pertinent pour le classement est
+  // toujours accompagné d'un `ranking_updated` explicite par le site
+  // d'écriture (voir routes/rounds.ts, routes/routes.ts).
+  realtimeBridge.subscribeAll((event) => {
+    if (event.type === 'ranking_updated') {
+      publicRankingCache.invalidateCategory(event.competitionId, event.categoryId)
+    }
+  })
 
   app.use(
     '*',
@@ -82,6 +109,10 @@ export function createApp(deps: AppDeps): Hono {
       judgeTokenSigner: deps.judgeTokenSigner,
       now: deps.now,
     }),
+  )
+  app.route(
+    '/api/v1/public',
+    createPublicRoutes({ db: deps.db, cache: publicRankingCache, bridge: realtimeBridge }),
   )
 
   return app

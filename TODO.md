@@ -214,3 +214,36 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   a un état antérieur clair). Si un club rencontre un `rejected` en usage
   réel, prévoir cette reprise à ce moment-là plutôt que la construire à
   l'aveugle.
+
+## Depuis le Lot 7
+
+- **Un contest reste « provisoire » pour toujours tant que le Lot 8 n'a pas
+  construit la vraie publication.** Décision utilisateur explicite
+  (DECISIONS.md ADR-040) : aucune action de publication n'a été ajoutée ce
+  lot, ni pour le round implicite du contest ni de bouton pour le `PATCH`
+  déjà existant en format phases (ADR-030). Le Lot 8 devra décider comment
+  un contest atteint un jour `published`.
+- **Filtre « ascent actif » et liste des statuts de roster dupliqués entre
+  `judge-ascents.ts` et `public-ranking.ts`** (`superseded_by IS NULL AND
+  conflict_group IS NULL` ; `['registered', 'present']`) — pas de
+  refactorisation pour converger les deux, conformément à « tu ne réécris
+  pas ce qui marche ». À revoir si un troisième consommateur apparaît.
+- **`infra/scripts/load-test-sse.ts` a son propre `tsconfig.json` mais
+  n'est couvert par aucun script racine `pnpm typecheck`/`pnpm lint`** — ce
+  dossier n'est pas un paquet du workspace pnpm (pas de `package.json`), et
+  Turbo ne le voit donc pas. Vérifié manuellement (`tsc --noEmit -p
+  infra/scripts/tsconfig.json`, `eslint infra/scripts/load-test-sse.ts`)
+  pendant ce lot, mais rien ne le revérifiera automatiquement à la prochaine
+  modification.
+- **Test de limitation de débit publique : vérifie l'en-tête
+  `RateLimit-Limit`, pas un vrai épuisement à 429.** Cohérent avec le reste
+  du dépôt (aucun test existant n'exerce un vrai 429, `hono-rate-limiter`
+  n'a jamais été testé jusqu'au bout ailleurs non plus) — pas une régression
+  de rigueur propre à ce lot, mais à améliorer si la question se pose à
+  nouveau.
+- **`usePublicStream` ne gère pas un changement de `slug` sans démontage
+  complet du composant** (`apps/web/src/pages/public/PublicCompetition.vue`
+  le construit une seule fois avec la valeur initiale) — sans conséquence
+  dans les parcours actuels (aucun lien de l'application ne mène d'une
+  compétition publique à une autre sans navigation complète), mais à
+  revoir si ce cas d'usage apparaît.

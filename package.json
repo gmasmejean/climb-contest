@@ -15,6 +15,7 @@
     "format:check": "prettier --check .",
     "test": "turbo run test",
     "test:e2e": "playwright test",
+    "loadtest:sse": "tsx infra/scripts/load-test-sse.ts",
     "build": "turbo run build",
     "dev": "turbo run dev --parallel"
   },
