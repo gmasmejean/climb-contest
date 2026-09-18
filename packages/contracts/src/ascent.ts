@@ -67,6 +67,90 @@ export const correctLastAscentInputSchema = z
   })
 export type CorrectLastAscentInput = z.infer<typeof correctLastAscentInputSchema>
 
+/**
+ * Champs de forme organisateur (Lot 8) : seule différence avec
+ * `ascentShapeFields` — `status` accepte aussi `dsq`, que le juge ne voit
+ * jamais (voir commentaire de `ascentShapeFields` ci-dessus).
+ */
+const organizerAscentShapeFields = {
+  ...ascentShapeFields,
+  status: z.enum(['valid', 'dns', 'dnf', 'dsq']),
+}
+
+/** Saisie de secours (Lot 8) : l'organisateur crée un passage à la place d'un juge. */
+export const createAscentByOrganizerInputSchema = z
+  .object({
+    roundId: z.uuid(),
+    routeId: z.uuid(),
+    competitorId: z.uuid(),
+    recordedAt: z.iso.datetime(),
+    ...organizerAscentShapeFields,
+  })
+  .refine((v) => (v.status !== 'valid' ? v.holdNumber === null && !v.isTop : true), {
+    message: 'DNS/DNF/DSQ ne peuvent pas porter de numéro de prise.',
+    path: ['holdNumber'],
+  })
+  .refine((v) => (v.status === 'valid' && v.isTop ? v.holdNumber === null : true), {
+    message: 'Un TOP ne porte pas de numéro de prise.',
+    path: ['holdNumber'],
+  })
+  .refine((v) => (v.status === 'valid' && !v.isTop ? v.holdNumber !== null : true), {
+    message: 'Un passage valide sans TOP doit indiquer une prise.',
+    path: ['holdNumber'],
+  })
+export type CreateAscentByOrganizerInput = z.infer<typeof createAscentByOrganizerInputSchema>
+
+/** Réponse de la saisie de secours — même forme que `judgeAscentBatchResultSchema`, sans `id` (un seul passage, pas de lot). */
+export const organizerAscentWriteResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('accepted'), ascent: ascentSchema }),
+  z.object({ status: z.literal('duplicate'), ascent: ascentSchema }),
+  z.object({
+    status: z.literal('conflict'),
+    conflictGroup: z.uuid(),
+    existing: ascentSchema,
+    incoming: ascentSchema,
+  }),
+])
+export type OrganizerAscentWriteResult = z.infer<typeof organizerAscentWriteResultSchema>
+
+/**
+ * Correction organisateur (Lot 8, SPEC.md § 3.1) : motif obligatoire,
+ * contrairement à la correction juge (ADR-007). Contrairement à la saisie
+ * de secours ci-dessus, ne porte pas roundId/routeId/competitorId — une
+ * correction rectifie les valeurs d'un passage réel, jamais son
+ * affectation.
+ */
+export const correctAscentByOrganizerInputSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(500),
+    ...organizerAscentShapeFields,
+  })
+  .refine((v) => (v.status !== 'valid' ? v.holdNumber === null && !v.isTop : true), {
+    message: 'DNS/DNF/DSQ ne peuvent pas porter de numéro de prise.',
+    path: ['holdNumber'],
+  })
+  .refine((v) => (v.status === 'valid' && v.isTop ? v.holdNumber === null : true), {
+    message: 'Un TOP ne porte pas de numéro de prise.',
+    path: ['holdNumber'],
+  })
+  .refine((v) => (v.status === 'valid' && !v.isTop ? v.holdNumber !== null : true), {
+    message: 'Un passage valide sans TOP doit indiquer une prise.',
+    path: ['holdNumber'],
+  })
+export type CorrectAscentByOrganizerInput = z.infer<typeof correctAscentByOrganizerInputSchema>
+
+/**
+ * `GET .../ascents?roundId=&routeId=` (Lot 8, onglet Pilotage « Voies ») —
+ * même besoin que l'écran juge (qui compétiteur a déjà un passage sur cette
+ * voie, dans ce tour) mais côté organisateur, pour choisir un compétiteur à
+ * corriger ou à saisir en secours.
+ */
+export const organizerRouteAscentsQuerySchema = z.object({
+  roundId: z.uuid(),
+  routeId: z.uuid(),
+})
+export type OrganizerRouteAscentsQuery = z.infer<typeof organizerRouteAscentsQuerySchema>
+
 export const judgeRouteCategorySchema = z.object({
   id: z.uuid(),
   label: z.string(),

@@ -20,6 +20,23 @@ export type CreateCompetitorInput = z.infer<typeof createCompetitorInputSchema>
 export const updateCompetitorInputSchema = createCompetitorInputSchema.partial()
 export type UpdateCompetitorInput = z.infer<typeof updateCompetitorInputSchema>
 
+/**
+ * Lot 8 (DECISIONS.md) — statut jour J. Motif toujours facultatif (décidé
+ * avec l'utilisateur : même « présent », un simple pointage en série, n'a
+ * pas à exiger un texte).
+ */
+export const competitorStatusSchema = z.enum([
+  'registered',
+  'present',
+  'withdrawn',
+  'disqualified',
+])
+export const changeCompetitorStatusInputSchema = z.object({
+  status: competitorStatusSchema,
+  reason: z.string().trim().max(500).nullable().optional(),
+})
+export type ChangeCompetitorStatusInput = z.infer<typeof changeCompetitorStatusInputSchema>
+
 export const importCompetitorsInputSchema = z.object({
   csv: z.string().min(1),
   mode: z.enum(['preview', 'commit']),

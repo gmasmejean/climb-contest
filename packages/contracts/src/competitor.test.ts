@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  changeCompetitorStatusInputSchema,
   createCompetitorInputSchema,
   importCompetitorsInputSchema,
   importReportSchema,
@@ -43,6 +44,27 @@ describe('importCompetitorsInputSchema', () => {
 
   it('refuse un CSV vide', () => {
     expect(importCompetitorsInputSchema.safeParse({ csv: '', mode: 'preview' }).success).toBe(false)
+  })
+})
+
+describe('changeCompetitorStatusInputSchema', () => {
+  it('accepte un statut sans motif (toujours facultatif — décision utilisateur Lot 8)', () => {
+    expect(changeCompetitorStatusInputSchema.safeParse({ status: 'present' }).success).toBe(true)
+    expect(
+      changeCompetitorStatusInputSchema.safeParse({ status: 'disqualified' }).success,
+    ).toBe(true)
+  })
+
+  it('accepte un motif renseigné', () => {
+    const result = changeCompetitorStatusInputSchema.safeParse({
+      status: 'withdrawn',
+      reason: 'Blessure au genou avant le départ.',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('refuse un statut inconnu', () => {
+    expect(changeCompetitorStatusInputSchema.safeParse({ status: 'absent' }).success).toBe(false)
   })
 })
 
