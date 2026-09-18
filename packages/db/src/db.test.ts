@@ -58,6 +58,7 @@ describe('migrations', () => {
     const tableNames = result.rows.map((row) => (row as { table_name: string }).table_name)
     expect(tableNames.sort()).toEqual(
       [
+        'activity_log',
         'ascent',
         'ascent_event',
         'asset',
@@ -97,7 +98,7 @@ describe('migrations', () => {
       const afterUp = await client.query(
         "select table_name from information_schema.tables where table_schema = 'public' and table_name != '_migrations_applied'",
       )
-      expect(afterUp.rows.length).toBe(15)
+      expect(afterUp.rows.length).toBe(16)
     })
   })
 })
