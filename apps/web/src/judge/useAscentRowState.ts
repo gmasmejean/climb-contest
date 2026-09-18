@@ -1,123 +1,101 @@
 import type { CorrectLastAscentInput, CreateAscentInput } from '@climbcontest/contracts'
-import { reactive } from 'vue'
+import { computed, type ComputedRef } from 'vue'
 
 import { correctLastAscent, recordAscent } from './ascent-mutations'
+import { isAscentSummary, type AscentSummary } from './conflict-summary'
+import { judgeDb } from './local-db'
+import { syncEngine } from './sync-runtime'
+import { useLiveQuery } from './use-live-query'
 
-export interface AscentPreview {
-  holdNumber: number | null
-  modifier: 'none' | 'plus'
-  isTop: boolean
-  status: 'valid' | 'dns' | 'dnf'
-  climbTimeMs: number | null
-}
-
-export interface AscentRowState {
-  status: 'syncing' | 'synced' | 'error'
-  preview: AscentPreview
-  /** Epoch ms — connu côté client dès la soumission (ADR-007 : recordedAt + 5 min). */
-  correctableUntil: number
-  retry: () => void
+export interface AscentRowSyncState {
+  status: 'syncing' | 'conflict' | 'rejected'
+  reason?: string | undefined
+  conflict?: { existing: AscentSummary; incoming: AscentSummary } | undefined
 }
 
 /**
- * État optimiste des saisies en cours, par compétiteur — décision confirmée
- * pour ce lot (en ligne uniquement, pas de file durable avant le Lot 6) :
- * en mémoire seulement (module-scope, comme `useToast`), jamais persisté.
- * Un rechargement de page perd cet état non confirmé — c'est le Lot 6 qui
- * apporte la durabilité complète (IndexedDB, retries automatiques).
+ * État de synchronisation par compétiteur, dérivé de la file durable
+ * `packages/sync` (Dexie) — remplace le `Map` en mémoire du Lot 5. La
+ * DONNÉE du passage (fait/à faire, valeurs) vit désormais directement dans
+ * `routeDetails` (écrite de façon optimiste par `ascent-mutations.ts`) ; ce
+ * module ne fournit plus que l'état de synchronisation superposé, et la
+ * fenêtre de correction (ADR-007, persistée dans `lastSubmission`).
  *
- * Une ligne n'est JAMAIS retirée de `rows` une fois créée dans la session :
- * la retirer ferait retomber l'écran sur le premier `GET` (potentiellement
- * lancé avant que cette écriture n'ait abouti côté serveur, donc encore
- * « à faire ») plutôt que de garder l'aperçu réellement soumis.
+ * Simplification assumée pour ce lot : un `rejected` n'annule pas
+ * l'écriture optimiste déjà faite dans `routeDetails` (le compétiteur reste
+ * affiché « fait ») — l'avertissement reste visible et permanent tant que
+ * le juge ne l'a pas explicitement écarté, plutôt que de faire réapparaître
+ * silencieusement la ligne en « à faire ». Voir TODO.md.
  */
-const rows = reactive(new Map<string, AscentRowState>())
-
-/**
- * ADR-007, second volet (« jusqu'à la saisie suivante, n'importe quel
- * compétiteur ») : dès qu'une saisie part pour un AUTRE compétiteur, la
- * fenêtre de correction de la précédente se ferme immédiatement côté
- * affichage — le serveur reste de toute façon seul juge en dernier ressort.
- */
-let lastSubmittedCompetitorId: string | null = null
-
-const CORRECTION_WINDOW_MS = 5 * 60 * 1000
-
-function toPreview(input: {
-  holdNumber: number | null
-  modifier: 'none' | 'plus'
-  isTop: boolean
-  status: 'valid' | 'dns' | 'dnf'
-  climbTimeMs?: number | null | undefined
-}): AscentPreview {
-  return {
-    holdNumber: input.holdNumber,
-    modifier: input.modifier,
-    isTop: input.isTop,
-    status: input.status,
-    climbTimeMs: input.climbTimeMs ?? null,
-  }
-}
-
-function attempt(
-  competitorId: string,
-  preview: AscentPreview,
-  correctableUntil: number,
-  send: () => Promise<unknown>,
-): void {
-  lastSubmittedCompetitorId = competitorId
-  rows.set(competitorId, {
-    status: 'syncing',
-    preview,
-    correctableUntil,
-    retry: () => attempt(competitorId, preview, correctableUntil, send),
-  })
-  send()
-    .then(() => {
-      const current = rows.get(competitorId)
-      if (current) rows.set(competitorId, { ...current, status: 'synced' })
-    })
-    .catch(() => {
-      const current = rows.get(competitorId)
-      // Reste sous « fait » avec un indicateur d'erreur + réessai — jamais
-      // renvoyée vers « à faire » : la renvoyer risquerait une double saisie
-      // sur le même compétiteur (heurte l'index unique / le 409 serveur).
-      if (current) rows.set(competitorId, { ...current, status: 'error' })
-    })
-}
-
 export function useAscentRowState(): {
-  submitCreate: (competitorId: string, input: CreateAscentInput) => void
+  submitCreate: (competitorId: string, input: CreateAscentInput) => Promise<void>
   submitCorrect: (
     competitorId: string,
+    routeId: string,
+    supersedesId: string,
     input: CorrectLastAscentInput,
     originalRecordedAt: string,
-  ) => void
-  get: (competitorId: string) => AscentRowState | undefined
+  ) => Promise<void>
+  get: (competitorId: string) => AscentRowSyncState | undefined
   canCorrect: (competitorId: string, nowMs: number) => boolean
+  dismissRejected: (competitorId: string) => void
 } {
-  function submitCreate(competitorId: string, input: CreateAscentInput): void {
-    const correctableUntil = new Date(input.recordedAt).getTime() + CORRECTION_WINDOW_MS
-    attempt(competitorId, toPreview(input), correctableUntil, () => recordAscent(input))
+  const queueItems = useLiveQuery(() => judgeDb.queue.toArray(), [])
+  const lastSubmission = useLiveQuery(() => judgeDb.lastSubmission.get('current'), undefined)
+
+  const byCompetitorId: ComputedRef<Map<string, (typeof queueItems.value)[number]>> = computed(
+    () => new Map(queueItems.value.map((item) => [item.payload.competitorId, item])),
+  )
+
+  function submitCreate(_competitorId: string, input: CreateAscentInput): Promise<void> {
+    return recordAscent(input)
   }
+
   function submitCorrect(
     competitorId: string,
+    routeId: string,
+    supersedesId: string,
     input: CorrectLastAscentInput,
     originalRecordedAt: string,
-  ): void {
-    // La correction conserve l'heure d'origine côté serveur (ADR-007) : la
-    // fenêtre se calcule depuis cette heure-là, jamais depuis l'instant de
-    // la correction elle-même.
-    const correctableUntil = new Date(originalRecordedAt).getTime() + CORRECTION_WINDOW_MS
-    attempt(competitorId, toPreview(input), correctableUntil, () => correctLastAscent(input))
+  ): Promise<void> {
+    return correctLastAscent(competitorId, routeId, supersedesId, input, originalRecordedAt)
   }
-  function get(competitorId: string): AscentRowState | undefined {
-    return rows.get(competitorId)
+
+  function get(competitorId: string): AscentRowSyncState | undefined {
+    const item = byCompetitorId.value.get(competitorId)
+    if (!item) return undefined
+    if (item.state === 'pending' || item.state === 'sending') {
+      return { status: 'syncing' }
+    }
+    if (item.state === 'conflict') {
+      const existing = item.conflict?.existing
+      const incoming = item.conflict?.incoming
+      return {
+        status: 'conflict',
+        conflict:
+          isAscentSummary(existing) && isAscentSummary(incoming)
+            ? { existing, incoming }
+            : undefined,
+      }
+    }
+    if (item.state === 'rejected') {
+      return { status: 'rejected', reason: item.rejectedReason }
+    }
+    return undefined
   }
+
   function canCorrect(competitorId: string, nowMs: number): boolean {
-    const row = rows.get(competitorId)
+    const row = lastSubmission.value
     if (!row) return false
-    return lastSubmittedCompetitorId === competitorId && nowMs < row.correctableUntil
+    return row.competitorId === competitorId && nowMs < new Date(row.correctableUntil).getTime()
   }
-  return { submitCreate, submitCorrect, get, canCorrect }
+
+  function dismissRejected(competitorId: string): void {
+    const item = byCompetitorId.value.get(competitorId)
+    if (item && item.state === 'rejected') {
+      void syncEngine.dismissRejected(item.id)
+    }
+  }
+
+  return { submitCreate, submitCorrect, get, canCorrect, dismissRejected }
 }

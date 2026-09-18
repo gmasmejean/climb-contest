@@ -1,19 +1,15 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { useToast } from '@climbcontest/ui'
+import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
 
+import { judgeDb } from '../../judge/local-db'
+import { flushLiveQueries } from '../../test-utils/flush'
 import JudgeAscentEntry from './JudgeAscentEntry.vue'
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  })
-}
-
 const routeDetail = {
-  route: { id: 'route-1', number: 3, name: null, holdCount: 40 },
-  round: { id: 'round-1', type: 'qualification' },
+  route: { id: 'route-1', number: 3, name: null, holdCount: 40, categories: [] },
+  round: { id: 'round-1', type: 'qualification' as const },
   timingEnabled: false,
   competitors: [
     {
@@ -42,11 +38,17 @@ describe('JudgeAscentEntry', () => {
         { path: '/j/routes/:routeId', name: 'judge-route', component: { template: '<div />' } },
       ],
     })
-    vi.stubGlobal('fetch', vi.fn())
+    // Aucun test de ce fichier ne doit toucher le réseau : la saisie écrit en
+    // local (Dexie) puis enfile dans `packages/sync` — c'est CE contenu que
+    // les tests vérifient, jamais le corps d'une requête réseau.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('réseau indisponible en test')))
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals()
+    await judgeDb.routeDetails.clear()
+    await judgeDb.queue.clear()
+    await judgeDb.lastSubmission.clear()
   })
 
   function digitButton(wrapper: ReturnType<typeof mount>, label: string) {
@@ -54,13 +56,12 @@ describe('JudgeAscentEntry', () => {
   }
 
   it('compose une prise, affiche le récapitulatif exact et confirme', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(routeDetail))
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(null))
+    await judgeDb.routeDetails.put({ routeId: 'route-1', detail: routeDetail })
 
     await router.push('/j/routes/route-1/competitors/comp-1')
     await router.isReady()
     const wrapper = mount(JudgeAscentEntry, { global: { plugins: [router] } })
-    await flushPromises()
+    await flushLiveQueries()
 
     expect(wrapper.text()).toContain('Dossard 47 — Léa Martin')
 
@@ -73,35 +74,52 @@ describe('JudgeAscentEntry', () => {
 
     expect(wrapper.text()).toContain('Dossard 47 — Léa Martin — Voie 3 — prise 25+')
 
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ id: 'new-ascent' }, 201))
     const confirmButton = wrapper.findAll('button').find((b) => b.text() === 'Confirmer')
     await confirmButton?.trigger('click')
-    await flushPromises()
 
-    const postCall = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === 'POST')
-    expect(postCall?.[0]).toBe('/api/v1/judge/ascents')
-    const body = JSON.parse(postCall?.[1]?.body as string) as {
+    // Écrit dans IndexedDB AVANT tout réseau (SPEC.md § 6.3) : la saisie doit
+    // être là, peu importe que le `fetch` de fond échoue. `trigger()`
+    // n'attend que le prochain tick Vue, pas la chaîne d'écritures Dexie
+    // internes à `confirm()` — on attend donc explicitement son résultat.
+    const queued = await vi.waitFor(async () => {
+      const rows = await judgeDb.queue.toArray()
+      expect(rows).toHaveLength(1)
+      return rows
+    })
+    const item = queued[0]
+    expect(item?.kind).toBe('create')
+    const payload = item?.payload as {
       holdNumber: number
       modifier: string
       routeId: string
       competitorId: string
     }
-    expect(body.holdNumber).toBe(25)
-    expect(body.modifier).toBe('plus')
-    expect(body.routeId).toBe('route-1')
-    expect(body.competitorId).toBe('comp-1')
+    expect(payload.holdNumber).toBe(25)
+    expect(payload.modifier).toBe('plus')
+    expect(payload.routeId).toBe('route-1')
+    expect(payload.competitorId).toBe('comp-1')
+
+    // Écriture optimiste immédiate du cache local (ADR-012).
+    const stored = await judgeDb.routeDetails.get('route-1')
+    expect(stored?.detail.competitors[0]?.ascent?.holdNumber).toBe(25)
 
     expect(router.currentRoute.value.name).toBe('judge-route')
+
+    // Régression : l'écriture optimiste ci-dessus ouvre IMMÉDIATEMENT la
+    // fenêtre de correction (ADR-007) pour ce compétiteur — si le texte du
+    // toast relit `mode` après cette écriture au lieu de la capturer avant,
+    // une toute première création s'annonce à tort comme une correction.
+    const { toasts } = useToast()
+    expect(toasts.at(-1)?.text).toBe('Passage enregistré ✓')
   })
 
   it('un TOP vide le numéro de prise et l’affiche dans le récapitulatif', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(routeDetail))
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(null))
+    await judgeDb.routeDetails.put({ routeId: 'route-1', detail: routeDetail })
 
     await router.push('/j/routes/route-1/competitors/comp-1')
     await router.isReady()
     const wrapper = mount(JudgeAscentEntry, { global: { plugins: [router] } })
-    await flushPromises()
+    await flushLiveQueries()
 
     const topButton = wrapper.findAll('button').find((b) => b.text() === 'TOP')
     await topButton?.trigger('click')
@@ -112,13 +130,12 @@ describe('JudgeAscentEntry', () => {
   })
 
   it('refuse d’avancer au récapitulatif sans prise ni statut choisi', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(routeDetail))
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(null))
+    await judgeDb.routeDetails.put({ routeId: 'route-1', detail: routeDetail })
 
     await router.push('/j/routes/route-1/competitors/comp-1')
     await router.isReady()
     const wrapper = mount(JudgeAscentEntry, { global: { plugins: [router] } })
-    await flushPromises()
+    await flushLiveQueries()
 
     const recapButton = wrapper.findAll('button').find((b) => b.text() === 'Voir le récapitulatif')
     await recapButton?.trigger('click')

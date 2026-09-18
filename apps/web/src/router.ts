@@ -44,25 +44,34 @@ const router = createRouter({
     },
     {
       // Pas de compte, pas de session organisateur (SPEC.md § 3.2) : ni
-      // `requiresAuth` ni `guestOnly`, ce garde ne les concerne pas.
+      // `requiresAuth` ni `guestOnly`, ce garde ne les concerne pas. Pas de
+      // bandeau de synchronisation ici — aucune file avant authentification.
       path: '/j/:token',
       name: 'judge-access',
       component: () => import('./pages/judge/JudgeAccess.vue'),
     },
     {
-      path: '/j/home',
-      name: 'judge-home',
-      component: () => import('./pages/judge/JudgeHome.vue'),
-    },
-    {
-      path: '/j/routes/:routeId',
-      name: 'judge-route',
-      component: () => import('./pages/judge/JudgeRoute.vue'),
-    },
-    {
-      path: '/j/routes/:routeId/competitors/:competitorId',
-      name: 'judge-ascent-entry',
-      component: () => import('./pages/judge/JudgeAscentEntry.vue'),
+      // `JudgeLayout` monte le bandeau de synchronisation UNE SEULE FOIS
+      // (Lot 6, ROADMAP.md point 6) pour les trois écrans juge authentifiés.
+      path: '/j',
+      component: () => import('./pages/judge/JudgeLayout.vue'),
+      children: [
+        {
+          path: 'home',
+          name: 'judge-home',
+          component: () => import('./pages/judge/JudgeHome.vue'),
+        },
+        {
+          path: 'routes/:routeId',
+          name: 'judge-route',
+          component: () => import('./pages/judge/JudgeRoute.vue'),
+        },
+        {
+          path: 'routes/:routeId/competitors/:competitorId',
+          name: 'judge-ascent-entry',
+          component: () => import('./pages/judge/JudgeAscentEntry.vue'),
+        },
+      ],
     },
   ],
 })
@@ -70,9 +79,21 @@ const router = createRouter({
 let bootstrapped = false
 
 router.beforeEach(async (to) => {
-  if (!bootstrapped) {
+  // Les écrans juge n'ont pas de session organisateur (SPEC.md § 3.2) — et
+  // surtout, AUCUN écran juge ne doit dépendre d'une requête réseau pour
+  // s'afficher (CLAUDE.md), y compris ce premier appel : au premier
+  // chargement hors ligne (onglet fermé/rouvert en mode avion, Lot 6), un
+  // `fetch` qui échoue par manque de réseau (pas juste un 401) rejetterait
+  // sinon la navigation ENTIÈRE avant même d'atteindre la garde ci-dessous.
+  if (!bootstrapped && !to.path.startsWith('/j')) {
     bootstrapped = true
-    await bootstrapSession()
+    try {
+      await bootstrapSession()
+    } catch {
+      // Hors ligne ou serveur injoignable au démarrage : dégradation propre
+      // (SPEC.md § 6.1) — on continue sans session restaurée, jamais un
+      // écran blanc.
+    }
   }
 
   if (to.meta.requiresAuth && !currentUser.value) {

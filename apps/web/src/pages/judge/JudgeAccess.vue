@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ApiError } from '../../api/client'
 import { judgeAuthApi } from '../../api/judge-auth'
 import { setJudgeSession } from '../../api/judge-session'
+import { bootstrapJudge } from '../../judge/bootstrap'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,12 +32,23 @@ async function submit(): Promise<void> {
   try {
     const session = await judgeAuthApi.auth({ token, pin: pin.value || undefined })
     setJudgeSession(session.token)
+    try {
+      // Déclenché une fois, au moment où le juge a encore du réseau
+      // (SPEC.md § 6.3) — plus aucun écran juge n'en dépendra ensuite.
+      await bootstrapJudge()
+    } catch {
+      throw new Error(
+        'Connexion réussie, mais impossible de télécharger vos voies — vérifiez votre réseau et réessayez.',
+      )
+    }
     await router.replace({ name: 'judge-home' })
   } catch (error) {
     authError.value =
       error instanceof ApiError
         ? (error.detail ?? error.title)
-        : 'Une erreur inattendue est survenue.'
+        : error instanceof Error
+          ? error.message
+          : 'Une erreur inattendue est survenue.'
     pin.value = ''
   } finally {
     submitting.value = false

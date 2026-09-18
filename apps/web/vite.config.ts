@@ -8,7 +8,11 @@ export default defineConfig({
     vue(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Lot 6 : une nouvelle version ne s'active jamais pendant qu'une
+      // saisie juge est en attente — `'prompt'` laisse `pwa-update.ts`
+      // piloter `updateSW()` lui-même, au lieu de basculer seul
+      // (`'autoUpdate'`), gated sur une file vide (DECISIONS.md ADR-035).
+      registerType: 'prompt',
       includeAssets: ['favicon.svg'],
       manifest: {
         id: '/',
@@ -33,6 +37,34 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Lot 6 (SPEC.md § 6.3) : réponse réseau d'abord avec repli cache
+        // pour les données API (utile au premier chargement du bootstrap
+        // juge, ou aux écrans organisateur/public en réseau instable) ;
+        // cache d'abord pour les ressources statiques. Seuls les `GET`
+        // matchent par défaut — les `POST` (dont `/judge/ascents/batch`) ne
+        // sont jamais interceptés ici : leurs retries sont gérés uniquement
+        // par `packages/sync`, jamais dupliqués au niveau du service worker.
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/api/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-get-cache',
+              networkTimeoutSeconds: 4,
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 200, maxAgeSeconds: 86_400 },
+            },
+          },
+          {
+            urlPattern: ({ request }: { request: Request }) =>
+              ['style', 'script', 'font', 'image'].includes(request.destination),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'static-assets',
+              expiration: { maxEntries: 200, maxAgeSeconds: 2_592_000 },
+            },
+          },
+        ],
       },
     }),
   ],

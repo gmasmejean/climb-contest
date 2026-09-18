@@ -1,19 +1,14 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
 
+import { judgeDb } from '../../judge/local-db'
+import { flushLiveQueries } from '../../test-utils/flush'
 import JudgeRoute from './JudgeRoute.vue'
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  })
-}
-
 const routeDetail = {
-  route: { id: 'route-1', number: 3, name: null, holdCount: 40 },
-  round: { id: 'round-1', type: 'qualification' },
+  route: { id: 'route-1', number: 3, name: null, holdCount: 40, categories: [] },
+  round: { id: 'round-1', type: 'qualification' as const },
   timingEnabled: false,
   competitors: [
     {
@@ -33,9 +28,9 @@ const routeDetail = {
       ascent: {
         id: 'ascent-2',
         holdNumber: 30,
-        modifier: 'none',
+        modifier: 'none' as const,
         isTop: false,
-        status: 'valid',
+        status: 'valid' as const,
         climbTimeMs: null,
         recordedAt: new Date().toISOString(),
       },
@@ -59,21 +54,26 @@ describe('JudgeRoute', () => {
         },
       ],
     })
-    vi.stubGlobal('fetch', vi.fn())
+    // Aucun test de ce fichier ne doit jamais toucher le réseau : toutes les
+    // lectures viennent de Dexie (ADR-012) ; un envoi de fond éventuel de
+    // `packages/sync` (debounce 300ms) ne doit pas provoquer d'appel réel.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('réseau indisponible en test')))
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllGlobals()
+    await judgeDb.routeDetails.clear()
+    await judgeDb.queue.clear()
+    await judgeDb.lastSubmission.clear()
   })
 
   it('sépare les compétiteurs entre « à faire » et « fait »', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(routeDetail))
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(null))
+    await judgeDb.routeDetails.put({ routeId: 'route-1', detail: routeDetail })
 
     await router.push('/j/routes/route-1')
     await router.isReady()
     const wrapper = mount(JudgeRoute, { global: { plugins: [router] } })
-    await flushPromises()
+    await flushLiveQueries()
 
     // Onglet « À faire » actif par défaut.
     expect(wrapper.text()).toContain('Dossard 47 — Léa Martin')
@@ -85,65 +85,77 @@ describe('JudgeRoute', () => {
   })
 
   it('filtre par dossard ou par nom', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(routeDetail))
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(null))
+    await judgeDb.routeDetails.put({ routeId: 'route-1', detail: routeDetail })
 
     await router.push('/j/routes/route-1')
     await router.isReady()
     const wrapper = mount(JudgeRoute, { global: { plugins: [router] } })
-    await flushPromises()
+    await flushLiveQueries()
 
     await wrapper.find('input').setValue('47')
     expect(wrapper.text()).toContain('Dossard 47')
   })
 
   it("affiche un état vide quand aucun tour n'est ouvert", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ ...routeDetail, round: null, competitors: [] }),
-    )
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(null))
+    await judgeDb.routeDetails.put({
+      routeId: 'route-1',
+      detail: { ...routeDetail, round: null, competitors: [] },
+    })
 
     await router.push('/j/routes/route-1')
     await router.isReady()
     const wrapper = mount(JudgeRoute, { global: { plugins: [router] } })
-    await flushPromises()
+    await flushLiveQueries()
 
     expect(wrapper.text()).toContain('Aucun tour ouvert')
   })
 
-  // Placé en dernier : `useAscentRowState` est un état module-scope partagé
-  // (comme `useToast`), donc la soumission simulée ici persiste pour le
-  // reste du fichier si ce test n'est pas le dernier.
-  it('propose « Corriger » sur une ligne tout juste synchronisée de façon optimiste', async () => {
-    // Simule ce que fait `JudgeAscentEntry.vue` juste avant de naviguer :
-    // la soumission part avant que `JudgeRoute.vue` ne relise le serveur, le
-    // `GET` ci-dessous peut donc légitimement encore renvoyer `ascent: null`.
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ id: 'new-ascent' }, 201))
-    const { useAscentRowState } = await import('../../judge/useAscentRowState')
-    useAscentRowState().submitCreate('comp-1', {
-      id: 'new-ascent',
-      roundId: 'round-1',
-      routeId: 'route-1',
-      competitorId: 'comp-1',
-      holdNumber: 25,
-      modifier: 'plus',
-      isTop: false,
-      status: 'valid',
-      climbTimeMs: null,
-      recordedAt: new Date().toISOString(),
-      deviceId: 'device-1',
-    })
-    await flushPromises()
+  it("affiche un message honnête quand la voie n'a jamais été téléchargée", async () => {
+    await router.push('/j/routes/route-inconnue')
+    await router.isReady()
+    const wrapper = mount(JudgeRoute, { global: { plugins: [router] } })
+    await flushLiveQueries()
 
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ ...routeDetail, competitors: [routeDetail.competitors[0]] }),
-    )
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(null))
+    expect(wrapper.text()).toContain('indisponible hors ligne')
+  })
+
+  it('propose « Corriger » sur une ligne tout juste enregistrée de façon optimiste', async () => {
+    // Simule ce que fait `ascent-mutations.ts` à l'enqueue : écriture
+    // optimiste AVANT tout réseau (SPEC.md § 6.3) — la ligne apparaît « fait »
+    // même si rien n'est encore parti.
+    const recordedAt = new Date().toISOString()
+    await judgeDb.routeDetails.put({
+      routeId: 'route-1',
+      detail: {
+        ...routeDetail,
+        competitors: [
+          {
+            ...routeDetail.competitors[0]!,
+            ascent: {
+              id: 'new-ascent',
+              holdNumber: 25,
+              modifier: 'plus' as const,
+              isTop: false,
+              status: 'valid' as const,
+              climbTimeMs: null,
+              recordedAt,
+            },
+          },
+        ],
+      },
+    })
+    await judgeDb.lastSubmission.put({
+      key: 'current',
+      competitorId: 'comp-1',
+      ascentId: 'new-ascent',
+      recordedAt,
+      correctableUntil: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    })
 
     await router.push('/j/routes/route-1')
     await router.isReady()
     const wrapper = mount(JudgeRoute, { global: { plugins: [router] } })
-    await flushPromises()
+    await flushLiveQueries()
 
     await wrapper.get('[role="tab"]:nth-of-type(2)').trigger('click')
     expect(wrapper.text()).toContain('prise 25+')

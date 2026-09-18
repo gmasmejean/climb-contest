@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import type { JudgeLastAscent, JudgeRouteDetail } from '@climbcontest/contracts'
 import { Button, NumberField, NumericKeypad, useToast } from '@climbcontest/ui'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { uuidv7 } from 'uuidv7'
 
-import { judgeAscentsApi, judgeRoutesApi } from '../../api/judge-ascents'
 import { useWakeLock } from '../../composables/useWakeLock'
 import { getDeviceId } from '../../judge/device-id'
 import { vibrateOnConfirm } from '../../judge/haptics'
+import { useJudgeRouteDetail } from '../../judge/local-store'
 import { useAscentRowState } from '../../judge/useAscentRowState'
 
 useWakeLock()
@@ -21,12 +20,10 @@ const rowState = useAscentRowState()
 const toast = useToast()
 
 type Mode = 'create' | 'correct' | 'readonly'
-type LoadState = 'loading' | 'error' | 'ready'
 
-const loadState = ref<LoadState>('loading')
-const detail = ref<JudgeRouteDetail | null>(null)
-const last = ref<JudgeLastAscent>(null)
-const mode = ref<Mode>('create')
+// Lecture locale seule (ADR-012, SPEC.md § 6.3) — jamais de dépendance
+// réseau pour afficher cet écran.
+const detail = useJudgeRouteDetail(routeId)
 const step = ref<'entry' | 'recap'>('entry')
 const nowMs = ref(Date.now())
 
@@ -37,58 +34,48 @@ const status = ref<'valid' | 'dns' | 'dnf'>('valid')
 const climbTimeMs = ref<number | null>(null)
 const entryError = ref('')
 const originalRecordedAt = ref('')
+const supersedesId = ref('')
 
 const competitor = computed(
   () => detail.value?.competitors.find((c) => c.id === competitorId) ?? null,
 )
 
-const correctableUntilMs = computed(() =>
-  last.value ? new Date(last.value.correctableUntil).getTime() : null,
-)
+// La fenêtre de correction (ADR-007) est désormais dérivée de la dernière
+// saisie DURABLE de ce juge (`lastSubmission`, IndexedDB) — plus d'appel
+// réseau (`GET /judge/ascents/last`) pour la connaître.
+const mode = computed<Mode>(() => {
+  if (!competitor.value || competitor.value.ascent === null) return 'create'
+  return rowState.canCorrect(competitorId, nowMs.value) ? 'correct' : 'readonly'
+})
+const correctableUntilMs = computed(() => {
+  if (mode.value !== 'correct' || !originalRecordedAt.value) return null
+  return new Date(originalRecordedAt.value).getTime() + 5 * 60 * 1000
+})
 const stillCorrectable = computed(
   () => correctableUntilMs.value !== null && nowMs.value < correctableUntilMs.value,
 )
 
-async function load(): Promise<void> {
-  loadState.value = 'loading'
-  try {
-    const [detailResponse, lastResponse] = await Promise.all([
-      judgeRoutesApi.detail(routeId),
-      judgeAscentsApi.last(),
-    ])
-    detail.value = detailResponse
-    last.value = lastResponse
-
-    const found = detailResponse.competitors.find((c) => c.id === competitorId)
-    if (!found) {
-      loadState.value = 'error'
-      return
-    }
-
-    if (found.ascent === null) {
-      mode.value = 'create'
-    } else if (
-      lastResponse !== null &&
-      lastResponse.ascent.id === found.ascent.id &&
-      Date.now() < new Date(lastResponse.correctableUntil).getTime()
-    ) {
-      mode.value = 'correct'
+// Préremplissage des champs — UNE SEULE FOIS quand le compétiteur devient
+// disponible, jamais à chaque mise à jour réactive du cache local (qui
+// écraserait sinon une saisie du juge déjà en cours à l'écran).
+let prefilled = false
+watch(
+  competitor,
+  (found) => {
+    if (prefilled || !found) return
+    prefilled = true
+    if (found.ascent !== null && mode.value === 'correct') {
       holdNumber.value = found.ascent.holdNumber
       modifier.value = found.ascent.modifier
       isTop.value = found.ascent.isTop
       status.value = found.ascent.status === 'dsq' ? 'valid' : found.ascent.status
       climbTimeMs.value = found.ascent.climbTimeMs
       originalRecordedAt.value = found.ascent.recordedAt
-    } else {
-      mode.value = 'readonly'
+      supersedesId.value = found.ascent.id
     }
-    loadState.value = 'ready'
-  } catch {
-    loadState.value = 'error'
-  }
-}
-
-onMounted(load)
+  },
+  { immediate: true },
+)
 
 let ticker: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
@@ -143,7 +130,13 @@ async function confirm(): Promise<void> {
   submitting.value = true
   vibrateOnConfirm()
 
-  if (mode.value === 'create') {
+  // Capturé UNE FOIS : l'écriture optimiste (dans `submitCreate`/`submitCorrect`
+  // ci-dessous) fait basculer `mode` de façon réactive dès qu'elle atteint
+  // Dexie (le compétiteur passe `ascent === null` → non-null, la fenêtre de
+  // correction s'ouvre) — le relire après l'await dirait toujours « correct ».
+  const submittedMode = mode.value
+
+  if (submittedMode === 'create') {
     const input = {
       id: uuidv7(),
       roundId: detail.value.round.id,
@@ -157,8 +150,8 @@ async function confirm(): Promise<void> {
       recordedAt: new Date().toISOString(),
       deviceId: getDeviceId(),
     }
-    rowState.submitCreate(competitorId, input)
-  } else if (mode.value === 'correct') {
+    await rowState.submitCreate(competitorId, input)
+  } else if (submittedMode === 'correct') {
     const input = {
       id: uuidv7(),
       holdNumber: holdNumber.value,
@@ -167,12 +160,24 @@ async function confirm(): Promise<void> {
       status: status.value,
       climbTimeMs: climbTimeMs.value,
     }
-    rowState.submitCorrect(competitorId, input, originalRecordedAt.value)
+    await rowState.submitCorrect(
+      competitorId,
+      routeId,
+      supersedesId.value,
+      input,
+      originalRecordedAt.value,
+    )
   }
 
+  // Durée réduite (2 s, au lieu des 5 s par défaut) : le toast est rendu au
+  // niveau de l'app (App.vue) donc reste affiché par-dessus l'écran SUIVANT
+  // après la navigation — sur un écran de 360 px, une confirmation trop
+  // longue recouvre le bas du prochain écran pendant que le juge enchaîne
+  // déjà sur le compétiteur suivant (CLAUDE.md § accessibilité).
   toast.show(
-    mode.value === 'correct' ? 'Correction enregistrée ✓' : 'Passage enregistré ✓',
+    submittedMode === 'correct' ? 'Correction enregistrée ✓' : 'Passage enregistré ✓',
     'success',
+    2000,
   )
   await router.replace({ name: 'judge-route', params: { routeId } })
 }
@@ -187,13 +192,17 @@ async function confirm(): Promise<void> {
       ← Retour à la voie
     </RouterLink>
 
-    <template v-if="loadState === 'loading'">
-      <p class="text-gray-600">Chargement…</p>
+    <template v-if="!detail">
+      <h1 class="text-xl font-bold text-gray-900">Voie indisponible hors ligne</h1>
+      <p class="text-gray-700">
+        Cette voie n'a pas encore été téléchargée sur cet appareil — reconnectez-vous une fois en
+        ligne pour la récupérer.
+      </p>
     </template>
 
-    <template v-else-if="loadState === 'error' || !competitor || !detail?.round">
+    <template v-else-if="!competitor || !detail.round">
       <h1 class="text-xl font-bold text-gray-900">Passage indisponible</h1>
-      <p class="text-gray-700">Impossible de charger ce compétiteur — réessayez.</p>
+      <p class="text-gray-700">Impossible de trouver ce compétiteur sur cette voie.</p>
     </template>
 
     <template v-else-if="mode === 'readonly'">

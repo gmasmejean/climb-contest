@@ -1,22 +1,20 @@
 <script setup lang="ts">
-import type { JudgeRoutesResponse } from '@climbcontest/contracts'
 import { Badge } from '@climbcontest/ui'
-import { onMounted, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 
-import { judgeRoutesApi } from '../../api/judge-ascents'
 import { clearJudgeSession } from '../../api/judge-session'
+import { judgeDb } from '../../judge/local-db'
+import { useJudgeRoutesList } from '../../judge/local-store'
+import { useLiveQuery } from '../../judge/use-live-query'
 
 const router = useRouter()
-const routes = ref<JudgeRoutesResponse | 'loading' | 'error'>('loading')
-
-onMounted(async () => {
-  try {
-    routes.value = await judgeRoutesApi.list()
-  } catch {
-    routes.value = 'error'
-  }
-})
+// Lecture locale seule (ADR-012, SPEC.md § 6.3) — jamais de dépendance
+// réseau pour afficher cet écran.
+const routes = useJudgeRoutesList()
+const neverBootstrapped = useLiveQuery(
+  async () => (await judgeDb.meta.get('judge')) === undefined,
+  true,
+)
 
 function logout(): void {
   clearJudgeSession()
@@ -26,14 +24,11 @@ function logout(): void {
 
 <template>
   <main class="mx-auto flex min-h-dvh max-w-sm flex-col gap-6 px-4 py-8">
-    <template v-if="routes === 'loading'">
-      <p class="text-gray-600">Chargement…</p>
-    </template>
-
-    <template v-else-if="routes === 'error'">
-      <h1 class="text-xl font-bold text-gray-900">Accès indisponible</h1>
+    <template v-if="neverBootstrapped">
+      <h1 class="text-xl font-bold text-gray-900">Rien de téléchargé pour l'instant</h1>
       <p class="text-gray-700">
-        Votre accès n'est plus valide — il a peut-être été révoqué. Contactez l'organisateur.
+        Reconnectez-vous une fois en ligne pour télécharger vos voies — vous pourrez ensuite noter
+        les passages hors ligne toute la journée.
       </p>
       <button
         type="button"

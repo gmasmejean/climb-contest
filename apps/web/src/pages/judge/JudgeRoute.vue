@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import type { JudgeLastAscent, JudgeRouteDetail } from '@climbcontest/contracts'
 import { SyncStatusIndicator, Tabs, TextField } from '@climbcontest/ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
-import { judgeAscentsApi, judgeRoutesApi } from '../../api/judge-ascents'
 import { useWakeLock } from '../../composables/useWakeLock'
+import { useJudgeRouteDetail } from '../../judge/local-store'
 import { useAscentRowState } from '../../judge/useAscentRowState'
 
 useWakeLock()
@@ -14,27 +13,13 @@ const route = useRoute()
 const routeId = String(route.params.routeId ?? '')
 const rowState = useAscentRowState()
 
-const detail = ref<JudgeRouteDetail | 'loading' | 'error'>('loading')
-const last = ref<JudgeLastAscent>(null)
+// Lecture locale seule (ADR-012, SPEC.md § 6.3) : jamais de dépendance
+// réseau pour afficher cet écran. `null` tant que le bootstrap n'a pas
+// encore chargé cette voie.
+const detail = useJudgeRouteDetail(routeId)
 const search = ref('')
 const activeTab = ref<'todo' | 'done'>('todo')
 const nowMs = ref(Date.now())
-
-async function load(): Promise<void> {
-  detail.value = 'loading'
-  try {
-    const [detailResponse, lastResponse] = await Promise.all([
-      judgeRoutesApi.detail(routeId),
-      judgeAscentsApi.last(),
-    ])
-    detail.value = detailResponse
-    last.value = lastResponse
-  } catch {
-    detail.value = 'error'
-  }
-}
-
-onMounted(load)
 
 let ticker: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
@@ -66,49 +51,42 @@ interface DisplayCompetitor {
   lastName: string
   categoryLabel: string
   done: boolean
-  syncStatus: 'syncing' | 'synced' | 'error' | null
+  syncStatus: 'syncing' | 'synced' | 'conflict' | 'rejected' | null
   canCorrect: boolean
   summary: string
-  retry?: (() => void) | undefined
+  rejectedReason?: string | undefined
+  conflictSummary?: { yours: string; other: string } | undefined
 }
 
 const displayCompetitors = computed<DisplayCompetitor[]>(() => {
-  if (detail.value === 'loading' || detail.value === 'error') return []
+  if (!detail.value) return []
   return detail.value.competitors.map((c) => {
     const overlay = rowState.get(c.id)
-    if (overlay) {
-      return {
-        id: c.id,
-        bib: c.bib,
-        firstName: c.firstName,
-        lastName: c.lastName,
-        categoryLabel: c.categoryLabel,
-        done: true,
-        syncStatus: overlay.status,
-        // Fondé sur la fenêtre connue côté client dès la soumission — ne
-        // dépend pas du `GET /judge/ascents/last`, qui a pu partir avant que
-        // cette écriture n'ait abouti côté serveur (voir useAscentRowState.ts).
-        canCorrect: rowState.canCorrect(c.id, nowMs.value),
-        summary: summarize(overlay.preview),
-        retry: overlay.status === 'error' ? overlay.retry : undefined,
-      }
-    }
-    const canCorrect =
-      c.ascent !== null &&
-      last.value !== null &&
-      last.value.ascent.id === c.ascent.id &&
-      nowMs.value < new Date(last.value.correctableUntil).getTime()
+    const done = c.ascent !== null
     return {
       id: c.id,
       bib: c.bib,
       firstName: c.firstName,
       lastName: c.lastName,
       categoryLabel: c.categoryLabel,
-      done: c.ascent !== null,
-      syncStatus: c.ascent !== null ? ('synced' as const) : null,
-      canCorrect,
+      done,
+      // La donnée (fait/valeurs) vient directement du cache local, déjà mis
+      // à jour de façon optimiste dès la saisie (ascent-mutations.ts) — ce
+      // qui reste à superposer ici, c'est uniquement l'état de
+      // synchronisation de la file.
+      syncStatus: overlay ? overlay.status : done ? 'synced' : null,
+      canCorrect: done && rowState.canCorrect(c.id, nowMs.value),
       summary: c.ascent ? summarize(c.ascent) : '',
-      retry: undefined,
+      rejectedReason: overlay?.status === 'rejected' ? overlay.reason : undefined,
+      // SPEC.md § 6.3 : « l'affiche au juge avec les deux valeurs » —
+      // `incoming` est ce que CE juge a saisi, `existing` la valeur déjà en
+      // base d'un autre appareil.
+      conflictSummary: overlay?.conflict
+        ? {
+            yours: summarize(overlay.conflict.incoming),
+            other: summarize(overlay.conflict.existing),
+          }
+        : undefined,
     }
   })
 })
@@ -139,13 +117,12 @@ const filtered = computed(() => {
       ← Vos voies
     </RouterLink>
 
-    <template v-if="detail === 'loading'">
-      <p class="text-gray-600">Chargement…</p>
-    </template>
-
-    <template v-else-if="detail === 'error'">
-      <h1 class="text-xl font-bold text-gray-900">Voie indisponible</h1>
-      <p class="text-gray-700">Impossible de charger cette voie — réessayez.</p>
+    <template v-if="!detail">
+      <h1 class="text-xl font-bold text-gray-900">Voie indisponible hors ligne</h1>
+      <p class="text-gray-700">
+        Cette voie n'a pas encore été téléchargée sur cet appareil — reconnectez-vous une fois en
+        ligne pour la récupérer.
+      </p>
     </template>
 
     <template v-else>
@@ -201,22 +178,28 @@ const filtered = computed(() => {
                   Corriger
                 </RouterLink>
               </div>
-              <div v-if="c.syncStatus === 'error'" class="flex items-center justify-between gap-4">
-                <p role="alert" class="text-sm font-medium text-red-700">
-                  Échec de l'envoi — la saisie est conservée sur cet écran.
+              <p
+                v-if="c.syncStatus === 'rejected'"
+                role="alert"
+                class="text-sm font-medium text-red-700"
+              >
+                Rejeté par le serveur — {{ c.rejectedReason }}
+              </p>
+              <div
+                v-else-if="c.syncStatus === 'conflict'"
+                role="alert"
+                class="text-sm text-red-700"
+              >
+                <p class="font-medium">
+                  Conflit : un autre appareil a enregistré une valeur différente pour ce passage —
+                  l'organisateur tranchera.
                 </p>
-                <button
-                  type="button"
-                  class="min-h-12 shrink-0 text-sm font-medium text-red-700 hover:underline"
-                  @click="c.retry?.()"
-                >
-                  Réessayer
-                </button>
+                <p v-if="c.conflictSummary">
+                  Vous avez saisi : {{ c.conflictSummary.yours }} — un autre appareil a saisi :
+                  {{ c.conflictSummary.other }}
+                </p>
               </div>
-              <SyncStatusIndicator
-                v-else
-                :status="c.syncStatus === 'syncing' ? 'syncing' : 'synced'"
-              />
+              <SyncStatusIndicator v-else :status="c.syncStatus ?? 'synced'" />
               <p v-if="!c.canCorrect && c.syncStatus === 'synced'" class="text-xs text-gray-500">
                 Passage déjà confirmé — seul l'organisateur peut le corriger désormais.
               </p>
