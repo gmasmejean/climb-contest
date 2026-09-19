@@ -1632,6 +1632,7 @@ cette seule route.
 
 ## ADR-050 — Lot 9 : les qualifiés d'un tour restent dérivés du classement, avec des garde-fous
 
+**Statut :** remplacée par ADR-054 (2026-09-19, avant tout code).
 **Date :** 2026-09-19
 **Contexte :** `ROADMAP.md` Lot 9, point 1 (format phases de bout en bout).
 Constat en explorant le code : `getQualifiers` n'est appelé que par le
@@ -1720,6 +1721,59 @@ d'authentification. Couvert par `router.test.ts` et un rechargement réel dans
 `e2e/organizer-pilotage.spec.ts`.
 
 ---
+
+## ADR-054 — Lot 9 : les qualifiés sont figés à l'ouverture du tour suivant (remplace ADR-050)
+
+**Date :** 2026-09-19
+**Contexte :** ADR-050 gardait la liste des qualifiés dérivée du classement,
+avec des garde-fous. En écrivant le code, un cas a fait tomber ce choix :
+un qualifié à la limite (10ᵉ) se blesse en demi-finale et passe en
+« abandon ». Le classement de qualification est recalculé sur les seuls
+compétiteurs `registered`/`present` (`loadFullCategoryRoster`), donc il
+disparaît du tour 1, et le 11ᵉ est promu en demi-finale sans que personne
+l'ait décidé. Le même effet vaut pour une disqualification ou une
+correction tardive. Question posée à l'utilisateur, qui a tranché de figer.
+
+**Décision :** table `round_qualifier` (migration réversible). À la
+transition d'un tour R vers `open`, pour chaque catégorie de R qui a un tour
+précédent P, le serveur calcule `getQualifiers(classement de P,
+P.qualifyingCount)` et enregistre la liste : compétiteur, rang obtenu,
+`frozen_at`, auteur. Cette liste fait foi pour R : écran juge, bootstrap
+hors ligne, refus d'une saisie hors liste, tableau de bord, classement
+public. Rien ne la recalcule ensuite — un abandon, une disqualification ou
+une correction de P ne promeut ni n'exclut personne.
+
+- **Un tour sans liste figée reste calculé à la volée** (repli inchangé) :
+  les tours ouverts avant ce lot, et le premier tour de chaque catégorie.
+  Aucun rattrapage de données n'est fait.
+- **Ouvrir R exige que chaque tour précédent de ses catégories soit `closed`
+  ou `published`**, sinon 409 avec le nom du tour à clore.
+- **Rouvrir P est refusé dès qu'un tour suivant de la même catégorie est
+  `open`/`closed`/`published`** : sa liste figée serait périmée.
+- **Sortie de secours : `open → draft` et `closed → draft`, uniquement si le
+  tour n'a aucun passage actif ni conflit.** Ouvrir un tour trop tôt n'est
+  plus une impasse : on le remet en préparation (la liste figée est
+  supprimée), on corrige P, on referme P, on rouvre R (nouvelle liste).
+  Extension du graphe d'ADR-045, seule autre transition ajoutée.
+- **Égalité à la limite** : tous les ex aequo sont qualifiés (SPEC.md §4.4 🟡,
+  comportement de `getQualifiers`) ; la liste figée peut donc dépasser
+  `qualifyingCount`, et l'interface le dit (« 11 au lieu de 10 : égalité »).
+- **Une correction de P après la figeage change son classement mais pas la
+  liste de R.** Assumé : la liste de départ d'un tour ne bouge pas une fois
+  le tour ouvert. Le classement final reste calculé par le moteur à partir
+  des tours.
+- La figeage est tracée : le `activity_log` existant (`round_status_changed`)
+  reçoit le nombre de qualifiés par catégorie dans son `payload`, sans
+  nouvelle valeur de `event_type`.
+
+**Options écartées :** rester dérivé avec « ignorer le statut pour la
+dérivation » (le classement affiché d'un abandon après passage change de
+comportement, un disqualifié garde ses passages dans le calcul) ; rester
+dérivé et documenter le risque (un classement peut changer silencieusement le
+jour J).
+
+---
+
 
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
