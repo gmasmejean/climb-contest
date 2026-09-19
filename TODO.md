@@ -295,13 +295,16 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 
 ## Depuis le Lot 9
 
-- **`e2e/judge-offline-sync.spec.ts` est instable quand toute la suite e2e
-  tourne à la suite** (échec à l'assertion « Hors ligne, 10 » après les dix
-  saisies), et passe à chaque fois seul. Observé sur 3 exécutions complètes :
-  2 échecs, dont un AVANT les changements de code du Lot 9 — ce n'est donc pas
-  une régression de ce lot. Non investigué. Piste : dépendance à l'ordre ou à
-  l'état d'activation du service worker après un test précédent. Rapporté ici
-  plutôt que corrigé, faute de cause établie.
+- ~~`e2e/judge-offline-sync.spec.ts` instable quand toute la suite tourne à la
+  suite.~~ Résolu au Lot 9 : c'était une course DANS LE TEST, pas dans le mode
+  hors ligne. Le test coupait le réseau juste après la connexion, avant que le
+  service worker ait fini d'installer son précache ; hors ligne, l'installation
+  échoue et le rechargement suivant échouait en `ERR_INTERNET_DISCONNECTED`.
+  Le test attend maintenant `navigator.serviceWorker.ready`. **Question laissée
+  ouverte** : un juge qui coupe son réseau dans les toutes premières secondes
+  suivant sa première connexion tomberait dans le même cas ; aucun indicateur
+  « prêt pour le hors ligne » n'existe dans l'interface. À envisager si un
+  club le rencontre.
 - **Qualifiés sans aucun passage réel** (voir `RULES.md` § 5, à faire valider) :
   un inscrit jamais déclaré absent qui n'a rien grimpé se qualifie s'il y a
   moins de participants réels que de places. Aucune règle ajoutée : c'est une

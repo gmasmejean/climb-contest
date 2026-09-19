@@ -71,6 +71,12 @@ avant de suspecter une régression.
 
 ## Prérequis
 
+Pour lancer la suite COMPLÈTE d'un coup, relevez le plafond des routes
+d'authentification (10 essais / 15 min / adresse, que la suite dépasse avec ses
+~15 connexions) : mettez `AUTH_RATE_LIMIT_MAX=1000` dans `infra/docker/.env`
+avant `docker compose up`. Sans cela, les tests les plus tardifs échouent en
+`429`. À ne JAMAIS faire en production.
+
 La pile complète doit tourner et contenir le compte de démo :
 
 ```sh

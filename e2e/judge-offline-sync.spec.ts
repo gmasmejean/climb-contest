@@ -108,6 +108,15 @@ test('un juge note 10 passages hors ligne, ferme/rouvre, et tout remonte dans l�
   await page.getByRole('button', { name: 'Commencer' }).click()
   await expect(page).toHaveURL('/j/home')
 
+  // Le service worker doit avoir fini d'installer son précache AVANT la
+  // coupure : hors ligne, son installation échoue et le rechargement de
+  // page plus bas ne trouve alors rien à servir. `ready` ne se résout qu'une
+  // fois un service worker ACTIF, donc précache terminé. Sans cette attente,
+  // ce test échouait par intermittence quand la machine était chargée.
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready
+  })
+
   await page.context().setOffline(true)
 
   await page.getByText(`Voie ${routeNumber}`).click()
