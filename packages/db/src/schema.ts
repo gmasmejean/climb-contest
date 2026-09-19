@@ -279,6 +279,41 @@ export const roundRoute = pgTable(
   (table) => [primaryKey({ columns: [table.roundId, table.routeId, table.categoryId] })],
 )
 
+/**
+ * ADR-054 : la liste des qualifiés d'un tour, figée au moment où ce tour
+ * passe à `open`. `round_id` est le tour QUI REÇOIT les qualifiés, pas celui
+ * dont ils viennent (`source_round_id`). Une catégorie sans ligne ici pour un
+ * tour donné n'est pas restreinte : premier tour de la catégorie, ou tour
+ * ouvert avant le Lot 9 (calculé à la volée, comme avant).
+ */
+export const roundQualifier = pgTable(
+  'round_qualifier',
+  {
+    roundId: uuid('round_id')
+      .notNull()
+      .references(() => round.id),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => category.id),
+    competitorId: uuid('competitor_id')
+      .notNull()
+      .references(() => competitor.id),
+    sourceRoundId: uuid('source_round_id')
+      .notNull()
+      .references(() => round.id),
+    // Rang obtenu au tour source. Plusieurs qualifiés peuvent le partager
+    // (égalité à la limite : tous les ex aequo passent).
+    sourceRank: integer('source_rank').notNull(),
+    frozenAt: timestamp('frozen_at', { withTimezone: true }).notNull().defaultNow(),
+    frozenByUserId: uuid('frozen_by_user_id').references(() => user.id),
+  },
+  (table) => [
+    primaryKey({ columns: [table.roundId, table.competitorId] }),
+    check('round_qualifier_source_rank_check', sql`${table.sourceRank} >= 1`),
+    index('round_qualifier_round_category_idx').on(table.roundId, table.categoryId),
+  ],
+)
+
 export const judge = pgTable('judge', {
   id: id(),
   competitionId: uuid('competition_id')

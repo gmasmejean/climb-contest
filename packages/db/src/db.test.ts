@@ -69,6 +69,7 @@ describe('migrations', () => {
         'judge',
         'judge_route',
         'round',
+        'round_qualifier',
         'round_route',
         'route',
         'route_category',
@@ -98,7 +99,7 @@ describe('migrations', () => {
       const afterUp = await client.query(
         "select table_name from information_schema.tables where table_schema = 'public' and table_name != '_migrations_applied'",
       )
-      expect(afterUp.rows.length).toBe(16)
+      expect(afterUp.rows.length).toBe(17)
     })
   })
 })

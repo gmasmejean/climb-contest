@@ -36,6 +36,13 @@
       "when": 1789748404700,
       "tag": "0005_lot8_activity_log",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789800676517,
+      "tag": "0006_lot9_round_qualifier",
+      "breakpoints": true
     }
   ]
 }
