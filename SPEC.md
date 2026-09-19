@@ -731,6 +731,12 @@ POST   /competitions/:id/qrcodes.pdf           un POST, pas un GET : inclut
                                                 client fournit pour les autres
                                                 (ADR-026)
 
+POST   /competitions/:id/round-status/:rid     { status } — transitions de tour ;
+                                                ouvrir fige les qualifiés
+                                                (ADR-054)
+GET    /competitions/:id/round-status/:rid/qualifiers
+                                                liste figée des qualifiés, par
+                                                catégorie
 GET    /competitions/:id/dashboard             état temps réel pour l'orga
 GET    /competitions/:id/conflicts
 POST   /competitions/:id/conflicts/:cid/resolve

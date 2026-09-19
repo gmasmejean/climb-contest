@@ -292,3 +292,25 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   navigateur complet) — pas fait par manque de temps dans ce lot, le
   scénario choisi couvre déjà tout le reste du pilotage (tours, correction,
   publication, reflet public).
+
+## Depuis le Lot 9
+
+- **`e2e/judge-offline-sync.spec.ts` est instable quand toute la suite e2e
+  tourne à la suite** (échec à l'assertion « Hors ligne, 10 » après les dix
+  saisies), et passe à chaque fois seul. Observé sur 3 exécutions complètes :
+  2 échecs, dont un AVANT les changements de code du Lot 9 — ce n'est donc pas
+  une régression de ce lot. Non investigué. Piste : dépendance à l'ordre ou à
+  l'état d'activation du service worker après un test précédent. Rapporté ici
+  plutôt que corrigé, faute de cause établie.
+- **Qualifiés sans aucun passage réel** (voir `RULES.md` § 5, à faire valider) :
+  un inscrit jamais déclaré absent qui n'a rien grimpé se qualifie s'il y a
+  moins de participants réels que de places. Aucune règle ajoutée : c'est une
+  règle de compétition à trancher avec un juge fédéral, pas un choix technique.
+- **Pas de notification poussée vers les juges à l'ouverture d'un tour**
+  (ADR-055) : le juge voit le nouveau tour au prochain retour au premier plan
+  ou via « Actualiser mes voies ». Une poussée SSE vers les juges serait
+  l'étape suivante si ce délai gêne en usage réel.
+- **Une correction d'un tour précédent après l'ouverture du suivant modifie son
+  classement mais pas la liste des qualifiés** (ADR-054, voulu). Rien
+  n'avertit l'organisateur que la liste figée diffère alors de ce qu'un
+  recalcul donnerait — à ajouter si le cas se présente en usage réel.

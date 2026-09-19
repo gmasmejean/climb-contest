@@ -171,7 +171,7 @@ toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Sept tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Huit tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
@@ -180,4 +180,6 @@ toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
   signalé au retour du réseau ; un passage noté par le juge apparaît en
   direct dans le classement public d'un second onglet, sans rechargement ;
   un organisateur résout un conflit, corrige un passage et publie un tour
-  depuis l'onglet Pilotage — voir `e2e/README.md` pour les lancer.
+  depuis l'onglet Pilotage ; une compétition en phases jouée de bout en bout
+  (qualification à deux voies, demi-finale, finale, classement final avec
+  contre-performance) — voir `e2e/README.md` pour les lancer.

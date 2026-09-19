@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Sept tests à ce jour :
+Huit tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -31,6 +31,13 @@ Sept tests à ce jour :
   par API (compétition/juge/conflit), recharge la page sur une route
   organisateur profonde pour vérifier que la session est restaurée
   (régression `TODO.md` § Lot 8, corrigée au Lot 9).
+
+- `phases-full-competition.spec.ts` — une compétition au format phases jouée
+  de bout en bout : la demi-finale ne s'ouvre pas avant la fin de la
+  qualification, la liste des qualifiés est figée à l'ouverture, un juge déjà
+  connecté actualise ses voies (ADR-055) et ne voit que les qualifiés, la
+  finale se départage à la contre-performance, le public voit le classement
+  final (`ROADMAP.md` Lot 9, point 1).
 
 ## Projets
 
