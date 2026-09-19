@@ -96,7 +96,7 @@ export function createOrganizerAscentRoutes(deps: OrganizerAscentRouteDeps): Hon
           await db.query.category.findMany({ where: inArray(category.id, categoryIds) })
         ).map((cat) => [cat.id, cat.label]),
       )
-      const competitors = await expectedCompetitors(db, competitionId, categoryIds)
+      const competitors = await expectedCompetitors(db, competitionId, categoryIds, roundId)
       const ascentsByCompetitor = await activeAscentsFor(
         db,
         roundId,
