@@ -32,7 +32,7 @@ cleanup() { $COMPOSE exec -T postgres sh -c "dropdb -U \"\$POSTGRES_USER\" --if-
 trap cleanup EXIT
 
 $COMPOSE exec -T postgres sh -c "createdb -U \"\$POSTGRES_USER\" $scratch"
-$COMPOSE exec -T postgres sh -c "pg_restore -U \"\$POSTGRES_USER\" -d $scratch --no-owner --exit-on-error" < "$dump"
+$COMPOSE exec -T postgres sh -c "cat > /tmp/verify-restore.dump && pg_restore -U \"\$POSTGRES_USER\" -d $scratch --no-owner --exit-on-error /tmp/verify-restore.dump; status=\$?; rm -f /tmp/verify-restore.dump; exit \$status" < "$dump"
 
 tables="$(psql_src "select table_name from information_schema.tables where table_schema='public' and table_type='BASE TABLE' order by 1")"
 [ -n "$tables" ] || { echo "ERREUR : la base source n'a aucune table." >&2; exit 1; }

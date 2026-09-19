@@ -46,7 +46,8 @@ echo "→ Arrêt de l'API…"
 $COMPOSE stop api
 
 echo "→ Restauration de la base…"
-$COMPOSE exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --exit-on-error' < "$dump"
+# Fichier transmis en entier d'abord (voir backup.sh), puis restauré depuis le conteneur.
+$COMPOSE exec -T postgres sh -c 'cat > /tmp/restore.dump && pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --exit-on-error /tmp/restore.dump; status=$?; rm -f /tmp/restore.dump; exit $status' < "$dump"
 
 if [ -n "$uploads" ]; then
   echo "→ Restauration des vidéos…"

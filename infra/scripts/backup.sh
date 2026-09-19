@@ -31,8 +31,11 @@ if [ ! -s "$dump.partial" ]; then
   echo "ERREUR : la sauvegarde est vide. Rien n'a été écrit." >&2
   exit 1
 fi
-# Relecture : un fichier illisible n'est pas une sauvegarde.
-if ! $COMPOSE exec -T postgres pg_restore --list < "$dump.partial" > /dev/null; then
+# Relecture : un fichier illisible n'est pas une sauvegarde. Le fichier est
+# d'abord transmis EN ENTIER dans le conteneur (`cat`), puis relu là : lire
+# `pg_restore --list` directement sur l'entrée standard s'arrête avant la fin et
+# fait échouer la liaison de `compose exec`, ce qui refusait des sauvegardes saines.
+if ! $COMPOSE exec -T postgres sh -c 'cat > /tmp/verify.dump && pg_restore --list /tmp/verify.dump > /dev/null; status=$?; rm -f /tmp/verify.dump; exit $status' < "$dump.partial"; then
   rm -f "$dump.partial"
   echo "ERREUR : la sauvegarde est illisible. Rien n'a été écrit." >&2
   exit 1
