@@ -9,7 +9,7 @@ const CARDS_PER_ROW = 2
 const CARDS_PER_COL = 3
 const CARD_WIDTH = (A4_WIDTH - MARGIN * 2 - CARD_GAP * (CARDS_PER_ROW - 1)) / CARDS_PER_ROW
 const CARD_HEIGHT = (A4_HEIGHT - MARGIN * 2 - CARD_GAP * (CARDS_PER_COL - 1)) / CARDS_PER_COL
-const QR_SIZE = 130
+const QR_SIZE = 100
 
 export interface JudgeSheetEntry {
   displayName: string
@@ -30,18 +30,39 @@ async function qrPng(text: string): Promise<Uint8Array> {
 }
 
 function wrapText(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
-  const words = text.split(' ')
   const lines: string[] = []
   let current = ''
-  for (const word of words) {
+
+  function pushWord(word: string): void {
     const candidate = current ? `${current} ${word}` : word
-    if (font.widthOfTextAtSize(candidate, size) > maxWidth && current) {
-      lines.push(current)
-      current = word
-    } else {
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
       current = candidate
+      return
     }
+    if (current) {
+      lines.push(current)
+      current = ''
+    }
+    if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+      current = word
+      return
+    }
+    // Le mot seul dépasse la largeur (une URL n'a pas d'espace où couper) :
+    // on le découpe caractère par caractère.
+    let chunk = ''
+    for (const char of word) {
+      const candidateChunk = chunk + char
+      if (chunk && font.widthOfTextAtSize(candidateChunk, size) > maxWidth) {
+        lines.push(chunk)
+        chunk = char
+      } else {
+        chunk = candidateChunk
+      }
+    }
+    current = chunk
   }
+
+  for (const word of text.split(' ')) pushWord(word)
   if (current) lines.push(current)
   return lines
 }
@@ -113,6 +134,13 @@ export async function generateQrSheet(input: QrSheetInput): Promise<Uint8Array> 
     width: publicQrSize,
     height: publicQrSize,
   })
+  publicPage.drawText(input.publicUrl, {
+    x: A4_WIDTH / 2 - font.widthOfTextAtSize(input.publicUrl, 12) / 2,
+    y: A4_HEIGHT / 2 - publicQrSize / 2 - 24,
+    size: 12,
+    font,
+    color: rgb(0.3, 0.3, 0.3),
+  })
 
   return pdf.save()
 }
@@ -157,17 +185,36 @@ async function drawJudgeCard(
     cursorY -= 12
   }
 
+  // L'URL en clair sous le QR (en plus du QR) : quelqu'un qui ouvre le PDF à
+  // l'écran doit pouvoir copier/coller le lien, pas seulement le scanner.
+  const urlFontSize = 7
+  const urlLineHeight = 9
+  const urlLines = wrapText(font, entry.accessUrl, urlFontSize, box.width - padding * 2)
+  const pinLineY = box.y + padding + 4
+  const urlBottomY = pinLineY + 14
+  const urlTopY = urlBottomY + (urlLines.length - 1) * urlLineHeight
+  const qrY = urlTopY + urlLineHeight + 6
+
   const qrImage = await pdf.embedPng(await qrPng(entry.accessUrl))
   const qrX = box.x + (box.width - QR_SIZE) / 2
-  const qrY = box.y + padding + 22
   page.drawImage(qrImage, { x: qrX, y: qrY, width: QR_SIZE, height: QR_SIZE })
 
+  urlLines.forEach((line, index) => {
+    page.drawText(line, {
+      x: box.x + (box.width - font.widthOfTextAtSize(line, urlFontSize)) / 2,
+      y: urlBottomY + (urlLines.length - 1 - index) * urlLineHeight,
+      size: urlFontSize,
+      font,
+      color: rgb(0.45, 0.45, 0.45),
+    })
+  })
+
   if (entry.pinRequired) {
-    page.drawText('PIN : ______', { x: box.x + padding, y: box.y + padding + 4, size: 12, font })
+    page.drawText('PIN : ______', { x: box.x + padding, y: pinLineY, size: 12, font })
   } else {
     page.drawText('Accès direct — pas de PIN', {
       x: box.x + padding,
-      y: box.y + padding + 4,
+      y: pinLineY,
       size: 10,
       font,
       color: rgb(0.3, 0.3, 0.3),
