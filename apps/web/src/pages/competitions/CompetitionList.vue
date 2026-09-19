@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { Badge, Button } from '@climbcontest/ui'
 import { useQuery } from '@tanstack/vue-query'
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { competitionsApi } from '../../api/competitions'
+import ImportBackupModal from './ImportBackupModal.vue'
+
+const importOpen = ref(false)
 
 const { data, isPending, isError } = useQuery({
   queryKey: ['competitions'],
@@ -27,6 +31,10 @@ const statusLabels: Record<string, string> = {
         <Button>Nouvelle compétition</Button>
       </RouterLink>
     </header>
+    <div>
+      <Button variant="secondary" @click="importOpen = true">Importer une sauvegarde</Button>
+    </div>
+    <ImportBackupModal :open="importOpen" @close="importOpen = false" />
 
     <p v-if="isPending" class="text-gray-600">Chargement…</p>
     <p v-else-if="isError" role="alert" class="text-red-700">

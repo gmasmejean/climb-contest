@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Huit tests à ce jour :
+Dix tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -38,6 +38,12 @@ Huit tests à ce jour :
   connecté actualise ses voies (ADR-055) et ne voit que les qualifiés, la
   finale se départage à la contre-performance, le public voit le classement
   final (`ROADMAP.md` Lot 9, point 1).
+
+- `exports-backup.spec.ts` — télécharge les résultats en PDF et en CSV et la
+  sauvegarde JSON depuis l'onglet Exports, puis réimporte cette sauvegarde
+  depuis « Mes compétitions » (aperçu avant écriture) ; et vérifie qu'un fichier
+  qui n'est pas une sauvegarde est refusé sans rien créer (`ROADMAP.md` Lot 9,
+  point 2). Les helpers d'amorçage par API vivent dans `e2e/support/api.ts`.
 
 ## Projets
 

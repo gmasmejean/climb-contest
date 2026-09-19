@@ -737,6 +737,14 @@ POST   /competitions/:id/round-status/:rid     { status } — transitions de tou
 GET    /competitions/:id/round-status/:rid/qualifiers
                                                 liste figée des qualifiés, par
                                                 catégorie
+GET    /competitions/:id/exports/results.csv   ?category= — classement, ce que le
+                                                public voit (Lot 9)
+GET    /competitions/:id/exports/results.pdf   ?category= — mise en page A4
+GET    /competitions/:id/exports/competition.json
+                                                sauvegarde complète, sans
+                                                secret (ADR-056)
+POST   /competitions/import                    { mode: 'preview'|'commit', backup }
+                                                → nouvelle compétition (ADR-056)
 GET    /competitions/:id/dashboard             état temps réel pour l'orga
 GET    /competitions/:id/conflicts
 POST   /competitions/:id/conflicts/:cid/resolve

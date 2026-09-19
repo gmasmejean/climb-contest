@@ -89,3 +89,51 @@ export async function apiFetch<T>(
   }
   return (await response.json()) as T
 }
+
+/** Nom de fichier proposé par le serveur (`Content-Disposition: attachment; filename="…"`). */
+function filenameFrom(response: Response, fallback: string): string {
+  const header = response.headers.get('content-disposition') ?? ''
+  return /filename="([^"]+)"/.exec(header)?.[1] ?? fallback
+}
+
+/**
+ * Télécharge un fichier protégé par le jeton organisateur. Un simple lien
+ * `<a href>` ne peut pas porter l'en-tête `Authorization` : on récupère donc le
+ * contenu avec `fetch` puis on le remet au navigateur (exports, Lot 9). Même
+ * reprise sur 401 que `apiFetch`.
+ */
+export async function apiDownload(
+  path: string,
+  fallbackFilename: string,
+  allowRetry = true,
+): Promise<{ blob: Blob; filename: string }> {
+  const headers = new Headers()
+  if (accessToken.value) headers.set('Authorization', `Bearer ${accessToken.value}`)
+  const response = await fetch(`/api/v1${path}`, { headers, credentials: 'include' })
+
+  if (response.status === 401 && allowRetry && (await refreshSession())) {
+    return apiDownload(path, fallbackFilename, false)
+  }
+  if (!response.ok) {
+    let body: ProblemBody | undefined
+    try {
+      body = (await response.json()) as ProblemBody
+    } catch {
+      body = undefined
+    }
+    throw new ApiError(response.status, body?.title ?? 'Erreur', body?.detail)
+  }
+  return { blob: await response.blob(), filename: filenameFrom(response, fallbackFilename) }
+}
+
+/** Déclenche l'enregistrement d'un contenu déjà en mémoire, sans quitter la page. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}

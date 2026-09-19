@@ -162,6 +162,18 @@ Le statut d'un compétiteur (présent/absent/abandon/disqualifié, motif
 toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
 `DECISIONS.md` (ADR-045 à ADR-049) pour les décisions prises pendant ce lot.
 
+## Exports et sauvegarde
+
+L'onglet **Exports** d'une compétition télécharge les résultats en PDF (A4,
+une catégorie par page, détail par voie, « provisoire » tant qu'un tour n'est
+pas publié) et en CSV (séparateur `;`, ouvrable dans Excel), par catégorie ou
+pour toutes. Ils viennent du même calcul que la page publique et ne portent que
+ce qu'elle montre : nom, prénom, club, dossard. Une **sauvegarde JSON** contient
+toute la compétition, historique des passages compris, sans aucun accès juge
+(DECISIONS.md ADR-056) ; **Mes compétitions → Importer une sauvegarde** la
+recrée comme une nouvelle compétition, après un aperçu obligatoire. Les juges
+sont restaurés révoqués : il faut recréer des accès et réimprimer les QR codes.
+
 ## Tests
 
 - `pnpm test` couvre les paquets purs (`contracts`, `ui`, `scoring`, `sync`)
@@ -171,7 +183,7 @@ toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Huit tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Dix tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
@@ -182,4 +194,5 @@ toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
   un organisateur résout un conflit, corrige un passage et publie un tour
   depuis l'onglet Pilotage ; une compétition en phases jouée de bout en bout
   (qualification à deux voies, demi-finale, finale, classement final avec
-  contre-performance) — voir `e2e/README.md` pour les lancer.
+  contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
+  sauvegarde — voir `e2e/README.md` pour les lancer.

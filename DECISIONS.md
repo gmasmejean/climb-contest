@@ -1876,6 +1876,29 @@ réversibles et sans conséquence sur les règles de compétition ; **à relire*
 
 ---
 
+## ADR-057 — Lot 9 : PDF de résultats en police standard, caractères non encodables translittérés
+
+**Date :** 2026-09-19
+**Contexte :** le PDF de résultats (`lib/exports/results-pdf.ts`) est généré par
+`pdf-lib` avec la police standard Helvetica, qui n'encode que WinAnsi. Un
+caractère hors de cet ensemble fait lever `encodeText`, donc l'export
+échouerait à cause d'un seul nom (polonais, cyrillique, emoji…). Avec des
+compétiteurs de toute origine, ça arrivera.
+
+**Décision :** `toSupportedText` (`lib/exports/pdf-text.ts`) garde tout ce que
+WinAnsi sait écrire (les accents français, « Œ », les guillemets), ramène une
+lettre latine étendue à sa lettre de base (`č → c`, `Ł → L`), et remplace le
+reste par `?`. Un export ne plante jamais à cause d'un nom.
+
+**Options écartées :** embarquer une police Unicode (fichier de plusieurs
+centaines de Ko à versionner, `fontkit` à ajouter, mise en page à revoir pour
+les écritures non latines) — disproportionné pour une compétition de club.
+
+**Limite assumée :** un nom en cyrillique ou en caractères asiatiques s'affiche
+`????` dans le PDF. Le CSV et le JSON, eux, gardent le texte tel quel.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

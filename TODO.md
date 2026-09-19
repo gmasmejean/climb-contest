@@ -314,3 +314,16 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   classement mais pas la liste des qualifiés** (ADR-054, voulu). Rien
   n'avertit l'organisateur que la liste figée diffère alors de ce qu'un
   recalcul donnerait — à ajouter si le cas se présente en usage réel.
+- **`lib/qrcode-pdf.ts` (planche de QR codes, Lot 4) ne protège pas ses
+  `drawText` contre un caractère hors WinAnsi** : un nom de compétition ou de
+  juge avec un caractère non latin ferait lever la génération de la planche.
+  Découvert en écrivant `lib/exports/pdf-text.ts` (ADR-057), qui règle le
+  problème pour les résultats mais pas pour cette planche — non touchée, elle
+  marche pour les cas courants. À faire converger sur `toSupportedText` si le
+  cas se présente.
+- **L'export CSV du journal d'activité (`lib/activity-log.ts`, Lot 8) n'a pas la
+  neutralisation d'injection de formule** de `lib/exports/csv.ts` : un motif
+  saisi par un organisateur commençant par `=` deviendrait une formule dans le
+  tableur. À traiter dans la revue de sécurité du Lot 9 (étape suivante).
+- **Le PDF de résultats n'affiche pas les caractères non latins** (ADR-057) :
+  ils sortent en `?`.
