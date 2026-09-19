@@ -3,6 +3,7 @@ import type { competition as competitionTable, Database } from '@climbcontest/db
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 
+import { buildCompetitionBackup } from '../lib/exports/backup'
 import { loadCompetitionResults } from '../lib/exports/results'
 import { resultsToCsv } from '../lib/exports/results-csv'
 import { resultsToPdf } from '../lib/exports/results-pdf'
@@ -74,6 +75,19 @@ export function createExportRoutes(deps: ExportRouteDeps): Hono {
       })
     },
   )
+
+  // ADR-056 : sauvegarde complète, réimportable par `POST /competitions/import`.
+  app.get('/competition.json', async (c) => {
+    const competition = c.get('competition')
+    const backup = await buildCompetitionBackup(db, competition, now())
+    const day = backup.exportedAt.slice(0, 10)
+    return new Response(JSON.stringify(backup), {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'content-disposition': `attachment; filename="sauvegarde-${slugify(competition.name)}-${day}.json"`,
+      },
+    })
+  })
 
   return app
 }

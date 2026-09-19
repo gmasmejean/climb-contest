@@ -12,6 +12,7 @@ import { createNoopRealtimeBridge, type RealtimeBridge } from './lib/realtime-br
 import { errorHandler } from './middleware/problem'
 import { createAuthRoutes } from './routes/auth'
 import { createCategoryRoutes } from './routes/categories'
+import { createCompetitionImportRoutes } from './routes/competition-import'
 import { createCompetitionRoutes } from './routes/competitions'
 import { createCompetitorRoutes } from './routes/competitors'
 import { createConflictsRoutes } from './routes/conflicts'
@@ -93,6 +94,10 @@ export function createApp(deps: AppDeps): Hono {
   )
 
   const scopedDeps = { db: deps.db, accessTokenSigner: deps.accessTokenSigner }
+  app.route(
+    '/api/v1/competitions/import',
+    createCompetitionImportRoutes({ ...scopedDeps, now: deps.now }),
+  )
   app.route('/api/v1/competitions', createCompetitionRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id/categories', createCategoryRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id/competitors', createCompetitorRoutes(scopedDeps))
