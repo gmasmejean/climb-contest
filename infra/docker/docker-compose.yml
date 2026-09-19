@@ -65,6 +65,9 @@ services:
       STORAGE_DRIVER: local-disk
       STORAGE_LOCAL_DIR: /data/uploads
       VIDEO_MAX_BYTES: ${VIDEO_MAX_BYTES:-209715200}
+      # Vide en production (plafonds d'authentification normaux) ; à relever
+      # uniquement pour lancer la suite e2e complète (voir e2e/README.md).
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-}
     volumes:
       - uploads-data:/data/uploads
     depends_on:

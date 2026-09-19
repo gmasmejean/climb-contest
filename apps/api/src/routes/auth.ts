@@ -51,6 +51,8 @@ type UserRow = typeof user.$inferSelect
 export function createAuthRoutes(deps: AuthRouteDeps): Hono {
   const app = new Hono()
   const { db, mailer, env, accessTokenSigner } = deps
+  // Plafonds normaux, sauf surcharge explicite pour une pile de test (env.ts).
+  const limitOr = (normal: number) => env.AUTH_RATE_LIMIT_MAX ?? normal
 
   async function issueSession(c: Context, row: UserRow): Promise<AuthResponse> {
     const refreshToken = randomToken(32)
@@ -79,7 +81,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
 
   app.post(
     '/register',
-    authRateLimiter(10, 15 * 60 * 1000),
+    authRateLimiter(limitOr(10), 15 * 60 * 1000),
     zValidator('json', registerInputSchema, (result, c) => {
       if (!result.success) {
         return problem(c, 400, 'Inscription invalide', result.error.issues[0]?.message)
@@ -176,7 +178,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
 
   app.post(
     '/resend-verification',
-    authRateLimiter(5, 15 * 60 * 1000),
+    authRateLimiter(limitOr(5), 15 * 60 * 1000),
     zValidator('json', resendVerificationInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide')
     }),
@@ -207,7 +209,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
 
   app.post(
     '/login',
-    authRateLimiter(10, 15 * 60 * 1000),
+    authRateLimiter(limitOr(10), 15 * 60 * 1000),
     zValidator('json', loginInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide')
     }),

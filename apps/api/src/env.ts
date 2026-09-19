@@ -21,6 +21,14 @@ const envSchema = z.object({
     .optional()
     .transform((value) => value === 'true'),
   MAIL_FROM: z.string().min(1),
+  // Réservé aux piles de TEST (e2e) : remplace le plafond des routes
+  // d'authentification (10 essais par 15 minutes et par adresse), que la suite
+  // e2e dépasse en se connectant une quinzaine de fois. Jamais en production.
+  AUTH_RATE_LIMIT_MAX: z
+    .string()
+    .optional()
+    .transform((value) => (value ? Number(value) : undefined))
+    .pipe(z.number().int().positive().optional()),
 })
 
 export type Env = z.infer<typeof envSchema>

@@ -2,6 +2,8 @@
 import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
 
+import { isHttpUrl } from '@climbcontest/contracts'
+
 import { publicApi, publicQueryKeys } from '../../api/public'
 import { parseVideoEmbed } from '../../lib/video-embed'
 
@@ -44,7 +46,7 @@ const { data, isPending, isError } = useQuery({
           :src="`/api/v1/public/${slug}/routes/${routeItem.id}/video`"
           :aria-label="`Vidéo d'enchaînement de la voie ${routeItem.number}`"
         />
-        <template v-else-if="routeItem.videoUrl">
+        <template v-else-if="isHttpUrl(routeItem.videoUrl)">
           <div
             v-if="parseVideoEmbed(routeItem.videoUrl)"
             class="mt-2 aspect-video overflow-hidden rounded-lg bg-gray-100"

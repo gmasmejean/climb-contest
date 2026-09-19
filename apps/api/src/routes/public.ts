@@ -1,4 +1,5 @@
 import {
+  isHttpUrl,
   publicCategoryQuerySchema,
   publicCompetitionMetaSchema,
   publicRankingResponseSchema,
@@ -177,7 +178,13 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
 
       return c.json(
         rows.map(({ videoAssetId, ...row }) =>
-          publicRouteSchema.parse({ ...row, hasUploadedVideo: videoAssetId !== null }),
+          publicRouteSchema.parse({
+            ...row,
+            // Un lien stocké avant la règle « http(s) seulement » n'est jamais
+            // renvoyé tel quel au public (XSS stockée).
+            videoUrl: isHttpUrl(row.videoUrl) ? row.videoUrl : null,
+            hasUploadedVideo: videoAssetId !== null,
+          }),
         ),
       )
     },

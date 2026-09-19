@@ -13,6 +13,24 @@ describe('createRouteInputSchema', () => {
     expect(createRouteInputSchema.safeParse({ ...valid, holdCount: 0 }).success).toBe(false)
   })
 
+  it.each([
+    ['javascript:alert(document.cookie)'],
+    ['JavaScript:alert(1)'],
+    ['data:text/html,<script>alert(1)</script>'],
+    ['vbscript:msgbox(1)'],
+    ['file:///etc/passwd'],
+    ['ftp://exemple.fr/video.mp4'],
+  ])('refuse un lien de vidéo qui n’est pas http(s) : %s (XSS stockée sur la page publique)', (videoUrl) => {
+    expect(createRouteInputSchema.safeParse({ ...valid, videoUrl }).success).toBe(false)
+  })
+
+  it.each([['https://youtu.be/abc123'], ['http://exemple.fr/v.mp4'], ['HTTPS://Vimeo.com/1']])(
+    'accepte un lien de vidéo http(s) : %s',
+    (videoUrl) => {
+      expect(createRouteInputSchema.safeParse({ ...valid, videoUrl }).success).toBe(true)
+    },
+  )
+
   it('refuse une URL de vidéo mal formée', () => {
     const result = createRouteInputSchema.safeParse({ ...valid, videoUrl: 'pas-une-url' })
     expect(result.success).toBe(false)

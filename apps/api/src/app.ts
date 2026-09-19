@@ -1,7 +1,9 @@
 import type { Database } from '@climbcontest/db'
-import { Hono } from 'hono'
+import { Hono, type MiddlewareHandler } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { logger as loggerMiddleware } from 'hono/logger'
+import { secureHeaders } from 'hono/secure-headers'
 
 import type { Env } from './env'
 import type { AccessTokenSigner, JudgeTokenSigner } from './lib/jwt'
@@ -10,7 +12,7 @@ import type { Mailer } from './lib/mailer'
 import { createPublicRankingCache, type PublicRankingCache } from './lib/public-cache'
 import { createNoopRealtimeBridge, type RealtimeBridge } from './lib/realtime-bridge'
 import type { StorageAdapter } from './lib/storage'
-import { errorHandler } from './middleware/problem'
+import { errorHandler, problem } from './middleware/problem'
 import { createAuthRoutes } from './routes/auth'
 import { createCategoryRoutes } from './routes/categories'
 import { createCompetitionImportRoutes } from './routes/competition-import'
@@ -30,6 +32,36 @@ import { createRoundRoutes } from './routes/rounds'
 import { createRoundStatusRoutes } from './routes/round-status'
 import { createRouteVideoRoutes } from './routes/route-video'
 import { createRouteRoutes } from './routes/routes'
+
+const MIB = 1024 * 1024
+
+/**
+ * Deux routes gèrent leur PROPRE limite, avec un message adapté : l'import de
+ * sauvegarde (25 Mio) et les morceaux de vidéo (16 Mio). La limite globale ne
+ * s'y applique pas.
+ */
+function hasOwnBodyLimit(method: string, path: string): boolean {
+  if (method === 'POST' && path === '/api/v1/competitions/import') return true
+  return method === 'PATCH' && /\/routes\/[^/]+\/video\/uploads\/[^/]+$/.test(path)
+}
+
+/**
+ * Taille maximale d'un corps de requête partout ailleurs (revue de sécurité,
+ * Lot 9). Sans limite globale, n'importe qui pouvait envoyer un JSON de
+ * plusieurs centaines de Mio à une route NON authentifiée (`/auth/login`) et
+ * saturer la mémoire. 1 Mio suffit à tout ce qui est du JSON ordinaire (l'import
+ * CSV des compétiteurs inclus).
+ */
+const defaultBodyLimit = bodyLimit({
+  maxSize: MIB,
+  onError: (c) =>
+    problem(
+      c,
+      413,
+      'Corps de requête trop volumineux',
+      'Cette requête est plus grosse que ce que le serveur accepte.',
+    ),
+})
 
 export interface AppDeps {
   env: Env
@@ -83,6 +115,12 @@ export function createApp(deps: AppDeps): Hono {
       credentials: true,
     }),
   )
+  // En-têtes de sécurité sur TOUTE réponse : pas de « sniffing » de type MIME,
+  // pas de cadrage par un autre site, pas de fuite de l'URL en `Referer`.
+  app.use('*', secureHeaders())
+  const limitBodySize: MiddlewareHandler = (c, next) =>
+    hasOwnBodyLimit(c.req.method, c.req.path) ? next() : defaultBodyLimit(c, next)
+  app.use('/api/*', limitBodySize)
   if (deps.env.NODE_ENV !== 'test') {
     app.use(
       '*',
