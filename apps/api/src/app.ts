@@ -21,6 +21,7 @@ import { createCompetitorRoutes } from './routes/competitors'
 import { createConflictsRoutes } from './routes/conflicts'
 import { createDashboardRoutes } from './routes/dashboard'
 import { createExportRoutes } from './routes/exports'
+import { createGdprRoutes } from './routes/gdpr'
 import { createHealthRoute } from './routes/health'
 import { createJudgeAscentRoutes } from './routes/judge-ascents'
 import { createJudgeAuthRoutes } from './routes/judge-auth'
@@ -159,6 +160,10 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/api/v1/competitions/:id', createConflictsRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id', createDashboardRoutes({ ...scopedDeps, now: deps.now }))
   app.route('/api/v1/competitions/:id/ascents', createOrganizerAscentRoutes(scopedDeps))
+  app.route(
+    '/api/v1/competitions/:id',
+    createGdprRoutes({ ...scopedDeps, storage: deps.storage, now: deps.now }),
+  )
   if (deps.storage) {
     app.route(
       '/api/v1/competitions/:id/routes/:rid/video',
