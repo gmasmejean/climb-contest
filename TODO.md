@@ -246,23 +246,19 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 
 ## Depuis le Lot 8
 
-- **Bug pré-existant découvert (pas causé par ce lot, reproduit sur `main`
-  avant le Lot 8) : un rechargement complet du navigateur directement sur
-  une route organisateur profonde (ex. `/competitions/:id`) perd la
-  session**, malgré le cookie de refresh `httpOnly` — l'utilisateur atterrit
-  sur `/` (accueil) au lieu de la page demandée, sans passer par `/login`
-  (donc pas un simple échec d'authentification classique). Découvert en
-  écrivant `e2e/organizer-pilotage.spec.ts` : `page.goto` direct vers
-  `/competitions/:id` échouait de façon déterministe, confirmé identique
-  après avoir revenu tout le code de ce lot (`git stash` vers `main`) puis
-  rejoué le test `judge-conflict.spec.ts` existant, qui échoue pour une
-  raison apparentée (un clic qui devrait naviguer vers `/j/routes/:id` reste
-  sur `/j/home`). Contourné dans le nouveau test en navigant uniquement par
-  clics (comme tous les parcours utilisateurs réels, qui n'atteignent
-  jamais ces routes par un lien externe ou un F5). À investiguer dans une
-  session dédiée : un organisateur qui recharge sa page de compétition en
-  cours de pilotage (raison réaliste : un F5 après un souci réseau) tomberait
-  dessus en usage réel.
+- ~~Bug pré-existant : un rechargement complet du navigateur sur une route
+  organisateur profonde (ex. `/competitions/:id`) perd la session.~~ Résolu
+  au Lot 9. Cause racine : `router.ts` sautait le bootstrap de session avec
+  `to.path.startsWith('/c')` (prévu pour la page publique `/c/<slug>`), qui
+  attrapait aussi `/competitions/...`. Sans session restaurée, la garde
+  redirigeait vers `login`, puis la navigation suivante faisait le bootstrap
+  tardivement et renvoyait vers `/` (`guestOnly`) — d'où l'arrivée sur
+  l'accueil « sans passer par `/login` ». Remplacé par un drapeau explicite
+  `meta.skipOrganizerSession` porté par les routes `/j` et `/c`
+  (`apps/web/src/router.ts`), testé par `router.test.ts` et par un
+  rechargement réel dans `e2e/organizer-pilotage.spec.ts`.
+  `e2e/judge-conflict.spec.ts`, qui échouait « pour une raison apparentée »,
+  repasse au vert avec ce correctif.
 - **`eventType: 'voided'` (`ascent_event`) reste non utilisé.** Aucune
   action « annuler complètement un passage » distincte de la correction
   n'a été construite ce lot — une correction vers un statut adapté (DSQ,
