@@ -1,20 +1,34 @@
 <script setup lang="ts">
 import type { DashboardAlert } from '@climbcontest/contracts'
-import { Badge } from '@climbcontest/ui'
+import { Badge, Button } from '@climbcontest/ui'
 import { useQuery } from '@tanstack/vue-query'
+import { computed } from 'vue'
 
 import { dashboardApi } from '../../../api/dashboard'
+import { UNREACHABLE_MESSAGE } from '../../../lib/network-errors'
 
 const props = defineProps<{ competitionId: string }>()
 
 // Polling plutôt que SSE (décidé avec l'utilisateur, DECISIONS.md) : ce
 // tableau de bord n'a pas besoin d'un temps réel à la seconde près, et
 // réutilise l'authentification JWT organisateur déjà en place.
-const { data, isPending } = useQuery({
+const { data, isPending, isError, dataUpdatedAt, refetch } = useQuery({
   queryKey: ['competitions', props.competitionId, 'dashboard'],
   queryFn: () => dashboardApi.get(props.competitionId),
   refetchInterval: 8000,
+  // Une seule relance avant d'avertir : par défaut TanStack en fait trois,
+  // avec repli, et l'organisateur regarderait des chiffres périmés pendant
+  // près de dix secondes sans le savoir.
+  retry: 1,
 })
+
+// TanStack garde les dernières données quand une relance échoue : sans ce
+// bandeau, l'organisateur croirait ces chiffres à jour (mode dégradé, Lot 9).
+const lastUpdate = computed(() =>
+  dataUpdatedAt.value
+    ? new Date(dataUpdatedAt.value).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null,
+)
 
 function alertLabel(alert: DashboardAlert): string {
   switch (alert.type) {
@@ -45,7 +59,20 @@ function alertDetail(alert: DashboardAlert): string {
 <template>
   <div class="flex flex-col gap-6">
     <p v-if="isPending" class="text-gray-600">Chargement…</p>
+    <div v-else-if="isError && !data" role="alert" class="flex flex-col items-start gap-3">
+      <p class="text-red-700">{{ UNREACHABLE_MESSAGE }}</p>
+      <Button variant="secondary" @click="() => refetch()">Réessayer</Button>
+    </div>
     <template v-else-if="data">
+      <p
+        v-if="isError"
+        role="alert"
+        class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900"
+      >
+        <strong>Le serveur ne répond plus.</strong> Les chiffres ci-dessous datent de
+        {{ lastUpdate }} : ne vous y fiez pas pour les alertes. Ils se remettront à jour dès que la
+        connexion revient ; les saisies des juges, elles, sont conservées sur leurs téléphones.
+      </p>
       <section v-if="data.alerts.length > 0" class="flex flex-col gap-2">
         <h2 class="font-medium text-gray-900">Alertes</h2>
         <ul class="flex flex-col gap-2">

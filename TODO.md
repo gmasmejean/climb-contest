@@ -355,3 +355,20 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **Aucune purge des sauvegardes déjà faites** : un fichier de sauvegarde d'avant
   la purge contient encore les données personnelles. À dire clairement dans
   `docs/EXPLOITATION.md` : purger une compétition ne purge pas les sauvegardes.
+- **Un organisateur qui recharge sa page alors que le serveur est injoignable est
+  renvoyé à l'écran de connexion** (ADR-060) : sa session ne se restaure qu'avec
+  le serveur. Il doit attendre le retour du réseau. Un mode « lecture seule »
+  qui garderait le dernier état affiché n'existe pas.
+- **Rien ne dit à un juge que sa file est bloquée parce que son accès a été
+  révoqué** : la répétition générale l'a confirmé — l'appareil du juge révoqué
+  reçoit un 401, traité comme une coupure réseau, et réessaie indéfiniment. Ses
+  saisies en attente n'atteindront jamais le serveur ; l'organisateur doit les
+  ressaisir (saisie de secours). Déjà noté au Lot 6, maintenant mesuré.
+- **Limitation de débit partagée par toute la salle** (mesuré par la répétition
+  et le test SSE) : 120 lots de saisie par minute et par adresse, 300
+  connexions SSE par minute et par adresse, 600 lectures publiques par minute.
+  Tous les juges et spectateurs d'une salle partagent souvent UNE adresse
+  publique (wifi). La cible de 300 spectateurs tient pile sur le plafond SSE :
+  une vague de reconnexions après une coupure la dépasserait, et les spectateurs
+  basculeraient alors sur le sondage à 30 s. Aucun perte de donnée (les
+  clients réessaient), mais un classement moins « direct ».

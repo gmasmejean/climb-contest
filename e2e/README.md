@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Douze tests à ce jour :
+Seize tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -55,6 +55,11 @@ Douze tests à ce jour :
   données personnelles, puis la purge : le bouton reste inactif tant que le nom
   exact n'est pas retapé, et plus aucun nom n'apparaît ensuite (`ROADMAP.md`
   Lot 9, point 4, ADR-051).
+
+- `degraded-mode.spec.ts` — mode dégradé, acteur par acteur (ADR-060) : le
+  tableau de bord organisateur avertit quand le serveur ne répond plus puis se
+  rétablit, la connexion et la liste disent quoi faire, et la page publique garde
+  son classement avec un indicateur honnête (« Reconnexion… », puis « En direct »).
 
 ## Projets
 

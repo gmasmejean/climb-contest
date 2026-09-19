@@ -207,7 +207,7 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Douze tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Seize tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
@@ -220,4 +220,4 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   (qualification à deux voies, demi-finale, finale, classement final avec
   contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
   sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise —
-  la purge des données personnelles ; voir `e2e/README.md` pour les lancer.
+  la purge des données personnelles ; le mode dégradé quand le serveur est injoignable ; voir `e2e/README.md` pour les lancer.

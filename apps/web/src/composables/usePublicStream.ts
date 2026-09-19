@@ -6,6 +6,17 @@ import type { PublicStreamEvent } from '@climbcontest/contracts'
 const DEFAULT_POLL_INTERVAL_MS = 30_000
 
 /**
+ * Chien de garde (Lot 9, mode dégradé) : le serveur émet un `ping` toutes les
+ * 25 s. Sans aucun signe de vie pendant ce délai — deux `ping` manqués et une
+ * marge —, la connexion est morte même si le navigateur ne l'a pas remarqué
+ * (wifi perdu sans que TCP le signale : `EventSource.onerror` peut tarder des
+ * minutes). Sans ce garde-fou, la page affichait « En direct » sur un classement
+ * figé — un indicateur menteur.
+ */
+const STALL_AFTER_MS = 65_000
+const WATCHDOG_INTERVAL_MS = 5_000
+
+/**
  * Même formule que `packages/sync/src/backoff.ts` (full jitter, ADR-037) —
  * réimplantée ici plutôt qu'importée : ce paquet reste ciblé sur la file
  * IndexedDB du juge, `apps/web` ne doit pas en dépendre pour un composable
@@ -22,6 +33,9 @@ export interface UsePublicStreamOptions {
   /** Injectable pour les tests — par défaut, un vrai `EventSource` du navigateur. */
   createEventSource?: (url: string) => EventSource
   pollIntervalMs?: number
+  /** Injectable pour les tests. */
+  now?: () => number
+  stallAfterMs?: number
   random?: () => number
   setTimeoutFn?: typeof setTimeout
   clearTimeoutFn?: typeof clearTimeout
@@ -73,12 +87,34 @@ export function usePublicStream(
   const cancelTimeout = options.clearTimeoutFn ?? clearTimeout
   const scheduleInterval = options.setIntervalFn ?? setInterval
   const cancelInterval = options.clearIntervalFn ?? clearInterval
+  const now = options.now ?? Date.now
+  const stallAfterMs = options.stallAfterMs ?? STALL_AFTER_MS
 
   let source: EventSource | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  let watchdogTimer: ReturnType<typeof setInterval> | null = null
+  let lastActivityAt = 0
   let attempt = 0
   let stopped = true
+
+  function stopWatchdog(): void {
+    if (watchdogTimer === null) return
+    cancelInterval(watchdogTimer)
+    watchdogTimer = null
+  }
+
+  function startWatchdog(): void {
+    stopWatchdog()
+    lastActivityAt = now()
+    watchdogTimer = scheduleInterval(() => {
+      if (stopped || !source || now() - lastActivityAt <= stallAfterMs) return
+      // Aucun signe de vie : la connexion est morte, on le dit et on reprend.
+      stopWatchdog()
+      closeSource()
+      scheduleReconnect()
+    }, WATCHDOG_INTERVAL_MS)
+  }
 
   function setState(state: PublicStreamConnectionState): void {
     handlers.onStateChange?.(state)
@@ -129,18 +165,22 @@ export function usePublicStream(
       attempt = 0
       stopPolling()
       setState('open')
+      startWatchdog()
     })
     es.addEventListener('error', () => {
       if (stopped) return
+      stopWatchdog()
       closeSource()
       scheduleReconnect()
     })
     es.addEventListener('ping', () => {
+      lastActivityAt = now()
       handlers.onHeartbeat?.()
     })
     for (const type of BUSINESS_EVENT_TYPES) {
       es.addEventListener(type, (rawEvent) => {
         const messageEvent = rawEvent as MessageEvent<string>
+        lastActivityAt = now()
         handlers.onHeartbeat?.()
         try {
           handlers.onEvent(JSON.parse(messageEvent.data) as PublicStreamEvent)
@@ -165,6 +205,14 @@ export function usePublicStream(
   function onOnline(): void {
     forceReconnectNow()
   }
+  // Le navigateur SAIT qu'il n'a plus de réseau : on le dit tout de suite,
+  // sans attendre le chien de garde.
+  function onOffline(): void {
+    if (stopped) return
+    stopWatchdog()
+    closeSource()
+    scheduleReconnect()
+  }
   function onVisibilityChange(): void {
     if (document.visibilityState === 'visible') forceReconnectNow()
   }
@@ -176,13 +224,16 @@ export function usePublicStream(
       attempt = 0
       connect()
       window.addEventListener('online', onOnline)
+      window.addEventListener('offline', onOffline)
       document.addEventListener('visibilitychange', onVisibilityChange)
     },
     stop() {
       if (stopped) return
       stopped = true
       window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      stopWatchdog()
       if (reconnectTimer !== null) cancelTimeout(reconnectTimer)
       reconnectTimer = null
       stopPolling()

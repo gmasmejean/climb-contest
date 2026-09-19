@@ -2005,6 +2005,30 @@ avant la première compétition réelle.
 
 ---
 
+## ADR-060 — Lot 9 : mode dégradé — ce que voit chaque acteur quand le serveur est injoignable
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 4. ADR-009 exclut un mode « zéro
+internet » à construire : on suppose un accès internet, même médiocre. La
+question est donc celle d'un serveur ou d'un réseau qui TOMBE en cours de
+compétition. Audit fait acteur par acteur, puis corrigé et couvert par
+`e2e/degraded-mode.spec.ts`.
+
+| Acteur | Avant | Maintenant |
+|---|---|---|
+| **Juge** | Tout s'affiche depuis IndexedDB, saisies mises en file, bandeau honnête (Lot 6). | Inchangé — couvert par `judge-offline-sync.spec.ts`. |
+| **Organisateur, tableau de bord** | Aucune gestion d'erreur : les chiffres restaient **figés, sans aucun avertissement**, l'organisateur croyait ses alertes à jour. | Bandeau rouge « Le serveur ne répond plus », avec l'heure des derniers chiffres, dès la 2ᵉ relance ratée (une seule relance au lieu de trois) ; disparaît tout seul au retour. |
+| **Organisateur, connexion** | « Une erreur inattendue est survenue. » | « Impossible de joindre le serveur. Vérifiez votre connexion internet, puis réessayez. Rien de ce que vous avez déjà enregistré n'est perdu. » |
+| **Organisateur, liste** | « Impossible de charger vos compétitions. » sans issue. | Le même message, et un bouton « Réessayer ». |
+| **Public** | Le classement affiché restait, mais l'indicateur **restait sur « En direct »** si la connexion mourait sans que le navigateur le remarque (wifi perdu) : un indicateur menteur. | Un chien de garde sur le `ping` du serveur (25 s) : plus de 65 s sans signe de vie, ou événement `offline` du navigateur, et la page passe en « Reconnexion… » ; le dernier classement reste lisible ; « En direct » revient à la reconnexion. |
+
+**Non traité, à savoir** (voir `TODO.md`) : un organisateur qui RECHARGE sa page
+alors que le serveur est injoignable est renvoyé à l'écran de connexion, faute de
+pouvoir restaurer sa session. Le message est désormais clair, mais il doit
+attendre le retour du réseau pour continuer.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

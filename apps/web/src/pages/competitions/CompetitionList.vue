@@ -7,6 +7,7 @@ import { RouterLink } from 'vue-router'
 import { retentionStatus } from '@climbcontest/contracts'
 
 import { competitionsApi } from '../../api/competitions'
+import { UNREACHABLE_MESSAGE } from '../../lib/network-errors'
 import ImportBackupModal from './ImportBackupModal.vue'
 
 const importOpen = ref(false)
@@ -20,7 +21,7 @@ function reminderOf(endsOn: string): { label: string; tone: 'warning' | 'danger'
   return null
 }
 
-const { data, isPending, isError } = useQuery({
+const { data, isPending, isError, refetch } = useQuery({
   queryKey: ['competitions'],
   queryFn: competitionsApi.list,
 })
@@ -48,9 +49,10 @@ const statusLabels: Record<string, string> = {
     <ImportBackupModal :open="importOpen" @close="importOpen = false" />
 
     <p v-if="isPending" class="text-gray-600">Chargement…</p>
-    <p v-else-if="isError" role="alert" class="text-red-700">
-      Impossible de charger vos compétitions.
-    </p>
+    <div v-else-if="isError" role="alert" class="flex flex-col items-start gap-3">
+      <p class="text-red-700">{{ UNREACHABLE_MESSAGE }}</p>
+      <Button variant="secondary" @click="() => refetch()">Réessayer</Button>
+    </div>
     <p v-else-if="data?.length === 0" class="text-gray-600">
       Aucune compétition pour l'instant — créez la première.
     </p>
