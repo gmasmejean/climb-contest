@@ -162,6 +162,17 @@ Le statut d'un compétiteur (présent/absent/abandon/disqualifié, motif
 toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
 `DECISIONS.md` (ADR-045 à ADR-049) pour les décisions prises pendant ce lot.
 
+## Données personnelles (RGPD)
+
+Les compétiteurs sont souvent mineurs. Dans l'onglet **Exports**, le
+**propriétaire** du club peut exporter tout ce qui identifie une personne, puis
+**supprimer** les données personnelles d'une compétition : noms, années de
+naissance, clubs, licences, vidéos et motifs saisis. Les résultats restent, sans
+personne derrière ; la ligne de la compétition reste comme trace de la purge.
+Il faut retaper le nom exact de la compétition, et l'action est irréversible.
+La liste des compétitions rappelle au bout de 2 ans, puis 5 ans. Rien n'est
+jamais supprimé automatiquement (DECISIONS.md ADR-051).
+
 ## Vidéos de voie
 
 Une voie peut porter un lien YouTube/Vimeo, ou une **vidéo téléversée**
@@ -196,7 +207,7 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Onze tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Douze tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
@@ -209,4 +220,4 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   (qualification à deux voies, demi-finale, finale, classement final avec
   contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
   sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise —
-  voir `e2e/README.md` pour les lancer.
+  la purge des données personnelles ; voir `e2e/README.md` pour les lancer.

@@ -70,7 +70,7 @@ const tabs = computed(() => {
       <JudgesTab v-else-if="activeTab === 'judges'" :competition="competition" />
       <ReadinessTab v-else-if="activeTab === 'readiness'" :competition-id="competitionId" />
       <PilotageTab v-else-if="activeTab === 'pilotage'" :competition="competition" />
-      <ExportsTab v-else-if="activeTab === 'exports'" :competition-id="competitionId" />
+      <ExportsTab v-else-if="activeTab === 'exports'" :competition="competition" />
     </div>
   </main>
 </template>

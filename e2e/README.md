@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Onze tests à ce jour :
+Douze tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -50,6 +50,11 @@ Onze tests à ce jour :
   morceaux) survit à une coupure réseau provoquée au deuxième, le lecteur public
   la lit par plages d'octets (`206`), puis la suppression demande confirmation
   (`ROADMAP.md` Lot 9, point 3).
+
+- `gdpr.spec.ts` — le rappel « plus de 5 ans » dans la liste, l'export des
+  données personnelles, puis la purge : le bouton reste inactif tant que le nom
+  exact n'est pas retapé, et plus aucun nom n'apparaît ensuite (`ROADMAP.md`
+  Lot 9, point 4, ADR-051).
 
 ## Projets
 

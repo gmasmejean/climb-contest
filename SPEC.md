@@ -751,6 +751,9 @@ GET    /competitions/:id/exports/results.pdf   ?category= — mise en page A4
 GET    /competitions/:id/exports/competition.json
                                                 sauvegarde complète, sans
                                                 secret (ADR-056)
+GET    /competitions/:id/gdpr-export           données personnelles (propriétaire, Lot 9)
+DELETE /competitions/:id/personal-data         { confirmName } — purge irréversible
+                                                (propriétaire, ADR-051)
 POST   /competitions/import                    { mode: 'preview'|'commit', backup }
                                                 → nouvelle compétition (ADR-056)
 GET    /competitions/:id/dashboard             état temps réel pour l'orga
@@ -807,10 +810,12 @@ Arbitré pendant le Lot 0 — détail et justification dans `DECISIONS.md` :
 9. ~~Vidéos : téléversement direct ou lien externe en v1 ?~~ Déjà tranché par
    `ROADMAP.md` — lien externe au Lot 3, téléversement au Lot 9.
 
-**Encore ouvert :**
+**Tranché au Lot 9 :**
 
-8. Politique de conservation et de purge des données personnelles (RGPD) —
-   à trancher avec le club avant le Lot 9.
+8. ~~Politique de conservation et de purge des données personnelles (RGPD).~~
+   Export et purge manuels, réservés au propriétaire du club, avec un rappel à
+   2 ans (archivage) et 5 ans (purge) — ADR-051. Rien n'est jamais supprimé
+   automatiquement.
 
 ---
 

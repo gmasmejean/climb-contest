@@ -13,6 +13,7 @@ import type {
   ImportReport,
   BackupPreview,
   ImportBackupResult,
+  PurgePersonalDataResult,
   ReadinessResponse,
   Round,
   RoundQualifiersResponse,
@@ -184,6 +185,18 @@ export const exportsApi = {
     )
     saveBlob(blob, filename)
   },
+  downloadPersonalData: async (competitionId: string) => {
+    const { blob, filename } = await apiDownload(
+      `/competitions/${competitionId}/gdpr-export`,
+      'donnees-personnelles.json',
+    )
+    saveBlob(blob, filename)
+  },
+  purgePersonalData: (competitionId: string, confirmName: string) =>
+    apiFetch<PurgePersonalDataResult>(`/competitions/${competitionId}/personal-data`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmName }),
+    }),
   previewImport: (backup: unknown) =>
     apiFetch<BackupPreview>('/competitions/import', {
       method: 'POST',

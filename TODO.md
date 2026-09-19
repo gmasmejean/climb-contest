@@ -347,3 +347,12 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **La vidéo téléversée n'est pas mise en cache hors ligne** (elle est
   volontairement exclue du cache du service worker) : hors réseau, la page
   publique n'a pas de lecteur.
+- **La purge RGPD ne touche pas au compte de l'organisateur** (e-mail, nom) : elle
+  porte sur les données d'une COMPÉTITION. Supprimer un compte organisateur ou un
+  club entier n'a pas d'action dédiée.
+- **La purge n'est pas tracée dans le journal d'activité** (`activity_log.event_type`
+  est restreint par un CHECK) : la trace est `competition.purged_at`. Ni qui l'a
+  faite, ni quand exactement au-delà de cette date.
+- **Aucune purge des sauvegardes déjà faites** : un fichier de sauvegarde d'avant
+  la purge contient encore les données personnelles. À dire clairement dans
+  `docs/EXPLOITATION.md` : purger une compétition ne purge pas les sauvegardes.

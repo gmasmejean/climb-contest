@@ -4,10 +4,21 @@ import { useQuery } from '@tanstack/vue-query'
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
+import { retentionStatus } from '@climbcontest/contracts'
+
 import { competitionsApi } from '../../api/competitions'
 import ImportBackupModal from './ImportBackupModal.vue'
 
 const importOpen = ref(false)
+const today = new Date().toISOString().slice(0, 10)
+
+/** Rappel de conservation (ADR-051) : jamais une action automatique, seulement un rappel. */
+function reminderOf(endsOn: string): { label: string; tone: 'warning' | 'danger' } | null {
+  const status = retentionStatus(endsOn, today)
+  if (status === 'purge_due') return { label: 'Plus de 5 ans : à purger', tone: 'danger' }
+  if (status === 'archive_due') return { label: 'Plus de 2 ans : exporter puis purger', tone: 'warning' }
+  return null
+}
 
 const { data, isPending, isError } = useQuery({
   queryKey: ['competitions'],
@@ -56,9 +67,18 @@ const statusLabels: Record<string, string> = {
               >{{ competition.venue }} — {{ competition.startsOn }}</span
             >
           </div>
-          <Badge :tone="competition.status === 'draft' ? 'neutral' : 'success'">
-            {{ statusLabels[competition.status] ?? competition.status }}
-          </Badge>
+          <div class="flex flex-col items-end gap-1">
+            <Badge :tone="competition.status === 'draft' ? 'neutral' : 'success'">
+              {{ statusLabels[competition.status] ?? competition.status }}
+            </Badge>
+            <Badge v-if="competition.purgedAt" tone="neutral">Données supprimées</Badge>
+            <Badge
+              v-else-if="reminderOf(competition.endsOn)"
+              :tone="reminderOf(competition.endsOn)!.tone"
+            >
+              {{ reminderOf(competition.endsOn)!.label }}
+            </Badge>
+          </div>
         </RouterLink>
       </li>
     </ul>
