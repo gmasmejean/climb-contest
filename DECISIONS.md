@@ -1831,6 +1831,51 @@ poussée serveur vers les juges (SSE) dans ce lot.
 
 ---
 
+## ADR-056 — Lot 9 : export JSON de sauvegarde et réimport
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 2 : « export complet de la compétition
+en JSON (sauvegarde, réimport) ». Rien n'était précisé sur le contenu ni sur la
+sémantique du réimport. Choix faits sans question à l'utilisateur, car
+réversibles et sans conséquence sur les règles de compétition ; **à relire**.
+
+**Décisions :**
+
+- **Liste blanche de colonnes**, écrite à la main dans `packages/contracts`
+  (`backup.ts`), jamais `select *`. Un secret ajouté plus tard à une table ne
+  fuit donc pas dans l'export. Exclus : hachés et clairs des jetons/PIN juge,
+  compteurs de PIN, mots de passe, sessions, jetons en attente, `public_slug`.
+- **Incluses** : compétition, catégories, compétiteurs (avec année de naissance et
+  licence — ce sont les données de l'organisateur, pas celles de la page
+  publique), voies, tours, affectations, qualifiés figés, juges (nom et voies
+  seulement), tous les passages y compris remplacés et en conflit, `ascent_event`,
+  `activity_log`. La trace complète permet de répondre à une réclamation.
+- **Vidéos téléversées : hors JSON** (fichiers binaires). `route.video_asset_id`
+  n'est pas exporté ; le lien externe `video_url` l'est.
+- **Réimport = une NOUVELLE compétition** : tous les identifiants sont
+  regénérés (uuid v7), y compris ceux des passages (un id de passage est
+  globalement unique : réimporter dans la même base entrerait en collision), un
+  nouveau `public_slug`, le club de l'organisateur qui importe. Les
+  identifiants présents dans les `payload` de `ascent_event`/`activity_log`
+  sont remplacés par les nouveaux. Le statut d'origine est conservé.
+- **Juges réimportés révoqués**, avec un jeton aléatoire jeté aussitôt :
+  l'historique d'attribution des passages est conservé, mais aucun accès n'est
+  restauré. L'organisateur recrée des juges avec de nouveaux QR. Pas de
+  restauration silencieuse d'un accès à des appareils qu'on ne connaît plus.
+- **Passages saisis par un organisateur** : rattachés à l'organisateur qui
+  importe (la contrainte `ascent_recorded_by_check` exige un auteur). L'identité
+  d'origine n'est pas exportée.
+- **Aperçu puis validation** (`mode: preview | commit`, comme ADR-024) : le
+  serveur revalide tout dans les deux modes ; l'écriture est une transaction
+  unique, tout ou rien.
+- **Validation** : schéma Zod versionné (`schemaVersion: 1`) puis contrôle
+  d'intégrité référentielle et des règles que la base impose (dossards et
+  numéros de voie uniques, forme d'un passage). Les erreurs sont en français et
+  disent quoi corriger.
+- **Limite de taille** du corps : 25 Mo.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
