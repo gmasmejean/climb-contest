@@ -10,13 +10,15 @@ import type { Env } from '../env'
 import { createAccessTokenSigner, createJudgeTokenSigner } from '../lib/jwt'
 import type { Logger } from '../lib/logger'
 import { FakeMailer } from '../test-utils/fake-mailer'
+import { authHeaders, judgeAuthHeaders } from '../test-utils/fixtures'
 import {
-  authenticateJudge,
-  authHeaders,
-  createTestCompetition,
-  judgeAuthHeaders,
-  registerLoggedInOrganizer,
-} from '../test-utils/fixtures'
+  enterAscent as enterAscentIn,
+  json,
+  playQualification as playQualificationIn,
+  postRoundStatus,
+  setUpPhasesScenario,
+  type PhasesScenario as Scenario,
+} from '../test-utils/phases-scenario'
 
 /**
  * ADR-054 — liste des qualifiés figée à l'ouverture du tour suivant, et
@@ -76,148 +78,17 @@ afterEach(async () => {
   )
 })
 
-async function json<T>(response: Response): Promise<T> {
-  return (await response.json()) as T
-}
-
-interface Scenario {
-  organizerToken: string
-  competitionId: string
-  publicSlug: string
-  categoryId: string
-  qualificationId: string
-  semifinalId: string
-  routeQ: string
-  routeS: string
-  /** bib 1..4, dans cet ordre. */
-  competitors: { id: string; bib: number }[]
-  judgeJwt: string
-}
-
-async function setUp(qualifyingCount: number | null): Promise<Scenario> {
-  const { accessToken: organizerToken } = await registerLoggedInOrganizer(app, mailer)
-  const competition = await createTestCompetition(app, organizerToken, {
-    format: 'phases',
-    startsOn: '2099-01-01',
-    endsOn: '2099-01-01',
-  })
-  const base = `/api/v1/competitions/${competition.id}`
-  const post = (path: string, body: unknown, method = 'POST') =>
-    app.request(`${base}${path}`, {
-      method,
-      headers: authHeaders(organizerToken),
-      body: JSON.stringify(body),
-    })
-
-  const category = await json<{ id: string }>(await post('/categories', { label: 'U16', sex: 'X' }))
-
-  const competitors: { id: string; bib: number }[] = []
-  for (const bib of [1, 2, 3, 4]) {
-    const created = await json<{ id: string }>(
-      await post('/competitors', {
-        categoryId: category.id,
-        bib,
-        firstName: `Prénom${bib}`,
-        lastName: `Nom${bib}`,
-      }),
-    )
-    competitors.push({ id: created.id, bib })
-  }
-
-  const routeIds: string[] = []
-  for (const number of [1, 2]) {
-    const created = await json<{ id: string }>(await post('/routes', { number, holdCount: 40, categoryIds: [] }))
-    await post(`/routes/${created.id}`, { categoryIds: [category.id] }, 'PATCH')
-    routeIds.push(created.id)
-  }
-  const [routeQ, routeS] = routeIds as [string, string]
-
-  const qualification = await json<{ id: string }>(
-    await post('/rounds', { type: 'qualification', style: 'onsight', qualifyingCount }),
-  )
-  const semifinal = await json<{ id: string }>(
-    await post('/rounds', { type: 'semifinal', style: 'onsight' }),
-  )
-  await post(
-    `/rounds/${qualification.id}/routes`,
-    { assignments: [{ routeId: routeQ, categoryId: category.id }] },
-    'PUT',
-  )
-  await post(
-    `/rounds/${semifinal.id}/routes`,
-    { assignments: [{ routeId: routeS, categoryId: category.id }] },
-    'PUT',
-  )
-
-  const judge = await json<{ accessToken: string; pin?: string }>(
-    await post('/judges', { displayName: 'Juge Test', routeIds: [routeQ, routeS] }),
-  )
-  const judgeJwt = await authenticateJudge(app, judge.accessToken, judge.pin)
-
-  return {
-    organizerToken,
-    competitionId: competition.id,
-    publicSlug: String(competition['publicSlug']),
-    categoryId: category.id,
-    qualificationId: qualification.id,
-    semifinalId: semifinal.id,
-    routeQ,
-    routeS,
-    competitors,
-    judgeJwt,
-  }
-}
-
-function postStatus(s: Scenario, roundId: string, status: string) {
-  return app.request(`/api/v1/competitions/${s.competitionId}/round-status/${roundId}`, {
-    method: 'POST',
-    headers: authHeaders(s.organizerToken),
-    body: JSON.stringify({ status }),
-  })
-}
-
-async function enterAscent(
+const setUp = (qualifyingCount: number | null) => setUpPhasesScenario(app, mailer, qualifyingCount)
+const postStatus = (s: Scenario, roundId: string, status: string) =>
+  postRoundStatus(app, s, roundId, status)
+const enterAscent = (
   s: Scenario,
   roundId: string,
   routeId: string,
   competitorId: string,
   holdNumber: number,
-) {
-  const response = await app.request('/api/v1/judge/ascents/batch', {
-    method: 'POST',
-    headers: judgeAuthHeaders(s.judgeJwt),
-    body: JSON.stringify({
-      items: [
-        {
-          kind: 'create',
-          id: crypto.randomUUID(),
-          roundId,
-          routeId,
-          competitorId,
-          holdNumber,
-          modifier: 'none',
-          isTop: false,
-          status: 'valid',
-          climbTimeMs: null,
-          recordedAt: '2026-09-19T10:00:00.000Z',
-          deviceId: 'device-test',
-        },
-      ],
-    }),
-  })
-  const body = await json<{ results: { status: string; reason?: string }[] }>(response)
-  return body.results[0]
-}
-
-/** Qualification jouée : la liste de départ dit bib 1 = prise 30, 2 = 25, 3 = 20, 4 = 10 (sauf `holds`). */
-async function playQualification(s: Scenario, holds: number[] = [30, 25, 20, 10]) {
-  expect((await postStatus(s, s.qualificationId, 'open')).status).toBe(200)
-  for (const [index, competitor] of s.competitors.entries()) {
-    const result = await enterAscent(s, s.qualificationId, s.routeQ, competitor.id, holds[index]!)
-    expect(result?.status).toBe('accepted')
-  }
-  expect((await postStatus(s, s.qualificationId, 'closed')).status).toBe(200)
-}
+) => enterAscentIn(app, s, roundId, routeId, competitorId, holdNumber)
+const playQualification = (s: Scenario, holds?: number[]) => playQualificationIn(app, s, holds)
 
 async function qualifiers(s: Scenario, roundId = s.semifinalId) {
   const response = await app.request(
@@ -332,11 +203,7 @@ describe('figeage des qualifiés à l’ouverture du tour suivant (ADR-054)', ()
     // …et le classement public montre toujours les deux mêmes qualifiés.
     const ranking = await json<{
       entries: { bib: number | null; rounds: { roundType: string }[] }[]
-    }>(
-      await app.request(
-        `/api/v1/public/${s.publicSlug}/rankings?category=${s.categoryId}`,
-      ),
-    )
+    }>(await app.request(`/api/v1/public/${s.publicSlug}/rankings?category=${s.categoryId}`))
     const inSemifinal = ranking.entries
       .filter((e) => e.rounds.some((r) => r.roundType === 'semifinal'))
       .map((e) => e.bib)
@@ -351,7 +218,9 @@ describe('figeage des qualifiés à l’ouverture du tour suivant (ADR-054)', ()
 
     // Le passage de bib 3 (prise 20) est corrigé en prise 39 : il passerait
     // devant bib 1 et 2 si la liste était recalculée.
-    const routeQAscents = await json<{ id: string; competitor?: unknown; ascent: { id: string } | null; bib: number }[]>(
+    const routeQAscents = await json<
+      { id: string; competitor?: unknown; ascent: { id: string } | null; bib: number }[]
+    >(
       await app.request(
         `/api/v1/competitions/${s.competitionId}/ascents?roundId=${s.qualificationId}&routeId=${s.routeQ}`,
         { headers: authHeaders(s.organizerToken) },
