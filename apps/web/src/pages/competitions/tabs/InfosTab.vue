@@ -13,6 +13,17 @@ const props = defineProps<{ competition: Competition }>()
 const queryClient = useQueryClient()
 const toast = useToast()
 
+const publicUrl = `${window.location.origin}/c/${props.competition.publicSlug}`
+
+async function copyPublicUrl(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(publicUrl)
+    toast.show('Copié.', 'success')
+  } catch {
+    toast.show('Copie impossible — sélectionnez le texte manuellement.', 'error')
+  }
+}
+
 const form = reactive({
   name: props.competition.name,
   venue: props.competition.venue,
@@ -112,9 +123,21 @@ function applyStatus(): void {
       <dd class="text-gray-900">{{ competition.format === 'contest' ? 'Contest' : 'Phases' }}</dd>
       <dt class="text-gray-600">Moteur de cotation</dt>
       <dd class="text-gray-900">{{ competition.scoringEngineId }}</dd>
-      <dt class="text-gray-600">URL publique</dt>
-      <dd class="text-gray-900">/c/{{ competition.publicSlug }}</dd>
     </dl>
+    <div class="flex flex-col gap-1">
+      <span class="text-sm text-gray-600">URL publique</span>
+      <div class="flex flex-wrap items-center gap-2">
+        <a
+          :href="publicUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="min-h-12 flex-1 break-all rounded-lg border border-gray-300 bg-gray-50 px-3 py-3 text-sm text-blue-700 underline"
+        >
+          {{ publicUrl }}
+        </a>
+        <Button variant="secondary" @click="copyPublicUrl">Copier</Button>
+      </div>
+    </div>
     <p class="text-xs text-gray-500">
       Le format et le moteur de cotation ne peuvent plus être modifiés après la création.
     </p>
