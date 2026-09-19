@@ -1774,6 +1774,47 @@ jour J).
 
 ---
 
+## ADR-055 — Lot 9 : le client juge actualise ses voies quand sa file est vide
+
+**Date :** 2026-09-19
+**Contexte :** `bootstrapJudge()` (Lot 6) ne tourne qu'à la connexion
+(`JudgeAccess.vue`). En format phases, un juge connecté le matin garde le
+cache de la qualification : quand la demi-finale s'ouvre, sa voie reste vide
+(« aucun tour ouvert ») jusqu'à ce qu'il rouvre son lien. Relancer le
+bootstrap tel quel efface `routeDetails` puis le réécrit, ce qui détruirait
+l'état « fait » optimiste des saisies encore en file. Question posée à
+l'utilisateur, qui a choisi l'actualisation sûre.
+
+**Décision :** le bootstrap peut être relancé en journée, à trois
+conditions cumulées :
+
+- **Déclencheurs** : démarrage de l'application, retour du réseau, retour au
+  premier plan (les mêmes que la file, `sync-runtime.ts`), plus un bouton
+  « Actualiser mes voies » sur l'accueil juge. Au plus une actualisation
+  automatique toutes les 30 s.
+- **File vide** : aucun élément `pending` ou `sending` dans la file. Les
+  éléments `conflict` et `rejected` ne bloquent pas — le serveur les a déjà
+  traités, ils restent affichés par la file.
+- **Vérifié dans la transaction d'écriture**, pas avant le téléchargement :
+  `bootstrapJudge({ onlyIfQueueIdle: true })` relit la table `queue` à
+  l'intérieur de la transaction Dexie qui réécrit `routeDetails`. Une saisie
+  enregistrée pendant le téléchargement fait renoncer à l'écriture ; une
+  saisie qui arrive après attend la fin de la transaction et applique son
+  écriture optimiste sur les données fraîches. Jamais d'écrasement.
+
+Quand des saisies sont en attente, l'actualisation est simplement reportée :
+elle est retentée dès que la file se vide.
+
+**Options écartées :** rouvrir le lien à la main à chaque changement de tour
+(procédure documentée seulement — un juge qui oublie reste devant une voie
+vide, sous pression) ; actualisation périodique inconditionnelle (risque
+d'écraser des saisies en attente).
+
+**Limite assumée :** le juge voit le nouveau tour au prochain retour au
+premier plan ou en appuyant sur le bouton, pas instantanément — pas de
+poussée serveur vers les juges (SSE) dans ce lot.
+
+---
 
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
