@@ -148,6 +148,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
   // déclenche ce POST.
   app.post(
     '/verify-email',
+    authRateLimiter(limitOr(20), 15 * 60 * 1000),
     zValidator('json', verifyEmailInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide')
     }),
@@ -244,7 +245,10 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
     },
   )
 
-  app.post('/refresh', async (c) => {
+  // Plafonds larges : tout un club partage souvent UNE adresse (wifi de la
+  // salle) et chaque organisateur rafraîchit sa session à chaque chargement de
+  // page. Le but est d'empêcher un flot, pas de gêner un usage normal.
+  app.post('/refresh', authRateLimiter(limitOr(300), 15 * 60 * 1000), async (c) => {
     const refreshToken = getCookie(c, REFRESH_COOKIE_NAME)
     if (!refreshToken) {
       throw new ApiError(401, 'Session invalide', 'Aucune session active.')
@@ -288,7 +292,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
     return c.json(result)
   })
 
-  app.post('/logout', async (c) => {
+  app.post('/logout', authRateLimiter(limitOr(120), 15 * 60 * 1000), async (c) => {
     const refreshToken = getCookie(c, REFRESH_COOKIE_NAME)
     if (refreshToken) {
       const tokenHash = hashToken(refreshToken)
@@ -352,6 +356,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
 
   app.post(
     '/invitations/accept',
+    authRateLimiter(limitOr(20), 15 * 60 * 1000),
     zValidator('json', acceptInviteInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide', result.error.issues[0]?.message)
     }),

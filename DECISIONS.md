@@ -1944,6 +1944,67 @@ sans elles, pas de déplacement dans la vidéo.
 
 ---
 
+## ADR-059 — Lot 9 : revue de sécurité des trois frontières
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 4. Méthode : une **matrice automatique**
+(`routes/security-matrix.test.ts`) construite depuis `app.routes` — une route
+ajoutée sans être classée fait échouer le fichier, et une route classée dans un
+préfixe hérite des contrôles de ce préfixe — plus des tests ciblés
+(`security-hardening.test.ts`, `lib/*.test.ts`). Chaque défaut ci-dessous a été
+démontré par un test qui échouait AVANT le correctif. Les tests ont aussi été
+vérifiés en cassant volontairement le code (mutation) : ils échouent.
+
+**Défauts trouvés et corrigés :**
+
+1. **Adresse client falsifiable** (haute). `clientIp` prenait la PREMIÈRE entrée
+   de `X-Forwarded-For`, que le client écrit lui-même : la limitation de débit
+   se contournait en changeant d'« adresse » à chaque requête. Désormais la
+   DERNIÈRE, ajoutée par Caddy. Suppose un seul proxy de confiance.
+2. **XSS stockée par lien de vidéo** (haute). `z.url()` accepte `javascript:`.
+   L'inscription étant ouverte, n'importe qui pouvait poser un tel lien sur sa
+   propre compétition ; un clic d'un organisateur connecté sur la page publique
+   exécutait du script dans l'origine de l'application, d'où le cookie de
+   refresh donnait un jeton d'accès. Corrigé à trois niveaux : seul http(s)
+   est stocké, une valeur héritée n'est jamais servie, la page revérifie.
+3. **Quatre routes anonymes sans limitation de débit** (moyenne) :
+   `verify-email`, `refresh`, `logout`, `invitations/accept` — contraire à
+   SPEC.md §6.4. Plafonds larges pour `refresh`/`logout` (tout un club partage
+   une adresse).
+4. **Aucune limite de taille de corps** (moyenne) : un JSON de plusieurs
+   centaines de Mio à `/auth/login` saturait la mémoire sans authentification.
+   1 Mio par défaut ; l'import de sauvegarde (25 Mio) et les morceaux de vidéo
+   (16 Mio) gardent leur propre limite.
+5. **Injection de formule dans l'export CSV du journal** (moyenne) : un motif
+   ou un nom commençant par `=` s'exécutait dans le tableur.
+6. **Algorithme JWT non épinglé** (basse) : HS384/HS512 acceptés avec le bon
+   secret. Seul HS256, le seul émis, est accepté.
+7. **Aucun en-tête de sécurité** (basse à moyenne) : `secureHeaders` sur l'API,
+   et sur l'application web un ensemble d'en-têtes dont une CSP stricte.
+
+**Vérifié sain (avec test) :** jetons organisateur et juge jamais
+interchangeables ; 404 (jamais 403 ni 200) sur la compétition d'un autre club ;
+isolement entre DEUX compétitions d'un même club, sur les identifiants imbriqués
+et sur les références du corps ; aucune route GET ne modifie de ligne (ADR-020) ;
+aucune route publique ne répond 5xx à des paramètres hostiles ; le public ne
+reçoit ni licence, ni année de naissance, ni secret.
+
+**Vérifié par lecture, sans test dédié :** SQL toujours paramétré ; aucun
+`v-html` ; cookie de refresh `httpOnly`, `SameSite=Lax`, `Secure` en
+production ; clé de stockage jamais dérivée d'une entrée client ; aucune requête
+sortante vers une URL fournie par un utilisateur (pas de SSRF).
+
+**Ouvert, non corrigé** (voir `TODO.md`) : limitation de débit en mémoire, par
+processus ; la planche de QR codes plante sur un caractère hors WinAnsi ;
+conservation en clair des accès juge par défaut (ADR-027, choix assumé) ; pas
+de trace dans le journal de la suppression d'une vidéo.
+
+**Limite de la méthode :** une revue par l'auteur du code n'est pas une revue
+indépendante. Une relecture par un tiers (`/code-review`) reste recommandée
+avant la première compétition réelle.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
