@@ -705,7 +705,15 @@ GET    /competitions/:id/routes
 POST   /competitions/:id/routes
 PATCH  /competitions/:id/routes/:rid
 POST   /competitions/:id/routes/reorder        { orderedIds } — renumérote
-POST   /competitions/:id/routes/:rid/video     (upload ou lien — Lot 9)
+POST   /competitions/:id/routes/:rid/video/uploads       { sizeBytes, mimeType }
+                                                          → ouvre un envoi (Lot 9)
+GET    /competitions/:id/routes/:rid/video/uploads/:uid  où reprendre (Upload-Offset)
+PATCH  /competitions/:id/routes/:rid/video/uploads/:uid  un morceau, à l'octet
+                                                          Upload-Offset ; 409 si décalé
+POST   /competitions/:id/routes/:rid/video/uploads/:uid/complete
+                                                          vérifie le contenu réel
+DELETE /competitions/:id/routes/:rid/video/uploads/:uid  abandonne l'envoi
+DELETE /competitions/:id/routes/:rid/video               retire la vidéo téléversée
 GET    /competitions/:id/rounds                format phases uniquement
 POST   /competitions/:id/rounds
 PATCH  /competitions/:id/rounds/:rid
@@ -763,6 +771,7 @@ POST   /judge/ascents/batch              [{ id, ... }] → état par élément
 GET    /public/:slug                     métadonnées de la compétition
 GET    /public/:slug/rankings?category=  classement publié
 GET    /public/:slug/routes?category=
+GET    /public/:slug/routes/:rid/video   vidéo téléversée, avec Range (Lot 9)
 GET    /public/:slug/stream              SSE : ranking_updated, round_status_changed,
                                           route_updated
 ```

@@ -327,3 +327,20 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   tableur. À traiter dans la revue de sécurité du Lot 9 (étape suivante).
 - **Le PDF de résultats n'affiche pas les caractères non latins** (ADR-057) :
   ils sortent en `?`.
+- **Adaptateur de stockage S3 non livré** (ADR-058) : `STORAGE_DRIVER=s3` échoue
+  au démarrage. À faire quand un déploiement sans disque persistant en aura
+  besoin : SDK AWS, conteneur MinIO en CI, envoi multipart (parties de 5 Mio
+  minimum, donc morceaux plus gros que 8 Mio ou regroupés côté serveur).
+- **Supprimer une vidéo téléversée n'est ni réversible ni tracé dans le journal
+  d'activité** (le fichier disparaît du disque). `CLAUDE.md` demande des saisies
+  destructives réversibles et tracées ; une confirmation explicite la précède,
+  mais le journal (`activity_log`, `event_type` restreint par un CHECK) ne
+  l'enregistre pas. À faire si un organisateur perd une vidéo par erreur.
+- **Aucun quota de vidéos par compétition** : seule la taille d'une vidéo est
+  bornée (`VIDEO_MAX_BYTES`). Un club pourrait remplir le disque avec une vidéo
+  par voie. À borner si le disque devient un souci.
+- **Pas de reprise d'envoi entre appareils** : l'identifiant de reprise vit dans
+  le `localStorage` du navigateur qui a commencé l'envoi.
+- **La vidéo téléversée n'est pas mise en cache hors ligne** (elle est
+  volontairement exclue du cache du service worker) : hors réseau, la page
+  publique n'a pas de lecteur.

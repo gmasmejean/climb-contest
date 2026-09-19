@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Dix tests à ce jour :
+Onze tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -44,6 +44,12 @@ Dix tests à ce jour :
   depuis « Mes compétitions » (aperçu avant écriture) ; et vérifie qu'un fichier
   qui n'est pas une sauvegarde est refusé sans rien créer (`ROADMAP.md` Lot 9,
   point 2). Les helpers d'amorçage par API vivent dans `e2e/support/api.ts`.
+
+- `route-video.spec.ts` — téléverse la vidéo d'une voie depuis l'interface : un
+  faux fichier est refusé avec un message clair, une vraie vidéo de 9 Mio (deux
+  morceaux) survit à une coupure réseau provoquée au deuxième, le lecteur public
+  la lit par plages d'octets (`206`), puis la suppression demande confirmation
+  (`ROADMAP.md` Lot 9, point 3).
 
 ## Projets
 

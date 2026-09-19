@@ -162,6 +162,19 @@ Le statut d'un compétiteur (présent/absent/abandon/disqualifié, motif
 toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
 `DECISIONS.md` (ADR-045 à ADR-049) pour les décisions prises pendant ce lot.
 
+## Vidéos de voie
+
+Une voie peut porter un lien YouTube/Vimeo, ou une **vidéo téléversée**
+(voies → Modifier → « Choisir une vidéo »). MP4, MOV et WebM seulement, vérifiés
+sur le contenu réel du fichier et non sur l'extension ; pas de transcodage, donc
+le codec n'est pas contrôlé (H.264/AAC recommandé). L'envoi se fait par morceaux
+de 8 Mo et **reprend tout seul** après une coupure ; fermer l'onglet ne perd pas
+les octets déjà envoyés : rechoisir le même fichier reprend. Taille maximale :
+`VIDEO_MAX_BYTES` (200 Mo par défaut). Les fichiers sont sur le volume Docker
+`uploads-data` — à inclure dans vos sauvegardes. Voir DECISIONS.md ADR-052 et
+ADR-058 (le stockage S3 n'est pas livré : `STORAGE_DRIVER=s3` échoue
+explicitement).
+
 ## Exports et sauvegarde
 
 L'onglet **Exports** d'une compétition télécharge les résultats en PDF (A4,
@@ -183,7 +196,7 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Dix tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Onze tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
@@ -195,4 +208,5 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   depuis l'onglet Pilotage ; une compétition en phases jouée de bout en bout
   (qualification à deux voies, demi-finale, finale, classement final avec
   contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
-  sauvegarde — voir `e2e/README.md` pour les lancer.
+  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise —
+  voir `e2e/README.md` pour les lancer.
