@@ -13,6 +13,7 @@ import type {
   ImportReport,
   ReadinessResponse,
   Round,
+  RoundQualifiersResponse,
   Route,
   UpdateCategoryInput,
   UpdateCompetitionInput,
@@ -142,6 +143,11 @@ export const roundsApi = {
       method: 'POST',
       body: json(input),
     }),
+  // ADR-054 : la liste des qualifiés figée à l'ouverture du tour.
+  qualifiers: (competitionId: string, roundId: string) =>
+    apiFetch<RoundQualifiersResponse>(
+      `/competitions/${competitionId}/round-status/${roundId}/qualifiers`,
+    ),
   reorder: (competitionId: string, orderedIds: string[]) =>
     apiFetch<Round[]>(`/competitions/${competitionId}/rounds/reorder`, {
       method: 'POST',
