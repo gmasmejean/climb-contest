@@ -1630,8 +1630,98 @@ cette seule route.
 
 ---
 
+## ADR-050 — Lot 9 : les qualifiés d'un tour restent dérivés du classement, avec des garde-fous
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 1 (format phases de bout en bout).
+Constat en explorant le code : `getQualifiers` n'est appelé que par le
+classement public (`lib/public-ranking.ts`) ; `expectedCompetitors()`
+(`lib/ascent-progress.ts`), qui alimente l'écran voie du juge, le bootstrap
+hors ligne, le batch et le tableau de bord, renvoie **toute la catégorie**.
+En demi-finale ou finale, un juge verrait donc aussi les non-qualifiés et le
+serveur accepterait leur saisie.
+
+**Décision (actée avec l'utilisateur) :** pas de table de « qualifiés
+figés ». Le roster du tour N+1 est le résultat de `getQualifiers` sur le
+classement du tour N, recalculé. Trois garde-fous le rendent sûr :
+
+- ouvrir le tour N+1 est refusé tant que le tour N n'est pas `closed` ou
+  `published` ;
+- rouvrir le tour N est refusé une fois N+1 ouvert ;
+- une correction organisateur d'un passage du tour N après l'ouverture de
+  N+1 n'est acceptée que si l'ensemble des qualifiés recalculé est
+  **identique** ; sinon elle est refusée avec un message qui dit quoi faire.
+  Ce dernier point est un raffinement décidé pendant la planification : un
+  blocage total de toute correction créerait une impasse, le graphe de
+  statuts (ADR-045) n'autorisant pas N+1 → `draft`.
+
+**Options écartées :** figer les qualifiés en base à l'ouverture de N+1
+(nouvelle table, migration, cas « qualifié figé ≠ classement recalculé » à
+afficher) ; dériver sans aucun blocage (une correction tardive pourrait
+faire sortir un compétiteur qui a déjà grimpé la demi-finale).
+
+**Point de règle encore ouvert :** en cas d'égalité à la limite, tous les
+ex aequo sont qualifiés (SPEC.md §4.4, marqué 🟡 « à confirmer »). C'est ce
+que fait déjà `getQualifiers`. Pas tranché en silence : à faire valider par
+un juge fédéral via `RULES.md`, et affiché à l'organisateur.
+
+---
+
+## ADR-051 — Lot 9 : RGPD — export et purge manuels, avec rappel
+
+**Date :** 2026-09-19
+**Contexte :** SPEC.md §6.4 et §8 laissaient ouverte la politique de
+conservation (proposition : archivage à 2 ans, purge à 5 ans). Les
+compétiteurs sont majoritairement mineurs.
+
+**Décision (actée avec l'utilisateur) :** aucune suppression automatique.
+Deux actions explicites par compétition, réservées au propriétaire du club :
+**export RGPD** (toutes les données personnelles, en JSON) et **purge**
+(confirmation forte, une trace sans donnée personnelle est conservée).
+L'interface affiche un rappel quand une compétition dépasse 2 ans, puis
+5 ans.
+
+**Options écartées :** job planifié qui anonymise à 2 ans et purge à 5 ans,
+avec e-mail d'avertissement — plus conforme sans intervention, mais
+irréversible sans action humaine sur des données de mineurs.
+
+---
+
+## ADR-052 — Lot 9 : vidéos téléversées — refus des formats exotiques, sans transcodage
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 3 : « transcodage ou refus des
+formats exotiques ».
+
+**Décision (actée avec l'utilisateur) :** refus, pas de transcodage. Pas de
+ffmpeg dans l'image Docker (pas de file de jobs, pas d'état « en cours de
+traitement »). Formats acceptés : mp4, mov, webm, vérifiés par la signature
+réelle du conteneur et non par l'extension ; taille maximale configurable.
+Envoi en morceaux reprenable, derrière l'interface `StorageAdapter`
+(SPEC.md §6.1).
+
+**Limite assumée :** sans `ffprobe`, le codec n'est pas vérifié — un mp4 dont
+le codec n'est pas lisible par le navigateur sera accepté puis illisible. Le
+guide organisateur devra le dire (H.264/AAC recommandé).
+
+---
+
+## ADR-053 — Lot 9 : un drapeau de route, jamais un préfixe de chemin, pour exclure la session organisateur
+
+**Date :** 2026-09-19
+**Contexte :** `apps/web/src/router.ts` sautait le bootstrap de session avec
+`to.path.startsWith('/c')`. Ce test attrapait `/competitions/...`, si bien
+qu'un F5 sur une route organisateur perdait la session (TODO.md § Lot 8).
+
+**Décision :** ce qui n'a pas de session organisateur (`/j`, `/j/:token`,
+`/c/:slug`, `/c/:slug/salle`) le déclare par `meta.skipOrganizerSession` sur
+la route. Aucun test de préfixe de chemin pour décider d'un comportement
+d'authentification. Couvert par `router.test.ts` et un rechargement réel dans
+`e2e/organizer-pilotage.spec.ts`.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
-- **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la
-  proposition (archivage 2 ans, purge 5 ans) n'a pas été validée avec le
-  club. À trancher avant le Lot 9, qui implémente l'export/purge.
+- ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
+  ADR-051 (export et purge manuels, avec rappel à 2 et 5 ans).
