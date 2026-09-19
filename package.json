@@ -8,14 +8,15 @@
     "node": ">=22 <23"
   },
   "scripts": {
-    "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck && tsc --noEmit -p infra/scripts/tsconfig.json",
+    "lint": "turbo run lint && eslint infra/scripts",
     "lint:fix": "turbo run lint -- --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "turbo run test",
     "test:e2e": "playwright test",
     "loadtest:sse": "tsx infra/scripts/load-test-sse.ts",
+    "rehearsal": "tsx infra/scripts/rehearsal.ts",
     "build": "turbo run build",
     "dev": "turbo run dev --parallel"
   },

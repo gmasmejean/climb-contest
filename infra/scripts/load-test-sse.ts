@@ -58,7 +58,7 @@ interface Fixture {
 }
 
 /**
- * Format phases : un `PATCH .../rounds/:id { status: 'open' }` suffit à
+ * Format phases : un `POST .../round-status/:id { status: 'open' }` suffit à
  * déclencher un `ranking_updated` réel (routes/rounds.ts), sans avoir à
  * fabriquer un juge ni un passage — le strict minimum pour ce test.
  */
@@ -183,8 +183,10 @@ async function main(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 3000))
   console.log('Ouverture du tour — déclenche le NOTIFY que toutes les connexions attendent…')
   publishedAt.time = performance.now()
-  await apiJson(`/api/v1/competitions/${fixture.competitionId}/rounds/${fixture.roundId}`, {
-    method: 'PATCH',
+  // Lot 8 (ADR-045/046) : le statut d'un tour ne se change plus par le PATCH
+  // générique mais par `POST .../round-status/:roundId`.
+  await apiJson(`/api/v1/competitions/${fixture.competitionId}/round-status/${fixture.roundId}`, {
+    method: 'POST',
     headers: fixture.authHeaders,
     body: JSON.stringify({ status: 'open' }),
   })

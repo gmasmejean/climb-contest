@@ -224,13 +224,12 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   conflict_group IS NULL` ; `['registered', 'present']`) — pas de
   refactorisation pour converger les deux, conformément à « tu ne réécris
   pas ce qui marche ». À revoir si un troisième consommateur apparaît.
-- **`infra/scripts/load-test-sse.ts` a son propre `tsconfig.json` mais
-  n'est couvert par aucun script racine `pnpm typecheck`/`pnpm lint`** — ce
-  dossier n'est pas un paquet du workspace pnpm (pas de `package.json`), et
-  Turbo ne le voit donc pas. Vérifié manuellement (`tsc --noEmit -p
-  infra/scripts/tsconfig.json`, `eslint infra/scripts/load-test-sse.ts`)
-  pendant ce lot, mais rien ne le revérifiera automatiquement à la prochaine
-  modification.
+- ~~`infra/scripts/load-test-sse.ts` n'est couvert par aucun script racine.~~
+  Résolu au Lot 9 : `pnpm typecheck` et `pnpm lint` passent aussi sur
+  `infra/scripts` (`tsc --noEmit -p infra/scripts/tsconfig.json`,
+  `eslint infra/scripts`). En s'y remettant, le script SSE s'est révélé PÉRIMÉ :
+  il déclenchait l'événement par un `PATCH` de statut de tour fermé depuis le
+  Lot 8 ; il passe maintenant par `POST .../round-status/:id`.
 - **Test de limitation de débit publique : vérifie l'en-tête
   `RateLimit-Limit`, pas un vrai épuisement à 429.** Cohérent avec le reste
   du dépôt (aucun test existant n'exerce un vrai 429, `hono-rate-limiter`
