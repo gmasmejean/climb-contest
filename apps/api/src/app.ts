@@ -16,6 +16,7 @@ import { createCompetitionRoutes } from './routes/competitions'
 import { createCompetitorRoutes } from './routes/competitors'
 import { createConflictsRoutes } from './routes/conflicts'
 import { createDashboardRoutes } from './routes/dashboard'
+import { createExportRoutes } from './routes/exports'
 import { createHealthRoute } from './routes/health'
 import { createJudgeAscentRoutes } from './routes/judge-ascents'
 import { createJudgeAuthRoutes } from './routes/judge-auth'
@@ -106,6 +107,10 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/api/v1/competitions/:id', createConflictsRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id', createDashboardRoutes({ ...scopedDeps, now: deps.now }))
   app.route('/api/v1/competitions/:id/ascents', createOrganizerAscentRoutes(scopedDeps))
+  app.route(
+    '/api/v1/competitions/:id/exports',
+    createExportRoutes({ ...scopedDeps, now: deps.now }),
+  )
   app.route(
     '/api/v1/judge',
     createJudgeAuthRoutes({ db: deps.db, judgeTokenSigner: deps.judgeTokenSigner }),
