@@ -38,13 +38,50 @@ export type ChangeRoundStatusInput = z.infer<typeof changeRoundStatusInputSchema
  * Exporté ici (plutôt que dupliqué côté `apps/api` et `apps/web`) pour que
  * le bouton désactivé côté client et le refus serveur reflètent exactement
  * la même règle.
+ *
+ * Lot 9 (ADR-054) : `open → draft` et `closed → draft` sont ajoutées comme
+ * sortie de secours d'un tour ouvert trop tôt. Le graphe les autorise, mais
+ * le serveur les refuse tant que le tour a un passage actif ou un conflit —
+ * ce que ce graphe seul ne peut pas exprimer.
  */
 export const ROUND_STATUS_TRANSITIONS: Record<RoundStatus, RoundStatus[]> = {
   draft: ['open'],
-  open: ['closed'],
-  closed: ['open', 'published'],
+  open: ['closed', 'draft'],
+  closed: ['open', 'published', 'draft'],
   published: ['closed'],
 }
+
+/**
+ * Lot 9 (ADR-054) — la liste des qualifiés figée à l'ouverture d'un tour,
+ * par catégorie. `requested` est le nombre de qualifiés demandé par le tour
+ * précédent (`qualifyingCount`), `count` le nombre réel : `count > requested`
+ * signifie une égalité à la limite (tous les ex aequo passent, SPEC.md §4.4).
+ */
+export const roundQualifiersResponseSchema = z.object({
+  roundId: z.uuid(),
+  categories: z.array(
+    z.object({
+      categoryId: z.uuid(),
+      categoryLabel: z.string(),
+      // Toujours null si aucune liste figée : premier tour de la catégorie,
+      // ou tour ouvert avant le Lot 9 (calculé à la volée).
+      frozenAt: z.iso.datetime().nullable(),
+      requested: z.number().int().positive().nullable(),
+      count: z.number().int().nonnegative(),
+      tiedAtCutoff: z.boolean(),
+      competitors: z.array(
+        z.object({
+          competitorId: z.uuid(),
+          bib: z.number().int().nullable(),
+          firstName: z.string(),
+          lastName: z.string(),
+          sourceRank: z.number().int().positive(),
+        }),
+      ),
+    }),
+  ),
+})
+export type RoundQualifiersResponse = z.infer<typeof roundQualifiersResponseSchema>
 
 export const reorderRoundsInputSchema = z.object({
   orderedIds: z.array(z.uuid()).min(1),

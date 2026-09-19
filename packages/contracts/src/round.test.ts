@@ -4,6 +4,7 @@ import {
   changeRoundStatusInputSchema,
   createRoundInputSchema,
   ROUND_STATUS_TRANSITIONS,
+  roundQualifiersResponseSchema,
   setRoundRoutesInputSchema,
   updateRoundInputSchema,
 } from './round'
@@ -55,9 +56,15 @@ describe('changeRoundStatusInputSchema', () => {
 describe('ROUND_STATUS_TRANSITIONS', () => {
   it('est séquentiel, avec réouverture et dépublication possibles', () => {
     expect(ROUND_STATUS_TRANSITIONS.draft).toEqual(['open'])
-    expect(ROUND_STATUS_TRANSITIONS.open).toEqual(['closed'])
-    expect(ROUND_STATUS_TRANSITIONS.closed).toEqual(['open', 'published'])
+    expect(ROUND_STATUS_TRANSITIONS.open).toEqual(['closed', 'draft'])
+    expect(ROUND_STATUS_TRANSITIONS.closed).toEqual(['open', 'published', 'draft'])
     expect(ROUND_STATUS_TRANSITIONS.published).toEqual(['closed'])
+  })
+
+  it('n’autorise le retour en brouillon que depuis open et closed, jamais depuis published (ADR-054)', () => {
+    expect(ROUND_STATUS_TRANSITIONS.open).toContain('draft')
+    expect(ROUND_STATUS_TRANSITIONS.closed).toContain('draft')
+    expect(ROUND_STATUS_TRANSITIONS.published).not.toContain('draft')
   })
 
   it('n’autorise jamais de sauter directement à published depuis draft ou open', () => {
@@ -87,6 +94,48 @@ describe('setRoundRoutesInputSchema', () => {
   it('refuse un identifiant de voie mal formé', () => {
     const result = setRoundRoutesInputSchema.safeParse({
       assignments: [{ routeId: 'r1', categoryId: '0189dcd5-5311-7d40-8db0-9496a2eef37b' }],
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('roundQualifiersResponseSchema', () => {
+  const uuid = '0189dcd5-5311-7d40-8db0-9496a2eef37b'
+
+  it('accepte une catégorie sans liste figée (premier tour ou tour antérieur au Lot 9)', () => {
+    const result = roundQualifiersResponseSchema.safeParse({
+      roundId: uuid,
+      categories: [
+        {
+          categoryId: uuid,
+          categoryLabel: 'U16 Femme',
+          frozenAt: null,
+          requested: null,
+          count: 0,
+          tiedAtCutoff: false,
+          competitors: [],
+        },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('refuse un rang source inférieur à 1', () => {
+    const result = roundQualifiersResponseSchema.safeParse({
+      roundId: uuid,
+      categories: [
+        {
+          categoryId: uuid,
+          categoryLabel: 'U16 Femme',
+          frozenAt: '2026-09-19T10:00:00.000Z',
+          requested: 10,
+          count: 1,
+          tiedAtCutoff: false,
+          competitors: [
+            { competitorId: uuid, bib: 1, firstName: 'Léa', lastName: 'Martin', sourceRank: 0 },
+          ],
+        },
+      ],
     })
     expect(result.success).toBe(false)
   })
