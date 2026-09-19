@@ -49,23 +49,27 @@ const router = createRouter({
       path: '/j/:token',
       name: 'judge-access',
       component: () => import('./pages/judge/JudgeAccess.vue'),
+      meta: { skipOrganizerSession: true },
     },
     {
       // Page publique (ROADMAP.md Lot 7) : ni auth ni brouillon, comme `/j`.
       path: '/c/:slug',
       name: 'public-competition',
       component: () => import('./pages/public/PublicCompetition.vue'),
+      meta: { skipOrganizerSession: true },
     },
     {
       path: '/c/:slug/salle',
       name: 'public-room-screen',
       component: () => import('./pages/public/PublicRoomScreen.vue'),
+      meta: { skipOrganizerSession: true },
     },
     {
       // `JudgeLayout` monte le bandeau de synchronisation UNE SEULE FOIS
       // (Lot 6, ROADMAP.md point 6) pour les trois écrans juge authentifiés.
       path: '/j',
       component: () => import('./pages/judge/JudgeLayout.vue'),
+      meta: { skipOrganizerSession: true },
       children: [
         {
           path: 'home',
@@ -98,7 +102,12 @@ router.beforeEach(async (to) => {
   // sinon la navigation ENTIÈRE avant même d'atteindre la garde ci-dessous.
   // La page publique (`/c`, Lot 7) n'a pas non plus de session organisateur
   // — même logique, étendue par extension d'ADR-038.
-  if (!bootstrapped && !to.path.startsWith('/j') && !to.path.startsWith('/c')) {
+  //
+  // Le drapeau est porté par la route (`meta.skipOrganizerSession`), jamais
+  // déduit d'un préfixe de chemin : un `startsWith('/c')` attrapait aussi
+  // `/competitions/...`, si bien qu'un F5 sur une route organisateur ne
+  // restaurait pas la session (TODO.md § Lot 8, corrigé au Lot 9).
+  if (!bootstrapped && !to.meta.skipOrganizerSession) {
     bootstrapped = true
     try {
       await bootstrapSession()
