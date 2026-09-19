@@ -34,7 +34,17 @@ const { data, isPending, isError } = useQuery({
           >
         </p>
 
-        <template v-if="routeItem.videoUrl">
+        <!-- Vidéo téléversée (Lot 9, ADR-058) : lue depuis l'API avec `Range`. -->
+        <video
+          v-if="routeItem.hasUploadedVideo"
+          class="mt-2 aspect-video w-full rounded-lg bg-black"
+          controls
+          preload="metadata"
+          playsinline
+          :src="`/api/v1/public/${slug}/routes/${routeItem.id}/video`"
+          :aria-label="`Vidéo d'enchaînement de la voie ${routeItem.number}`"
+        />
+        <template v-else-if="routeItem.videoUrl">
           <div
             v-if="parseVideoEmbed(routeItem.videoUrl)"
             class="mt-2 aspect-video overflow-hidden rounded-lg bg-gray-100"

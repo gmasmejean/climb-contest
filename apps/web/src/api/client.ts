@@ -97,32 +97,43 @@ function filenameFrom(response: Response, fallback: string): string {
 }
 
 /**
- * Télécharge un fichier protégé par le jeton organisateur. Un simple lien
- * `<a href>` ne peut pas porter l'en-tête `Authorization` : on récupère donc le
- * contenu avec `fetch` puis on le remet au navigateur (exports, Lot 9). Même
- * reprise sur 401 que `apiFetch`.
+ * `fetch` authentifié qui renvoie la réponse brute (ni corps JSON ni erreur
+ * levée) : pour ce qui n'est pas du JSON — téléchargements, envoi d'octets.
+ * Même reprise sur 401 que `apiFetch` : le jeton d'accès dure 15 minutes, un
+ * envoi de vidéo plus long doit le renouveler en cours de route.
  */
+export async function apiRawFetch(
+  path: string,
+  init: RequestInit = {},
+  allowRetry = true,
+): Promise<Response> {
+  const headers = new Headers(init.headers)
+  if (accessToken.value) headers.set('Authorization', `Bearer ${accessToken.value}`)
+  const response = await fetch(`/api/v1${path}`, { ...init, headers, credentials: 'include' })
+  if (response.status === 401 && allowRetry && (await refreshSession())) {
+    return apiRawFetch(path, init, false)
+  }
+  return response
+}
+
+/** Transforme une réponse d'erreur (problem+json) en `ApiError`. */
+export async function errorFromResponse(response: Response): Promise<ApiError> {
+  let body: ProblemBody | undefined
+  try {
+    body = (await response.json()) as ProblemBody
+  } catch {
+    body = undefined
+  }
+  return new ApiError(response.status, body?.title ?? 'Erreur', body?.detail)
+}
+
+/** Télécharge un fichier protégé par le jeton organisateur (exports, Lot 9). */
 export async function apiDownload(
   path: string,
   fallbackFilename: string,
-  allowRetry = true,
 ): Promise<{ blob: Blob; filename: string }> {
-  const headers = new Headers()
-  if (accessToken.value) headers.set('Authorization', `Bearer ${accessToken.value}`)
-  const response = await fetch(`/api/v1${path}`, { headers, credentials: 'include' })
-
-  if (response.status === 401 && allowRetry && (await refreshSession())) {
-    return apiDownload(path, fallbackFilename, false)
-  }
-  if (!response.ok) {
-    let body: ProblemBody | undefined
-    try {
-      body = (await response.json()) as ProblemBody
-    } catch {
-      body = undefined
-    }
-    throw new ApiError(response.status, body?.title ?? 'Erreur', body?.detail)
-  }
+  const response = await apiRawFetch(path)
+  if (!response.ok) throw await errorFromResponse(response)
   return { blob: await response.blob(), filename: filenameFrom(response, fallbackFilename) }
 }
 

@@ -46,7 +46,10 @@ export default defineConfig({
         // par `packages/sync`, jamais dupliqués au niveau du service worker.
         runtimeCaching: [
           {
-            urlPattern: ({ url }: { url: URL }) => url.pathname.startsWith('/api/'),
+            // Pas les vidéos téléversées (Lot 9) : plusieurs dizaines de Mo, lues par
+            // plages d'octets — jamais à mettre dans le Cache Storage.
+            urlPattern: ({ url }: { url: URL }) =>
+              url.pathname.startsWith('/api/') && !url.pathname.endsWith('/video'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-get-cache',

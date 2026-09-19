@@ -57,8 +57,25 @@ describe('publicRouteSchema — aucune donnée organisateur', () => {
       sector: 'Mur nord',
       color: 'rouge',
       videoUrl: 'https://youtu.be/abc123',
+      hasUploadedVideo: false,
     })
     expect(result.success).toBe(true)
+  })
+
+  it('annonce une vidéo téléversée par un simple booléen, jamais l’identifiant interne de l’asset (Lot 9)', () => {
+    const route = {
+      id: uuid,
+      number: 3,
+      name: null,
+      holdCount: 40,
+      sector: null,
+      color: null,
+      videoUrl: null,
+      hasUploadedVideo: true,
+    }
+    expect(publicRouteSchema.safeParse(route).success).toBe(true)
+    expect(publicRouteSchema.safeParse({ ...route, videoAssetId: otherUuid }).success).toBe(false)
+    expect(publicRouteSchema.safeParse({ ...route, hasUploadedVideo: undefined }).success).toBe(false)
   })
 
   it('rejette les champs inconnus (aucune fuite de champ organisateur)', () => {
@@ -70,6 +87,7 @@ describe('publicRouteSchema — aucune donnée organisateur', () => {
       sector: null,
       color: null,
       videoUrl: null,
+      hasUploadedVideo: false,
       notes: 'commentaire interne organisateur',
     })
     expect(result.success).toBe(false)
