@@ -57,7 +57,7 @@ export async function computeDashboard(
   const closedRoundCategoryRoutes = new Map<string, { roundId: string; categoryId: string; routeIds: string[] }>()
 
   for (const rr of roundRoutes) {
-    const expected = await expectedCompetitors(db, competitionId, [rr.categoryId])
+    const expected = await expectedCompetitors(db, competitionId, [rr.categoryId], rr.roundId)
     const active = await activeAscentsFor(db, rr.roundId, rr.routeId, expected.map((e) => e.id))
     const lastAscentAt = [...active.values()].reduce<Date | null>(
       (max, a) => (max === null || a.recordedAt > max ? a.recordedAt : max),
@@ -125,7 +125,7 @@ export async function computeDashboard(
   }
 
   for (const group of closedRoundCategoryRoutes.values()) {
-    const expected = await expectedCompetitors(db, competitionId, [group.categoryId])
+    const expected = await expectedCompetitors(db, competitionId, [group.categoryId], group.roundId)
     if (expected.length === 0) continue
     const activeRows = await db.query.ascent.findMany({
       where: and(

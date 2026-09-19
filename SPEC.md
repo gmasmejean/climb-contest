@@ -1,10 +1,11 @@
 # SPEC.md — Spécification fonctionnelle et technique
 
 **Projet :** application de gestion de compétitions d'escalade de difficulté
-**Version :** 0.2 — arbitrages du Lot 0 intégrés, voir `DECISIONS.md`
+**Version :** 0.3 — arbitrages du Lot 0 et du Lot 9 intégrés, voir `DECISIONS.md`
 **Statut :** les points encore marqués 🟡 sont ouverts. La plupart ont été
-arbitrés pendant le Lot 0 (ADR-001 à ADR-016 dans `DECISIONS.md`) ; seule la
-politique RGPD reste à trancher avant le Lot 9.
+arbitrés pendant le Lot 0 (ADR-001 à ADR-016 dans `DECISIONS.md`) ; la politique
+RGPD l'a été au Lot 9 (ADR-051). Reste ouverte la règle d'égalité à la limite
+de qualification (§ 4.4), à faire valider par un juge fédéral.
 
 ---
 
@@ -705,7 +706,15 @@ GET    /competitions/:id/routes
 POST   /competitions/:id/routes
 PATCH  /competitions/:id/routes/:rid
 POST   /competitions/:id/routes/reorder        { orderedIds } — renumérote
-POST   /competitions/:id/routes/:rid/video     (upload ou lien — Lot 9)
+POST   /competitions/:id/routes/:rid/video/uploads       { sizeBytes, mimeType }
+                                                          → ouvre un envoi (Lot 9)
+GET    /competitions/:id/routes/:rid/video/uploads/:uid  où reprendre (Upload-Offset)
+PATCH  /competitions/:id/routes/:rid/video/uploads/:uid  un morceau, à l'octet
+                                                          Upload-Offset ; 409 si décalé
+POST   /competitions/:id/routes/:rid/video/uploads/:uid/complete
+                                                          vérifie le contenu réel
+DELETE /competitions/:id/routes/:rid/video/uploads/:uid  abandonne l'envoi
+DELETE /competitions/:id/routes/:rid/video               retire la vidéo téléversée
 GET    /competitions/:id/rounds                format phases uniquement
 POST   /competitions/:id/rounds
 PATCH  /competitions/:id/rounds/:rid
@@ -731,6 +740,23 @@ POST   /competitions/:id/qrcodes.pdf           un POST, pas un GET : inclut
                                                 client fournit pour les autres
                                                 (ADR-026)
 
+POST   /competitions/:id/round-status/:rid     { status } — transitions de tour ;
+                                                ouvrir fige les qualifiés
+                                                (ADR-054)
+GET    /competitions/:id/round-status/:rid/qualifiers
+                                                liste figée des qualifiés, par
+                                                catégorie
+GET    /competitions/:id/exports/results.csv   ?category= — classement, ce que le
+                                                public voit (Lot 9)
+GET    /competitions/:id/exports/results.pdf   ?category= — mise en page A4
+GET    /competitions/:id/exports/competition.json
+                                                sauvegarde complète, sans
+                                                secret (ADR-056)
+GET    /competitions/:id/gdpr-export           données personnelles (propriétaire, Lot 9)
+DELETE /competitions/:id/personal-data         { confirmName } — purge irréversible
+                                                (propriétaire, ADR-051)
+POST   /competitions/import                    { mode: 'preview'|'commit', backup }
+                                                → nouvelle compétition (ADR-056)
 GET    /competitions/:id/dashboard             état temps réel pour l'orga
 GET    /competitions/:id/conflicts
 POST   /competitions/:id/conflicts/:cid/resolve
@@ -749,6 +775,7 @@ POST   /judge/ascents/batch              [{ id, ... }] → état par élément
 GET    /public/:slug                     métadonnées de la compétition
 GET    /public/:slug/rankings?category=  classement publié
 GET    /public/:slug/routes?category=
+GET    /public/:slug/routes/:rid/video   vidéo téléversée, avec Range (Lot 9)
 GET    /public/:slug/stream              SSE : ranking_updated, round_status_changed,
                                           route_updated
 ```
@@ -784,10 +811,12 @@ Arbitré pendant le Lot 0 — détail et justification dans `DECISIONS.md` :
 9. ~~Vidéos : téléversement direct ou lien externe en v1 ?~~ Déjà tranché par
    `ROADMAP.md` — lien externe au Lot 3, téléversement au Lot 9.
 
-**Encore ouvert :**
+**Tranché au Lot 9 :**
 
-8. Politique de conservation et de purge des données personnelles (RGPD) —
-   à trancher avec le club avant le Lot 9.
+8. ~~Politique de conservation et de purge des données personnelles (RGPD).~~
+   Export et purge manuels, réservés au propriétaire du club, avec un rappel à
+   2 ans (archivage) et 5 ans (purge) — ADR-051. Rien n'est jamais supprimé
+   automatiquement.
 
 ---
 

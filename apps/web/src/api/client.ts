@@ -89,3 +89,62 @@ export async function apiFetch<T>(
   }
   return (await response.json()) as T
 }
+
+/** Nom de fichier proposé par le serveur (`Content-Disposition: attachment; filename="…"`). */
+function filenameFrom(response: Response, fallback: string): string {
+  const header = response.headers.get('content-disposition') ?? ''
+  return /filename="([^"]+)"/.exec(header)?.[1] ?? fallback
+}
+
+/**
+ * `fetch` authentifié qui renvoie la réponse brute (ni corps JSON ni erreur
+ * levée) : pour ce qui n'est pas du JSON — téléchargements, envoi d'octets.
+ * Même reprise sur 401 que `apiFetch` : le jeton d'accès dure 15 minutes, un
+ * envoi de vidéo plus long doit le renouveler en cours de route.
+ */
+export async function apiRawFetch(
+  path: string,
+  init: RequestInit = {},
+  allowRetry = true,
+): Promise<Response> {
+  const headers = new Headers(init.headers)
+  if (accessToken.value) headers.set('Authorization', `Bearer ${accessToken.value}`)
+  const response = await fetch(`/api/v1${path}`, { ...init, headers, credentials: 'include' })
+  if (response.status === 401 && allowRetry && (await refreshSession())) {
+    return apiRawFetch(path, init, false)
+  }
+  return response
+}
+
+/** Transforme une réponse d'erreur (problem+json) en `ApiError`. */
+export async function errorFromResponse(response: Response): Promise<ApiError> {
+  let body: ProblemBody | undefined
+  try {
+    body = (await response.json()) as ProblemBody
+  } catch {
+    body = undefined
+  }
+  return new ApiError(response.status, body?.title ?? 'Erreur', body?.detail)
+}
+
+/** Télécharge un fichier protégé par le jeton organisateur (exports, Lot 9). */
+export async function apiDownload(
+  path: string,
+  fallbackFilename: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await apiRawFetch(path)
+  if (!response.ok) throw await errorFromResponse(response)
+  return { blob: await response.blob(), filename: filenameFrom(response, fallbackFilename) }
+}
+
+/** Déclenche l'enregistrement d'un contenu déjà en mémoire, sans quitter la page. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}

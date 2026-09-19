@@ -5,6 +5,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { ApiError, apiFetch } from '../api/client'
 import { setSession } from '../api/session'
+import { UNREACHABLE_MESSAGE } from '../lib/network-errors'
 
 const route = useRoute()
 const router = useRouter()
@@ -86,7 +87,9 @@ async function onSubmit(): Promise<void> {
         needsVerification.value = true
       }
     } else {
-      formError.value = 'Une erreur inattendue est survenue.'
+      // `fetch` rejette quand le réseau est coupé : ce n'est pas une erreur
+      // « inattendue », c'est un serveur injoignable — et on dit quoi faire.
+      formError.value = UNREACHABLE_MESSAGE
     }
   } finally {
     submitting.value = false

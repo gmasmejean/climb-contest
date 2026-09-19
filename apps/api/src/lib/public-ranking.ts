@@ -8,6 +8,7 @@ import {
   competition,
   competitor,
   round,
+  roundQualifier,
   roundRoute,
   route,
   type Database,
@@ -48,14 +49,14 @@ interface RawAscentRow {
   climbTimeMs: number | null
 }
 
-interface RouteMeta {
+export interface RouteMeta {
   routeId: string
   number: number
   name: string | null
   holdCount: number
 }
 
-interface RoundMeta {
+export interface RoundMeta {
   roundId: string
   type: RoundType
   status: RoundStatus
@@ -64,7 +65,7 @@ interface RoundMeta {
   routes: RouteMeta[]
 }
 
-interface RoundComputation {
+export interface RoundComputation {
   roundId: string
   type: RoundType
   status: RoundStatus
@@ -92,7 +93,7 @@ export async function assembleCategoryRanking(
   now: () => Date = () => new Date(),
 ): Promise<PublicRankingResponse> {
   const engine = getScoringEngine(currentCompetition.scoringEngineId)
-  const roundMetas = await loadContributingRounds(db, currentCompetition.id, categoryId)
+  const { roundMetas, perRound } = await computeCategoryRounds(db, currentCompetition, categoryId)
 
   if (roundMetas.length === 0) {
     return {
@@ -103,6 +104,67 @@ export async function assembleCategoryRanking(
       entries: [],
     }
   }
+
+  const competitionContext: CompetitionContext = {
+    roundRankings: perRound.map((r) => ({ roundId: r.roundId, ranking: r.ranking })),
+  }
+  const finalRanking = engine.rankFinal(competitionContext)
+
+  const competitorById = await loadCompetitorDisplayInfo(db, currentCompetition.id, categoryId)
+  const provisional = perRound.some((r) => r.status !== 'published')
+
+  const entries: PublicRankingEntry[] = finalRanking.entries
+    .slice()
+    .sort((a, b) => a.rank - b.rank)
+    .map((entry) => {
+      const info = competitorById.get(entry.competitorId)
+      const rounds = perRound
+        .filter((r) => r.ranking.entries.some((e) => e.competitorId === entry.competitorId))
+        .map((r) => buildRoundDetail(r, entry.competitorId))
+
+      return {
+        rank: entry.rank,
+        bib: info?.bib ?? null,
+        firstName: info?.firstName ?? '',
+        lastName: info?.lastName ?? '',
+        club: info?.clubName ?? null,
+        reachedRoundId: entry.reachedRoundId,
+        rounds,
+      }
+    })
+
+  return {
+    categoryId,
+    started: true,
+    provisional,
+    generatedAt: now().toISOString(),
+    entries,
+  }
+}
+
+/**
+ * Calcule, tour par tour, le classement d'une catégorie — la boucle
+ * partagée entre le classement public et la figeage des qualifiés
+ * (`lib/round-qualifiers.ts`, ADR-054).
+ *
+ * Le roster d'un tour est, par ordre de priorité : (1) la liste figée en
+ * base pour ce (tour, catégorie) — elle fait foi dès qu'elle existe, quels
+ * que soient les statuts ou corrections ultérieurs ; (2) au premier tour,
+ * toute la catégorie ; (3) sinon, les qualifiés recalculés du tour précédent,
+ * comme avant le Lot 9 (tours ouverts avant l'introduction de la figeage).
+ *
+ * `stopAfterRoundId` : s'arrête après avoir calculé ce tour (inclus), pour ne
+ * pas payer les tours suivants quand on n'en a pas besoin.
+ */
+export async function computeCategoryRounds(
+  db: Database,
+  currentCompetition: Pick<CompetitionRow, 'id' | 'format' | 'scoringEngineId' | 'scoringConfig'>,
+  categoryId: string,
+  options: { stopAfterRoundId?: string } = {},
+): Promise<{ roundMetas: readonly RoundMeta[]; perRound: RoundComputation[] }> {
+  const engine = getScoringEngine(currentCompetition.scoringEngineId)
+  const roundMetas = await loadContributingRounds(db, currentCompetition.id, categoryId)
+  if (roundMetas.length === 0) return { roundMetas, perRound: [] }
 
   const fullRoster = await loadFullCategoryRoster(db, currentCompetition.id, categoryId)
 
@@ -118,7 +180,10 @@ export async function assembleCategoryRanking(
   let previousRoundRanking: RoundRanking | undefined
 
   for (const roundMeta of roundMetas) {
-    if (perRound.length > 0) {
+    const frozen = await loadFrozenRoster(db, roundMeta.roundId, categoryId)
+    if (frozen) {
+      roster = frozen
+    } else if (perRound.length > 0) {
       const previous = roundMetas[perRound.length - 1]
       if (!previous) throw new Error('Incohérence interne : tour précédent introuvable.')
       // Roster vide (catégorie sans compétiteur) : `getQualifiers` refuse un
@@ -179,43 +244,28 @@ export async function assembleCategoryRanking(
       ascentsByRoute,
     })
     previousRoundRanking = ranking
+    if (roundMeta.roundId === options.stopAfterRoundId) break
   }
 
-  const competitionContext: CompetitionContext = {
-    roundRankings: perRound.map((r) => ({ roundId: r.roundId, ranking: r.ranking })),
-  }
-  const finalRanking = engine.rankFinal(competitionContext)
+  return { roundMetas, perRound }
+}
 
-  const competitorById = await loadCompetitorDisplayInfo(db, currentCompetition.id, categoryId)
-  const provisional = perRound.some((r) => r.status !== 'published')
-
-  const entries: PublicRankingEntry[] = finalRanking.entries
-    .slice()
-    .sort((a, b) => a.rank - b.rank)
-    .map((entry) => {
-      const info = competitorById.get(entry.competitorId)
-      const rounds = perRound
-        .filter((r) => r.ranking.entries.some((e) => e.competitorId === entry.competitorId))
-        .map((r) => buildRoundDetail(r, entry.competitorId))
-
-      return {
-        rank: entry.rank,
-        bib: info?.bib ?? null,
-        firstName: info?.firstName ?? '',
-        lastName: info?.lastName ?? '',
-        club: info?.clubName ?? null,
-        reachedRoundId: entry.reachedRoundId,
-        rounds,
-      }
-    })
-
-  return {
-    categoryId,
-    started: true,
-    provisional,
-    generatedAt: now().toISOString(),
-    entries,
-  }
+/**
+ * La liste figée d'un (tour, catégorie), ou `null` s'il n'y en a pas — premier
+ * tour de la catégorie, tour ouvert avant le Lot 9, ou catégorie sans aucun
+ * qualifié (indiscernable d'une absence de figeage, sans conséquence : il n'y
+ * a alors personne à restreindre).
+ */
+async function loadFrozenRoster(
+  db: Database,
+  roundId: string,
+  categoryId: string,
+): Promise<readonly string[] | null> {
+  const rows = await db
+    .select({ competitorId: roundQualifier.competitorId })
+    .from(roundQualifier)
+    .where(and(eq(roundQualifier.roundId, roundId), eq(roundQualifier.categoryId, categoryId)))
+  return rows.length === 0 ? null : rows.map((row) => row.competitorId)
 }
 
 function buildRoundDetail(roundComputation: RoundComputation, competitorId: string): PublicRankingRoundDetail {
@@ -225,24 +275,30 @@ function buildRoundDetail(roundComputation: RoundComputation, competitorId: stri
     throw new Error(`Compétiteur ${competitorId} absent du tour ${roundComputation.roundId}.`)
   }
 
-  const routes = roundComputation.routes.map((routeMeta) => {
+  // Une voie sans passage ACTIF pour ce compétiteur n'a pas de détail : pas
+  // encore grimpée, ou passage en conflit non tranché (hors classement tant que
+  // l'organisateur n'a pas choisi, ADR-002). En format phases cela n'arrive
+  // jamais — des DNS sont synthétisés pour tout le roster (ADR-041) —, mais en
+  // contest c'est l'état NORMAL d'une compétition en cours. Trouvé par la
+  // répétition générale du Lot 9 : lever ici faisait répondre 500 au
+  // classement public de toute la catégorie.
+  const routes = roundComputation.routes.flatMap((routeMeta) => {
     const routeRanking = roundComputation.routeRankings.find((rr) => rr.routeId === routeMeta.routeId)
     const rankEntry = routeRanking?.entries.find((e) => e.competitorId === competitorId)
     const ascentEntry = roundComputation.ascentsByRoute.get(routeMeta.routeId)?.get(competitorId)
-    /* v8 ignore next 3 -- toute voie du tour porte une entrée pour chaque membre du roster de ce tour */
-    if (!rankEntry || !ascentEntry) {
-      throw new Error(`Voie ${routeMeta.routeId} incohérente pour le compétiteur ${competitorId}.`)
-    }
-    return {
-      routeId: routeMeta.routeId,
-      routeNumber: routeMeta.number,
-      routeName: routeMeta.name,
-      holdNumber: ascentEntry.holdNumber,
-      modifier: ascentEntry.modifier,
-      isTop: ascentEntry.isTop,
-      status: ascentEntry.status,
-      routeRank: rankEntry.rank,
-    }
+    if (!rankEntry || !ascentEntry) return []
+    return [
+      {
+        routeId: routeMeta.routeId,
+        routeNumber: routeMeta.number,
+        routeName: routeMeta.name,
+        holdNumber: ascentEntry.holdNumber,
+        modifier: ascentEntry.modifier,
+        isTop: ascentEntry.isTop,
+        status: ascentEntry.status,
+        routeRank: rankEntry.rank,
+      },
+    ]
   })
 
   return {

@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception'
 
 import { isInvalidTextRepresentation } from '../lib/pg-errors'
 
-export type ProblemStatus = 400 | 401 | 403 | 404 | 409 | 422 | 423 | 429 | 500
+export type ProblemStatus = 400 | 401 | 403 | 404 | 409 | 413 | 416 | 422 | 423 | 429 | 500
 
 export class ApiError extends Error {
   constructor(

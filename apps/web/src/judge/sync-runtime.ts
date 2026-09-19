@@ -1,7 +1,10 @@
 import { SyncEngine, type QueueItem } from '@climbcontest/sync'
 import { onUnmounted, shallowRef, type Ref } from 'vue'
 
+import { judgeToken } from '../api/judge-session'
+import { bootstrapJudge } from './bootstrap'
 import type { QueuePayload } from './queue-payload'
+import { createRefreshScheduler, refreshRoutesIfQueueIdle } from './refresh-routes'
 import { DexieQueueStorage } from './sync-storage'
 import { HttpSyncTransport } from './sync-transport'
 
@@ -15,6 +18,19 @@ export const syncEngine = new SyncEngine<QueuePayload>(
   new HttpSyncTransport(),
 )
 
+/**
+ * ADR-055 : les voies du juge sont actualisées (nouveau tour ouvert…) aux
+ * mêmes déclencheurs que la file, mais seulement quand elle est vide.
+ */
+export const refreshScheduler = createRefreshScheduler({
+  now: () => Date.now(),
+  refresh: () =>
+    refreshRoutesIfQueueIdle({
+      hasJudgeSession: () => judgeToken.value !== null,
+      bootstrap: bootstrapJudge,
+    }),
+})
+
 let started = false
 
 /**
@@ -25,12 +41,22 @@ let started = false
 export function startSyncRuntime(): void {
   if (started) return
   started = true
-  void syncEngine.onStartup()
+  void syncEngine.onStartup().then(() => refreshScheduler.request())
   window.addEventListener('online', () => {
     syncEngine.onOnline()
+    void refreshScheduler.request()
   })
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') syncEngine.onVisible()
+    if (document.visibilityState === 'visible') {
+      syncEngine.onVisible()
+      void refreshScheduler.request()
+    }
+  })
+  // Une actualisation reportée parce que la file n'était pas vide reprend dès
+  // qu'elle se vide.
+  syncEngine.subscribe((items) => {
+    const waiting = items.some((item) => item.state === 'pending' || item.state === 'sending')
+    if (!waiting) void refreshScheduler.onQueueIdle()
   })
 }
 

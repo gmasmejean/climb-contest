@@ -1,13 +1,47 @@
 <script setup lang="ts">
-import { Badge } from '@climbcontest/ui'
+import { Badge, Button, useToast } from '@climbcontest/ui'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { clearJudgeSession } from '../../api/judge-session'
+import { clearJudgeSession, judgeToken } from '../../api/judge-session'
+import { bootstrapJudge } from '../../judge/bootstrap'
 import { judgeDb } from '../../judge/local-db'
 import { useJudgeRoutesList } from '../../judge/local-store'
+import { refreshRoutesIfQueueIdle, type RefreshOutcome } from '../../judge/refresh-routes'
 import { useLiveQuery } from '../../judge/use-live-query'
 
 const router = useRouter()
+const toast = useToast()
+const refreshing = ref(false)
+
+const REFRESH_MESSAGES: Record<RefreshOutcome, { text: string; tone: 'success' | 'error' }> = {
+  refreshed: { text: 'Vos voies sont à jour.', tone: 'success' },
+  'waiting-for-queue': {
+    text: 'Des saisies attendent d’être envoyées. Patientez que le bandeau indique « À jour », puis réessayez.',
+    tone: 'error',
+  },
+  failed: {
+    text: 'Impossible de joindre le serveur. Vos saisies restent enregistrées sur ce téléphone.',
+    tone: 'error',
+  },
+  'no-session': { text: 'Reconnectez-vous avec votre lien pour actualiser vos voies.', tone: 'error' },
+}
+
+// ADR-055 : jamais d'écrasement d'une saisie en attente — le bouton est la
+// version manuelle de l'actualisation automatique.
+async function refreshRoutes(): Promise<void> {
+  refreshing.value = true
+  try {
+    const outcome = await refreshRoutesIfQueueIdle({
+      hasJudgeSession: () => judgeToken.value !== null,
+      bootstrap: bootstrapJudge,
+    })
+    const message = REFRESH_MESSAGES[outcome]
+    toast.show(message.text, message.tone)
+  } finally {
+    refreshing.value = false
+  }
+}
 // Lecture locale seule (ADR-012, SPEC.md § 6.3) — jamais de dépendance
 // réseau pour afficher cet écran.
 const routes = useJudgeRoutesList()
@@ -40,7 +74,12 @@ function logout(): void {
     </template>
 
     <template v-else>
-      <h1 class="text-2xl font-bold text-gray-900">Vos voies</h1>
+      <div class="flex items-center justify-between gap-3">
+        <h1 class="text-2xl font-bold text-gray-900">Vos voies</h1>
+        <Button variant="secondary" :disabled="refreshing" @click="refreshRoutes">
+          Actualiser mes voies
+        </Button>
+      </div>
       <ul class="flex flex-col gap-3">
         <li v-for="r in routes" :key="r.id">
           <RouterLink

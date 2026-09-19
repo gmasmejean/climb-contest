@@ -46,7 +46,11 @@ describe('usePublicStream', () => {
 
   it('ouvre une connexion vers le bon slug au démarrage', () => {
     const onEvent = vi.fn()
-    const stream = usePublicStream('abc123', { onEvent }, { createEventSource: (url) => new FakeEventSource(url) as unknown as EventSource })
+    const stream = usePublicStream(
+      'abc123',
+      { onEvent },
+      { createEventSource: (url) => new FakeEventSource(url) as unknown as EventSource },
+    )
     stream.start()
 
     expect(FakeEventSource.instances).toHaveLength(1)
@@ -153,9 +157,13 @@ describe('usePublicStream', () => {
   })
 
   it('stop() ferme la connexion et empêche toute reconnexion ultérieure', () => {
-    const stream = usePublicStream('abc123', { onEvent: vi.fn() }, {
-      createEventSource: (url) => new FakeEventSource(url) as unknown as EventSource,
-    })
+    const stream = usePublicStream(
+      'abc123',
+      { onEvent: vi.fn() },
+      {
+        createEventSource: (url) => new FakeEventSource(url) as unknown as EventSource,
+      },
+    )
     stream.start()
     const first = lastInstance()
     stream.stop()
@@ -164,5 +172,107 @@ describe('usePublicStream', () => {
     first.dispatch('error')
     vi.advanceTimersByTime(60_000)
     expect(FakeEventSource.instances).toHaveLength(1)
+  })
+
+  describe('chien de garde (mode dégradé)', () => {
+    const factory = {
+      createEventSource: (url: string) => new FakeEventSource(url) as unknown as EventSource,
+    }
+
+    it('une connexion silencieuse depuis plus de 65 s est déclarée morte : « reconnexion » et nouvelle tentative', () => {
+      const onStateChange = vi.fn()
+      const stream = usePublicStream(
+        'abc',
+        { onEvent: vi.fn(), onStateChange },
+        { ...factory, random: () => 0.5 },
+      )
+      stream.start()
+      lastInstance().dispatch('open')
+      expect(onStateChange).toHaveBeenLastCalledWith('open')
+
+      vi.advanceTimersByTime(60_000)
+      expect(onStateChange).toHaveBeenLastCalledWith('open')
+
+      vi.advanceTimersByTime(10_000)
+      expect(onStateChange).toHaveBeenLastCalledWith('reconnecting')
+      expect(FakeEventSource.instances[0]?.closed).toBe(true)
+
+      vi.advanceTimersByTime(2_000)
+      expect(FakeEventSource.instances).toHaveLength(2)
+      stream.stop()
+    })
+
+    it('un ping remet le compteur à zéro : une connexion qui vit n’est jamais déclarée morte', () => {
+      const onStateChange = vi.fn()
+      const stream = usePublicStream('abc', { onEvent: vi.fn(), onStateChange }, factory)
+      stream.start()
+      lastInstance().dispatch('open')
+
+      for (let i = 0; i < 6; i += 1) {
+        vi.advanceTimersByTime(25_000)
+        lastInstance().dispatch('ping')
+      }
+
+      expect(onStateChange).not.toHaveBeenCalledWith('reconnecting')
+      expect(FakeEventSource.instances).toHaveLength(1)
+      stream.stop()
+    })
+
+    it('un événement métier compte aussi comme un signe de vie', () => {
+      const onStateChange = vi.fn()
+      const stream = usePublicStream('abc', { onEvent: vi.fn(), onStateChange }, factory)
+      stream.start()
+      lastInstance().dispatch('open')
+
+      vi.advanceTimersByTime(60_000)
+      lastInstance().dispatch(
+        'ranking_updated',
+        JSON.stringify({ type: 'ranking_updated', competitionId: 'c', categoryId: 'k' }),
+      )
+      vi.advanceTimersByTime(60_000)
+
+      expect(onStateChange).not.toHaveBeenCalledWith('reconnecting')
+      stream.stop()
+    })
+
+    it('« offline » du navigateur passe tout de suite en reconnexion, sans attendre le chien de garde', () => {
+      const onStateChange = vi.fn()
+      const stream = usePublicStream('abc', { onEvent: vi.fn(), onStateChange }, factory)
+      stream.start()
+      lastInstance().dispatch('open')
+
+      window.dispatchEvent(new Event('offline'))
+
+      expect(onStateChange).toHaveBeenLastCalledWith('reconnecting')
+      expect(FakeEventSource.instances[0]?.closed).toBe(true)
+      stream.stop()
+    })
+
+    it('repasse à « open » quand la connexion revient', () => {
+      const onStateChange = vi.fn()
+      const stream = usePublicStream('abc', { onEvent: vi.fn(), onStateChange }, factory)
+      stream.start()
+      lastInstance().dispatch('open')
+      window.dispatchEvent(new Event('offline'))
+
+      window.dispatchEvent(new Event('online'))
+      lastInstance().dispatch('open')
+
+      expect(onStateChange).toHaveBeenLastCalledWith('open')
+      stream.stop()
+    })
+
+    it('stop() arrête le chien de garde : aucune reconnexion après l’arrêt', () => {
+      const onStateChange = vi.fn()
+      const stream = usePublicStream('abc', { onEvent: vi.fn(), onStateChange }, factory)
+      stream.start()
+      lastInstance().dispatch('open')
+      stream.stop()
+
+      vi.advanceTimersByTime(300_000)
+
+      expect(FakeEventSource.instances).toHaveLength(1)
+      expect(onStateChange).not.toHaveBeenCalledWith('reconnecting')
+    })
   })
 })

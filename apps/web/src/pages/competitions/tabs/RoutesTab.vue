@@ -6,6 +6,7 @@ import { computed, reactive, ref } from 'vue'
 
 import { ApiError } from '../../../api/client'
 import { categoriesApi, routesApi } from '../../../api/competitions'
+import RouteVideoUploader from '../RouteVideoUploader.vue'
 
 const props = defineProps<{ competitionId: string }>()
 
@@ -21,6 +22,10 @@ const { data: categories } = useQuery({
   queryKey: categoriesKey,
   queryFn: () => categoriesApi.list(props.competitionId),
 })
+
+async function onVideoChanged(): Promise<void> {
+  await refresh()
+}
 
 async function refresh(): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: routesKey })
@@ -39,6 +44,9 @@ function emptyForm() {
 }
 const form = reactive(emptyForm())
 const editingRouteId = ref<string | null>(null)
+const editingHasVideo = computed(
+  () => routes.value?.find((r) => r.id === editingRouteId.value)?.videoAssetId != null,
+)
 const formError = ref('')
 
 function buildPayload() {
@@ -204,6 +212,16 @@ const categoryList = computed(() => categories.value ?? [])
         <TextField v-model="form.color" label="Couleur (optionnelle)" />
         <TextField v-model="form.videoUrl" label="Vidéo (lien, optionnel)" />
       </div>
+      <RouteVideoUploader
+        v-if="editingRouteId"
+        :competition-id="competitionId"
+        :route-id="editingRouteId"
+        :has-video="editingHasVideo"
+        @changed="onVideoChanged"
+      />
+      <p v-else class="text-sm text-gray-600">
+        Enregistrez la voie pour pouvoir y téléverser une vidéo.
+      </p>
       <fieldset class="flex flex-col gap-2">
         <legend class="text-sm font-medium text-gray-900">Catégories concernées</legend>
         <label

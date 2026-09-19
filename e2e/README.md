@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Sept tests à ce jour :
+Seize tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -28,9 +28,38 @@ Sept tests à ce jour :
   saisie (« choisir cette valeur »), corrige le passage retenu, ferme puis
   publie le tour depuis l'onglet Pilotage — le classement public reflète la
   valeur finale, sans marquage « provisoire » (`ROADMAP.md` Lot 8). Amorcé
-  par API (compétition/juge/conflit), navigue uniquement par clics UI
-  jamais un `page.goto` direct vers une route organisateur profonde,
-  voir `TODO.md` § Lot 8 pour le bug pré-existant que ça contourne.
+  par API (compétition/juge/conflit), recharge la page sur une route
+  organisateur profonde pour vérifier que la session est restaurée
+  (régression `TODO.md` § Lot 8, corrigée au Lot 9).
+
+- `phases-full-competition.spec.ts` — une compétition au format phases jouée
+  de bout en bout : la demi-finale ne s'ouvre pas avant la fin de la
+  qualification, la liste des qualifiés est figée à l'ouverture, un juge déjà
+  connecté actualise ses voies (ADR-055) et ne voit que les qualifiés, la
+  finale se départage à la contre-performance, le public voit le classement
+  final (`ROADMAP.md` Lot 9, point 1).
+
+- `exports-backup.spec.ts` — télécharge les résultats en PDF et en CSV et la
+  sauvegarde JSON depuis l'onglet Exports, puis réimporte cette sauvegarde
+  depuis « Mes compétitions » (aperçu avant écriture) ; et vérifie qu'un fichier
+  qui n'est pas une sauvegarde est refusé sans rien créer (`ROADMAP.md` Lot 9,
+  point 2). Les helpers d'amorçage par API vivent dans `e2e/support/api.ts`.
+
+- `route-video.spec.ts` — téléverse la vidéo d'une voie depuis l'interface : un
+  faux fichier est refusé avec un message clair, une vraie vidéo de 9 Mio (deux
+  morceaux) survit à une coupure réseau provoquée au deuxième, le lecteur public
+  la lit par plages d'octets (`206`), puis la suppression demande confirmation
+  (`ROADMAP.md` Lot 9, point 3).
+
+- `gdpr.spec.ts` — le rappel « plus de 5 ans » dans la liste, l'export des
+  données personnelles, puis la purge : le bouton reste inactif tant que le nom
+  exact n'est pas retapé, et plus aucun nom n'apparaît ensuite (`ROADMAP.md`
+  Lot 9, point 4, ADR-051).
+
+- `degraded-mode.spec.ts` — mode dégradé, acteur par acteur (ADR-060) : le
+  tableau de bord organisateur avertit quand le serveur ne répond plus puis se
+  rétablit, la connexion et la liste disent quoi faire, et la page publique garde
+  son classement avec un indicateur honnête (« Reconnexion… », puis « En direct »).
 
 ## Projets
 
@@ -51,6 +80,12 @@ celle déjà documentée dans `TODO.md` pour les conteneurs de test de
 avant de suspecter une régression.
 
 ## Prérequis
+
+Pour lancer la suite COMPLÈTE d'un coup, relevez le plafond des routes
+d'authentification (10 essais / 15 min / adresse, que la suite dépasse avec ses
+~15 connexions) : mettez `AUTH_RATE_LIMIT_MAX=1000` dans `infra/docker/.env`
+avant `docker compose up`. Sans cela, les tests les plus tardifs échouent en
+`429`. À ne JAMAIS faire en production.
 
 La pile complète doit tourner et contenir le compte de démo :
 

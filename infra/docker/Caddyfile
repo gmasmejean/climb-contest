@@ -8,6 +8,20 @@
 	}
 
 	handle {
+		# Revue de sécurité (Lot 9) — en-têtes de l'application web. L'API pose les
+		# siens (`secureHeaders`) : Caddy ne les double pas.
+		# La CSP n'autorise que ce que l'application utilise : ses propres
+		# fichiers, et les lecteurs YouTube (sans cookie) et Vimeo. Pas de script
+		# inline ; `style-src 'unsafe-inline'` seulement pour les attributs `style`
+		# que Vue pose dynamiquement.
+		header {
+			X-Content-Type-Options nosniff
+			X-Frame-Options DENY
+			Referrer-Policy strict-origin-when-cross-origin
+			Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		}
+
 		root * /srv
 		encode gzip
 		try_files {path} /index.html

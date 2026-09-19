@@ -1630,8 +1630,406 @@ cette seule route.
 
 ---
 
+## ADR-050 — Lot 9 : les qualifiés d'un tour restent dérivés du classement, avec des garde-fous
+
+**Statut :** remplacée par ADR-054 (2026-09-19, avant tout code).
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 1 (format phases de bout en bout).
+Constat en explorant le code : `getQualifiers` n'est appelé que par le
+classement public (`lib/public-ranking.ts`) ; `expectedCompetitors()`
+(`lib/ascent-progress.ts`), qui alimente l'écran voie du juge, le bootstrap
+hors ligne, le batch et le tableau de bord, renvoie **toute la catégorie**.
+En demi-finale ou finale, un juge verrait donc aussi les non-qualifiés et le
+serveur accepterait leur saisie.
+
+**Décision (actée avec l'utilisateur) :** pas de table de « qualifiés
+figés ». Le roster du tour N+1 est le résultat de `getQualifiers` sur le
+classement du tour N, recalculé. Trois garde-fous le rendent sûr :
+
+- ouvrir le tour N+1 est refusé tant que le tour N n'est pas `closed` ou
+  `published` ;
+- rouvrir le tour N est refusé une fois N+1 ouvert ;
+- une correction organisateur d'un passage du tour N après l'ouverture de
+  N+1 n'est acceptée que si l'ensemble des qualifiés recalculé est
+  **identique** ; sinon elle est refusée avec un message qui dit quoi faire.
+  Ce dernier point est un raffinement décidé pendant la planification : un
+  blocage total de toute correction créerait une impasse, le graphe de
+  statuts (ADR-045) n'autorisant pas N+1 → `draft`.
+
+**Options écartées :** figer les qualifiés en base à l'ouverture de N+1
+(nouvelle table, migration, cas « qualifié figé ≠ classement recalculé » à
+afficher) ; dériver sans aucun blocage (une correction tardive pourrait
+faire sortir un compétiteur qui a déjà grimpé la demi-finale).
+
+**Point de règle encore ouvert :** en cas d'égalité à la limite, tous les
+ex aequo sont qualifiés (SPEC.md §4.4, marqué 🟡 « à confirmer »). C'est ce
+que fait déjà `getQualifiers`. Pas tranché en silence : à faire valider par
+un juge fédéral via `RULES.md`, et affiché à l'organisateur.
+
+---
+
+## ADR-051 — Lot 9 : RGPD — export et purge manuels, avec rappel
+
+**Date :** 2026-09-19
+**Contexte :** SPEC.md §6.4 et §8 laissaient ouverte la politique de
+conservation (proposition : archivage à 2 ans, purge à 5 ans). Les
+compétiteurs sont majoritairement mineurs.
+
+**Décision (actée avec l'utilisateur) :** aucune suppression automatique.
+Deux actions explicites par compétition, réservées au propriétaire du club :
+**export RGPD** (toutes les données personnelles, en JSON) et **purge**
+(confirmation forte, une trace sans donnée personnelle est conservée).
+L'interface affiche un rappel quand une compétition dépasse 2 ans, puis
+5 ans.
+
+**Options écartées :** job planifié qui anonymise à 2 ans et purge à 5 ans,
+avec e-mail d'avertissement — plus conforme sans intervention, mais
+irréversible sans action humaine sur des données de mineurs.
+
+---
+
+## ADR-052 — Lot 9 : vidéos téléversées — refus des formats exotiques, sans transcodage
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 3 : « transcodage ou refus des
+formats exotiques ».
+
+**Décision (actée avec l'utilisateur) :** refus, pas de transcodage. Pas de
+ffmpeg dans l'image Docker (pas de file de jobs, pas d'état « en cours de
+traitement »). Formats acceptés : mp4, mov, webm, vérifiés par la signature
+réelle du conteneur et non par l'extension ; taille maximale configurable.
+Envoi en morceaux reprenable, derrière l'interface `StorageAdapter`
+(SPEC.md §6.1).
+
+**Limite assumée :** sans `ffprobe`, le codec n'est pas vérifié — un mp4 dont
+le codec n'est pas lisible par le navigateur sera accepté puis illisible. Le
+guide organisateur devra le dire (H.264/AAC recommandé).
+
+---
+
+## ADR-053 — Lot 9 : un drapeau de route, jamais un préfixe de chemin, pour exclure la session organisateur
+
+**Date :** 2026-09-19
+**Contexte :** `apps/web/src/router.ts` sautait le bootstrap de session avec
+`to.path.startsWith('/c')`. Ce test attrapait `/competitions/...`, si bien
+qu'un F5 sur une route organisateur perdait la session (TODO.md § Lot 8).
+
+**Décision :** ce qui n'a pas de session organisateur (`/j`, `/j/:token`,
+`/c/:slug`, `/c/:slug/salle`) le déclare par `meta.skipOrganizerSession` sur
+la route. Aucun test de préfixe de chemin pour décider d'un comportement
+d'authentification. Couvert par `router.test.ts` et un rechargement réel dans
+`e2e/organizer-pilotage.spec.ts`.
+
+---
+
+## ADR-054 — Lot 9 : les qualifiés sont figés à l'ouverture du tour suivant (remplace ADR-050)
+
+**Date :** 2026-09-19
+**Contexte :** ADR-050 gardait la liste des qualifiés dérivée du classement,
+avec des garde-fous. En écrivant le code, un cas a fait tomber ce choix :
+un qualifié à la limite (10ᵉ) se blesse en demi-finale et passe en
+« abandon ». Le classement de qualification est recalculé sur les seuls
+compétiteurs `registered`/`present` (`loadFullCategoryRoster`), donc il
+disparaît du tour 1, et le 11ᵉ est promu en demi-finale sans que personne
+l'ait décidé. Le même effet vaut pour une disqualification ou une
+correction tardive. Question posée à l'utilisateur, qui a tranché de figer.
+
+**Décision :** table `round_qualifier` (migration réversible). À la
+transition d'un tour R vers `open`, pour chaque catégorie de R qui a un tour
+précédent P, le serveur calcule `getQualifiers(classement de P,
+P.qualifyingCount)` et enregistre la liste : compétiteur, rang obtenu,
+`frozen_at`, auteur. Cette liste fait foi pour R : écran juge, bootstrap
+hors ligne, refus d'une saisie hors liste, tableau de bord, classement
+public. Rien ne la recalcule ensuite — un abandon, une disqualification ou
+une correction de P ne promeut ni n'exclut personne.
+
+- **Un tour sans liste figée reste calculé à la volée** (repli inchangé) :
+  les tours ouverts avant ce lot, et le premier tour de chaque catégorie.
+  Aucun rattrapage de données n'est fait.
+- **Ouvrir R exige que chaque tour précédent de ses catégories soit `closed`
+  ou `published`**, sinon 409 avec le nom du tour à clore.
+- **Rouvrir P est refusé dès qu'un tour suivant de la même catégorie est
+  `open`/`closed`/`published`** : sa liste figée serait périmée.
+- **Sortie de secours : `open → draft` et `closed → draft`, uniquement si le
+  tour n'a aucun passage actif ni conflit.** Ouvrir un tour trop tôt n'est
+  plus une impasse : on le remet en préparation (la liste figée est
+  supprimée), on corrige P, on referme P, on rouvre R (nouvelle liste).
+  Extension du graphe d'ADR-045, seule autre transition ajoutée.
+- **Égalité à la limite** : tous les ex aequo sont qualifiés (SPEC.md §4.4 🟡,
+  comportement de `getQualifiers`) ; la liste figée peut donc dépasser
+  `qualifyingCount`, et l'interface le dit (« 11 au lieu de 10 : égalité »).
+- **Une correction de P après la figeage change son classement mais pas la
+  liste de R.** Assumé : la liste de départ d'un tour ne bouge pas une fois
+  le tour ouvert. Le classement final reste calculé par le moteur à partir
+  des tours.
+- La figeage est tracée : le `activity_log` existant (`round_status_changed`)
+  reçoit le nombre de qualifiés par catégorie dans son `payload`, sans
+  nouvelle valeur de `event_type`.
+
+**Options écartées :** rester dérivé avec « ignorer le statut pour la
+dérivation » (le classement affiché d'un abandon après passage change de
+comportement, un disqualifié garde ses passages dans le calcul) ; rester
+dérivé et documenter le risque (un classement peut changer silencieusement le
+jour J).
+
+---
+
+## ADR-055 — Lot 9 : le client juge actualise ses voies quand sa file est vide
+
+**Date :** 2026-09-19
+**Contexte :** `bootstrapJudge()` (Lot 6) ne tourne qu'à la connexion
+(`JudgeAccess.vue`). En format phases, un juge connecté le matin garde le
+cache de la qualification : quand la demi-finale s'ouvre, sa voie reste vide
+(« aucun tour ouvert ») jusqu'à ce qu'il rouvre son lien. Relancer le
+bootstrap tel quel efface `routeDetails` puis le réécrit, ce qui détruirait
+l'état « fait » optimiste des saisies encore en file. Question posée à
+l'utilisateur, qui a choisi l'actualisation sûre.
+
+**Décision :** le bootstrap peut être relancé en journée, à trois
+conditions cumulées :
+
+- **Déclencheurs** : démarrage de l'application, retour du réseau, retour au
+  premier plan (les mêmes que la file, `sync-runtime.ts`), plus un bouton
+  « Actualiser mes voies » sur l'accueil juge. Au plus une actualisation
+  automatique toutes les 30 s.
+- **File vide** : aucun élément `pending` ou `sending` dans la file. Les
+  éléments `conflict` et `rejected` ne bloquent pas — le serveur les a déjà
+  traités. Mais ils ne suffisent pas à rester visibles : voir « Conservation »
+  ci-dessous.
+- **Vérifié dans la transaction d'écriture**, pas avant le téléchargement :
+  `bootstrapJudge({ onlyIfQueueIdle: true })` relit la table `queue` à
+  l'intérieur de la transaction Dexie qui réécrit `routeDetails`. Une saisie
+  enregistrée pendant le téléchargement fait renoncer à l'écriture ; une
+  saisie qui arrive après attend la fin de la transaction et applique son
+  écriture optimiste sur les données fraîches. Jamais d'écrasement.
+
+Quand des saisies sont en attente, l'actualisation est simplement reportée :
+elle est retentée dès que la file se vide.
+
+**Conservation des saisies en conflit ou rejetées (correction faite en
+écrivant le test e2e).** La première version supposait qu'un élément
+`conflict`/`rejected` « reste affiché par la file » après l'actualisation. Faux :
+`judge-conflict.spec.ts` a échoué. Le serveur n'a aucun passage *actif* pour
+un conflit (les deux lignes sont hors classement tant que l'organisateur n'a
+pas tranché), donc le cache frais remettait le compétiteur en « À faire », et
+seule la ligne « Fait » affiche l'avertissement de conflit : le juge aurait pu
+ressaisir un compétiteur en conflit sans rien voir. Parade
+(`preserveHeldAscents`, `judge/bootstrap.ts`) : pour un élément `conflict` ou
+`rejected`, la saisie locale est conservée telle quelle dans le cache, *pour
+le même tour uniquement*, et jamais à la place d'un passage que le serveur
+connaît. La connexion (sans `onlyIfQueueIdle`) repart toujours de la vérité du
+serveur, comme avant.
+
+**Options écartées :** rouvrir le lien à la main à chaque changement de tour
+(procédure documentée seulement — un juge qui oublie reste devant une voie
+vide, sous pression) ; actualisation périodique inconditionnelle (risque
+d'écraser des saisies en attente).
+
+**Limite assumée :** le juge voit le nouveau tour au prochain retour au
+premier plan ou en appuyant sur le bouton, pas instantanément — pas de
+poussée serveur vers les juges (SSE) dans ce lot.
+
+---
+
+## ADR-056 — Lot 9 : export JSON de sauvegarde et réimport
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 2 : « export complet de la compétition
+en JSON (sauvegarde, réimport) ». Rien n'était précisé sur le contenu ni sur la
+sémantique du réimport. Choix faits sans question à l'utilisateur, car
+réversibles et sans conséquence sur les règles de compétition ; **à relire**.
+
+**Décisions :**
+
+- **Liste blanche de colonnes**, écrite à la main dans `packages/contracts`
+  (`backup.ts`), jamais `select *`. Un secret ajouté plus tard à une table ne
+  fuit donc pas dans l'export. Exclus : hachés et clairs des jetons/PIN juge,
+  compteurs de PIN, mots de passe, sessions, jetons en attente, `public_slug`.
+- **Incluses** : compétition, catégories, compétiteurs (avec année de naissance et
+  licence — ce sont les données de l'organisateur, pas celles de la page
+  publique), voies, tours, affectations, qualifiés figés, juges (nom et voies
+  seulement), tous les passages y compris remplacés et en conflit, `ascent_event`,
+  `activity_log`. La trace complète permet de répondre à une réclamation.
+- **Vidéos téléversées : hors JSON** (fichiers binaires). `route.video_asset_id`
+  n'est pas exporté ; le lien externe `video_url` l'est.
+- **Réimport = une NOUVELLE compétition** : tous les identifiants sont
+  regénérés (uuid v7), y compris ceux des passages (un id de passage est
+  globalement unique : réimporter dans la même base entrerait en collision), un
+  nouveau `public_slug`, le club de l'organisateur qui importe. Les
+  identifiants présents dans les `payload` de `ascent_event`/`activity_log`
+  sont remplacés par les nouveaux. Le statut d'origine est conservé.
+- **Juges réimportés révoqués**, avec un jeton aléatoire jeté aussitôt :
+  l'historique d'attribution des passages est conservé, mais aucun accès n'est
+  restauré. L'organisateur recrée des juges avec de nouveaux QR. Pas de
+  restauration silencieuse d'un accès à des appareils qu'on ne connaît plus.
+- **Passages saisis par un organisateur** : rattachés à l'organisateur qui
+  importe (la contrainte `ascent_recorded_by_check` exige un auteur). L'identité
+  d'origine n'est pas exportée.
+- **Aperçu puis validation** (`mode: preview | commit`, comme ADR-024) : le
+  serveur revalide tout dans les deux modes ; l'écriture est une transaction
+  unique, tout ou rien.
+- **Validation** : schéma Zod versionné (`schemaVersion: 1`) puis contrôle
+  d'intégrité référentielle et des règles que la base impose (dossards et
+  numéros de voie uniques, forme d'un passage). Les erreurs sont en français et
+  disent quoi corriger.
+- **Limite de taille** du corps : 25 Mo.
+
+---
+
+## ADR-057 — Lot 9 : PDF de résultats en police standard, caractères non encodables translittérés
+
+**Date :** 2026-09-19
+**Contexte :** le PDF de résultats (`lib/exports/results-pdf.ts`) est généré par
+`pdf-lib` avec la police standard Helvetica, qui n'encode que WinAnsi. Un
+caractère hors de cet ensemble fait lever `encodeText`, donc l'export
+échouerait à cause d'un seul nom (polonais, cyrillique, emoji…). Avec des
+compétiteurs de toute origine, ça arrivera.
+
+**Décision :** `toSupportedText` (`lib/exports/pdf-text.ts`) garde tout ce que
+WinAnsi sait écrire (les accents français, « Œ », les guillemets), ramène une
+lettre latine étendue à sa lettre de base (`č → c`, `Ł → L`), et remplace le
+reste par `?`. Un export ne plante jamais à cause d'un nom.
+
+**Options écartées :** embarquer une police Unicode (fichier de plusieurs
+centaines de Ko à versionner, `fontkit` à ajouter, mise en page à revoir pour
+les écritures non latines) — disproportionné pour une compétition de club.
+
+**Limite assumée :** un nom en cyrillique ou en caractères asiatiques s'affiche
+`????` dans le PDF. Le CSV et le JSON, eux, gardent le texte tel quel.
+
+---
+
+## ADR-058 — Lot 9 : téléversement de vidéos — protocole maison, stockage sur disque, S3 explicitement non livré
+
+**Date :** 2026-09-19
+**Contexte :** ADR-052 acte « refus sans transcodage, envoi reprenable, derrière
+`StorageAdapter` (local-disk + s3-compatible) ». Deux précisions prises en
+implémentant.
+
+**Décision 1 — protocole d'envoi maison, sans dépendance.** Session d'envoi en
+base (`asset_upload`), puis morceaux envoyés en `PATCH` avec l'octet de départ
+déclaré (`Upload-Offset`). Un décalage entre l'octet annoncé et l'octet reçu
+répond `409` avec l'offset attendu : le client se recale et reprend. Même
+principe que tus, sans la dépendance ni le protocole complet.
+
+**Décision 2 — `StorageAdapter` livré avec UNE implémentation, `local-disk`.**
+L'interface est définie pour deux (SPEC.md §6.1), mais l'adaptateur S3 n'est
+PAS livré : `STORAGE_DRIVER=s3` échoue explicitement au démarrage. Raison :
+`CLAUDE.md` interdit le code simulé, et un adaptateur S3 sans test contre un
+vrai serveur compatible S3 en serait un ; l'ajouter demande le SDK AWS, un
+conteneur MinIO dans la CI et le mapping des morceaux sur l'envoi multipart
+(parties de 5 Mio minimum). C'est un écart au plan de départ du lot,
+signalé à l'utilisateur. Un seul déploiement (un VPS, un volume Docker) n'en a
+pas besoin en v1.
+
+**Décision 3 — vérification à la fin, sur le contenu réel.** À la fin de
+l'envoi, la taille reçue doit égaler la taille déclarée, et la SIGNATURE des
+premiers octets doit être celle d'un conteneur accepté (`ftyp` pour mp4/mov,
+EBML pour webm). Le type MIME déclaré n'est jamais une preuve. Le fichier est
+servi avec le type vérifié et `X-Content-Type-Options: nosniff`.
+
+**Décision 4 — clé de stockage jamais dérivée d'une entrée client** :
+`competitions/<competitionId>/videos/<assetId>`. Le nom de fichier d'origine
+n'est pas conservé. L'adaptateur disque refuse toute clé qui sortirait de sa
+racine.
+
+**Décision 5 — un envoi terminé remplace le lien externe** de la voie
+(`video_url` mis à null) ; supprimer la vidéo téléversée ne le rétablit pas.
+
+**Décision 6 — lecture publique servie par l'API, avec `Range`**, sous
+`/public/:slug/routes/:routeId/video`. Un `<video>` demande des plages d'octets ;
+sans elles, pas de déplacement dans la vidéo.
+
+**Limite assumée :** le codec n'est pas vérifié (ADR-052).
+
+---
+
+## ADR-059 — Lot 9 : revue de sécurité des trois frontières
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 4. Méthode : une **matrice automatique**
+(`routes/security-matrix.test.ts`) construite depuis `app.routes` — une route
+ajoutée sans être classée fait échouer le fichier, et une route classée dans un
+préfixe hérite des contrôles de ce préfixe — plus des tests ciblés
+(`security-hardening.test.ts`, `lib/*.test.ts`). Chaque défaut ci-dessous a été
+démontré par un test qui échouait AVANT le correctif. Les tests ont aussi été
+vérifiés en cassant volontairement le code (mutation) : ils échouent.
+
+**Défauts trouvés et corrigés :**
+
+1. **Adresse client falsifiable** (haute). `clientIp` prenait la PREMIÈRE entrée
+   de `X-Forwarded-For`, que le client écrit lui-même : la limitation de débit
+   se contournait en changeant d'« adresse » à chaque requête. Désormais la
+   DERNIÈRE, ajoutée par Caddy. Suppose un seul proxy de confiance.
+2. **XSS stockée par lien de vidéo** (haute). `z.url()` accepte `javascript:`.
+   L'inscription étant ouverte, n'importe qui pouvait poser un tel lien sur sa
+   propre compétition ; un clic d'un organisateur connecté sur la page publique
+   exécutait du script dans l'origine de l'application, d'où le cookie de
+   refresh donnait un jeton d'accès. Corrigé à trois niveaux : seul http(s)
+   est stocké, une valeur héritée n'est jamais servie, la page revérifie.
+3. **Quatre routes anonymes sans limitation de débit** (moyenne) :
+   `verify-email`, `refresh`, `logout`, `invitations/accept` — contraire à
+   SPEC.md §6.4. Plafonds larges pour `refresh`/`logout` (tout un club partage
+   une adresse).
+4. **Aucune limite de taille de corps** (moyenne) : un JSON de plusieurs
+   centaines de Mio à `/auth/login` saturait la mémoire sans authentification.
+   1 Mio par défaut ; l'import de sauvegarde (25 Mio) et les morceaux de vidéo
+   (16 Mio) gardent leur propre limite.
+5. **Injection de formule dans l'export CSV du journal** (moyenne) : un motif
+   ou un nom commençant par `=` s'exécutait dans le tableur.
+6. **Algorithme JWT non épinglé** (basse) : HS384/HS512 acceptés avec le bon
+   secret. Seul HS256, le seul émis, est accepté.
+7. **Aucun en-tête de sécurité** (basse à moyenne) : `secureHeaders` sur l'API,
+   et sur l'application web un ensemble d'en-têtes dont une CSP stricte.
+
+**Vérifié sain (avec test) :** jetons organisateur et juge jamais
+interchangeables ; 404 (jamais 403 ni 200) sur la compétition d'un autre club ;
+isolement entre DEUX compétitions d'un même club, sur les identifiants imbriqués
+et sur les références du corps ; aucune route GET ne modifie de ligne (ADR-020) ;
+aucune route publique ne répond 5xx à des paramètres hostiles ; le public ne
+reçoit ni licence, ni année de naissance, ni secret.
+
+**Vérifié par lecture, sans test dédié :** SQL toujours paramétré ; aucun
+`v-html` ; cookie de refresh `httpOnly`, `SameSite=Lax`, `Secure` en
+production ; clé de stockage jamais dérivée d'une entrée client ; aucune requête
+sortante vers une URL fournie par un utilisateur (pas de SSRF).
+
+**Ouvert, non corrigé** (voir `TODO.md`) : limitation de débit en mémoire, par
+processus ; la planche de QR codes plante sur un caractère hors WinAnsi ;
+conservation en clair des accès juge par défaut (ADR-027, choix assumé) ; pas
+de trace dans le journal de la suppression d'une vidéo.
+
+**Limite de la méthode :** une revue par l'auteur du code n'est pas une revue
+indépendante. Une relecture par un tiers (`/code-review`) reste recommandée
+avant la première compétition réelle.
+
+---
+
+## ADR-060 — Lot 9 : mode dégradé — ce que voit chaque acteur quand le serveur est injoignable
+
+**Date :** 2026-09-19
+**Contexte :** `ROADMAP.md` Lot 9, point 4. ADR-009 exclut un mode « zéro
+internet » à construire : on suppose un accès internet, même médiocre. La
+question est donc celle d'un serveur ou d'un réseau qui TOMBE en cours de
+compétition. Audit fait acteur par acteur, puis corrigé et couvert par
+`e2e/degraded-mode.spec.ts`.
+
+| Acteur | Avant | Maintenant |
+|---|---|---|
+| **Juge** | Tout s'affiche depuis IndexedDB, saisies mises en file, bandeau honnête (Lot 6). | Inchangé — couvert par `judge-offline-sync.spec.ts`. |
+| **Organisateur, tableau de bord** | Aucune gestion d'erreur : les chiffres restaient **figés, sans aucun avertissement**, l'organisateur croyait ses alertes à jour. | Bandeau rouge « Le serveur ne répond plus », avec l'heure des derniers chiffres, dès la 2ᵉ relance ratée (une seule relance au lieu de trois) ; disparaît tout seul au retour. |
+| **Organisateur, connexion** | « Une erreur inattendue est survenue. » | « Impossible de joindre le serveur. Vérifiez votre connexion internet, puis réessayez. Rien de ce que vous avez déjà enregistré n'est perdu. » |
+| **Organisateur, liste** | « Impossible de charger vos compétitions. » sans issue. | Le même message, et un bouton « Réessayer ». |
+| **Public** | Le classement affiché restait, mais l'indicateur **restait sur « En direct »** si la connexion mourait sans que le navigateur le remarque (wifi perdu) : un indicateur menteur. | Un chien de garde sur le `ping` du serveur (25 s) : plus de 65 s sans signe de vie, ou événement `offline` du navigateur, et la page passe en « Reconnexion… » ; le dernier classement reste lisible ; « En direct » revient à la reconnexion. |
+
+**Non traité, à savoir** (voir `TODO.md`) : un organisateur qui RECHARGE sa page
+alors que le serveur est injoignable est renvoyé à l'écran de connexion, faute de
+pouvoir restaurer sa session. Le message est désormais clair, mais il doit
+attendre le retour du réseau pour continuer.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
-- **RGPD — durée de conservation et de purge** (SPEC.md §8.8) : la
-  proposition (archivage 2 ans, purge 5 ans) n'a pas été validée avec le
-  club. À trancher avant le Lot 9, qui implémente l'export/purge.
+- ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
+  ADR-051 (export et purge manuels, avec rappel à 2 et 5 ans).

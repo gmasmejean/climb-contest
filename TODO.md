@@ -224,13 +224,12 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   conflict_group IS NULL` ; `['registered', 'present']`) — pas de
   refactorisation pour converger les deux, conformément à « tu ne réécris
   pas ce qui marche ». À revoir si un troisième consommateur apparaît.
-- **`infra/scripts/load-test-sse.ts` a son propre `tsconfig.json` mais
-  n'est couvert par aucun script racine `pnpm typecheck`/`pnpm lint`** — ce
-  dossier n'est pas un paquet du workspace pnpm (pas de `package.json`), et
-  Turbo ne le voit donc pas. Vérifié manuellement (`tsc --noEmit -p
-  infra/scripts/tsconfig.json`, `eslint infra/scripts/load-test-sse.ts`)
-  pendant ce lot, mais rien ne le revérifiera automatiquement à la prochaine
-  modification.
+- ~~`infra/scripts/load-test-sse.ts` n'est couvert par aucun script racine.~~
+  Résolu au Lot 9 : `pnpm typecheck` et `pnpm lint` passent aussi sur
+  `infra/scripts` (`tsc --noEmit -p infra/scripts/tsconfig.json`,
+  `eslint infra/scripts`). En s'y remettant, le script SSE s'est révélé PÉRIMÉ :
+  il déclenchait l'événement par un `PATCH` de statut de tour fermé depuis le
+  Lot 8 ; il passe maintenant par `POST .../round-status/:id`.
 - **Test de limitation de débit publique : vérifie l'en-tête
   `RateLimit-Limit`, pas un vrai épuisement à 429.** Cohérent avec le reste
   du dépôt (aucun test existant n'exerce un vrai 429, `hono-rate-limiter`
@@ -246,23 +245,19 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 
 ## Depuis le Lot 8
 
-- **Bug pré-existant découvert (pas causé par ce lot, reproduit sur `main`
-  avant le Lot 8) : un rechargement complet du navigateur directement sur
-  une route organisateur profonde (ex. `/competitions/:id`) perd la
-  session**, malgré le cookie de refresh `httpOnly` — l'utilisateur atterrit
-  sur `/` (accueil) au lieu de la page demandée, sans passer par `/login`
-  (donc pas un simple échec d'authentification classique). Découvert en
-  écrivant `e2e/organizer-pilotage.spec.ts` : `page.goto` direct vers
-  `/competitions/:id` échouait de façon déterministe, confirmé identique
-  après avoir revenu tout le code de ce lot (`git stash` vers `main`) puis
-  rejoué le test `judge-conflict.spec.ts` existant, qui échoue pour une
-  raison apparentée (un clic qui devrait naviguer vers `/j/routes/:id` reste
-  sur `/j/home`). Contourné dans le nouveau test en navigant uniquement par
-  clics (comme tous les parcours utilisateurs réels, qui n'atteignent
-  jamais ces routes par un lien externe ou un F5). À investiguer dans une
-  session dédiée : un organisateur qui recharge sa page de compétition en
-  cours de pilotage (raison réaliste : un F5 après un souci réseau) tomberait
-  dessus en usage réel.
+- ~~Bug pré-existant : un rechargement complet du navigateur sur une route
+  organisateur profonde (ex. `/competitions/:id`) perd la session.~~ Résolu
+  au Lot 9. Cause racine : `router.ts` sautait le bootstrap de session avec
+  `to.path.startsWith('/c')` (prévu pour la page publique `/c/<slug>`), qui
+  attrapait aussi `/competitions/...`. Sans session restaurée, la garde
+  redirigeait vers `login`, puis la navigation suivante faisait le bootstrap
+  tardivement et renvoyait vers `/` (`guestOnly`) — d'où l'arrivée sur
+  l'accueil « sans passer par `/login` ». Remplacé par un drapeau explicite
+  `meta.skipOrganizerSession` porté par les routes `/j` et `/c`
+  (`apps/web/src/router.ts`), testé par `router.test.ts` et par un
+  rechargement réel dans `e2e/organizer-pilotage.spec.ts`.
+  `e2e/judge-conflict.spec.ts`, qui échouait « pour une raison apparentée »,
+  repasse au vert avec ce correctif.
 - **`eventType: 'voided'` (`ascent_event`) reste non utilisé.** Aucune
   action « annuler complètement un passage » distincte de la correction
   n'a été construite ce lot — une correction vers un statut adapté (DSQ,
@@ -296,3 +291,84 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   navigateur complet) — pas fait par manque de temps dans ce lot, le
   scénario choisi couvre déjà tout le reste du pilotage (tours, correction,
   publication, reflet public).
+
+## Depuis le Lot 9
+
+- ~~`e2e/judge-offline-sync.spec.ts` instable quand toute la suite tourne à la
+  suite.~~ Résolu au Lot 9 : c'était une course DANS LE TEST, pas dans le mode
+  hors ligne. Le test coupait le réseau juste après la connexion, avant que le
+  service worker ait fini d'installer son précache ; hors ligne, l'installation
+  échoue et le rechargement suivant échouait en `ERR_INTERNET_DISCONNECTED`.
+  Le test attend maintenant `navigator.serviceWorker.ready`. **Question laissée
+  ouverte** : un juge qui coupe son réseau dans les toutes premières secondes
+  suivant sa première connexion tomberait dans le même cas ; aucun indicateur
+  « prêt pour le hors ligne » n'existe dans l'interface. À envisager si un
+  club le rencontre.
+- **Qualifiés sans aucun passage réel** (voir `RULES.md` § 5, à faire valider) :
+  un inscrit jamais déclaré absent qui n'a rien grimpé se qualifie s'il y a
+  moins de participants réels que de places. Aucune règle ajoutée : c'est une
+  règle de compétition à trancher avec un juge fédéral, pas un choix technique.
+- **Pas de notification poussée vers les juges à l'ouverture d'un tour**
+  (ADR-055) : le juge voit le nouveau tour au prochain retour au premier plan
+  ou via « Actualiser mes voies ». Une poussée SSE vers les juges serait
+  l'étape suivante si ce délai gêne en usage réel.
+- **Une correction d'un tour précédent après l'ouverture du suivant modifie son
+  classement mais pas la liste des qualifiés** (ADR-054, voulu). Rien
+  n'avertit l'organisateur que la liste figée diffère alors de ce qu'un
+  recalcul donnerait — à ajouter si le cas se présente en usage réel.
+- **`lib/qrcode-pdf.ts` (planche de QR codes, Lot 4) ne protège pas ses
+  `drawText` contre un caractère hors WinAnsi** : un nom de compétition ou de
+  juge avec un caractère non latin ferait lever la génération de la planche.
+  Découvert en écrivant `lib/exports/pdf-text.ts` (ADR-057), qui règle le
+  problème pour les résultats mais pas pour cette planche — non touchée, elle
+  marche pour les cas courants. À faire converger sur `toSupportedText` si le
+  cas se présente.
+- **L'export CSV du journal d'activité (`lib/activity-log.ts`, Lot 8) n'a pas la
+  neutralisation d'injection de formule** de `lib/exports/csv.ts` : un motif
+  saisi par un organisateur commençant par `=` deviendrait une formule dans le
+  tableur. À traiter dans la revue de sécurité du Lot 9 (étape suivante).
+- **Le PDF de résultats n'affiche pas les caractères non latins** (ADR-057) :
+  ils sortent en `?`.
+- **Adaptateur de stockage S3 non livré** (ADR-058) : `STORAGE_DRIVER=s3` échoue
+  au démarrage. À faire quand un déploiement sans disque persistant en aura
+  besoin : SDK AWS, conteneur MinIO en CI, envoi multipart (parties de 5 Mio
+  minimum, donc morceaux plus gros que 8 Mio ou regroupés côté serveur).
+- **Supprimer une vidéo téléversée n'est ni réversible ni tracé dans le journal
+  d'activité** (le fichier disparaît du disque). `CLAUDE.md` demande des saisies
+  destructives réversibles et tracées ; une confirmation explicite la précède,
+  mais le journal (`activity_log`, `event_type` restreint par un CHECK) ne
+  l'enregistre pas. À faire si un organisateur perd une vidéo par erreur.
+- **Aucun quota de vidéos par compétition** : seule la taille d'une vidéo est
+  bornée (`VIDEO_MAX_BYTES`). Un club pourrait remplir le disque avec une vidéo
+  par voie. À borner si le disque devient un souci.
+- **Pas de reprise d'envoi entre appareils** : l'identifiant de reprise vit dans
+  le `localStorage` du navigateur qui a commencé l'envoi.
+- **La vidéo téléversée n'est pas mise en cache hors ligne** (elle est
+  volontairement exclue du cache du service worker) : hors réseau, la page
+  publique n'a pas de lecteur.
+- **La purge RGPD ne touche pas au compte de l'organisateur** (e-mail, nom) : elle
+  porte sur les données d'une COMPÉTITION. Supprimer un compte organisateur ou un
+  club entier n'a pas d'action dédiée.
+- **La purge n'est pas tracée dans le journal d'activité** (`activity_log.event_type`
+  est restreint par un CHECK) : la trace est `competition.purged_at`. Ni qui l'a
+  faite, ni quand exactement au-delà de cette date.
+- **Aucune purge des sauvegardes déjà faites** : un fichier de sauvegarde d'avant
+  la purge contient encore les données personnelles. À dire clairement dans
+  `docs/EXPLOITATION.md` : purger une compétition ne purge pas les sauvegardes.
+- **Un organisateur qui recharge sa page alors que le serveur est injoignable est
+  renvoyé à l'écran de connexion** (ADR-060) : sa session ne se restaure qu'avec
+  le serveur. Il doit attendre le retour du réseau. Un mode « lecture seule »
+  qui garderait le dernier état affiché n'existe pas.
+- **Rien ne dit à un juge que sa file est bloquée parce que son accès a été
+  révoqué** : la répétition générale l'a confirmé — l'appareil du juge révoqué
+  reçoit un 401, traité comme une coupure réseau, et réessaie indéfiniment. Ses
+  saisies en attente n'atteindront jamais le serveur ; l'organisateur doit les
+  ressaisir (saisie de secours). Déjà noté au Lot 6, maintenant mesuré.
+- **Limitation de débit partagée par toute la salle** (mesuré par la répétition
+  et le test SSE) : 120 lots de saisie par minute et par adresse, 300
+  connexions SSE par minute et par adresse, 600 lectures publiques par minute.
+  Tous les juges et spectateurs d'une salle partagent souvent UNE adresse
+  publique (wifi). La cible de 300 spectateurs tient pile sur le plafond SSE :
+  une vague de reconnexions après une coupure la dépasserait, et les spectateurs
+  basculeraient alors sur le sondage à 30 s. Aucun perte de donnée (les
+  clients réessaient), mais un classement moins « direct ».

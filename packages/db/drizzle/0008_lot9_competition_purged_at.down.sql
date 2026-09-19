@@ -1,0 +1,1 @@
+ALTER TABLE "competition" DROP COLUMN "purged_at";

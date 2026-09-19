@@ -11,8 +11,12 @@ import type {
   CreateRouteInput,
   CreateRoundInput,
   ImportReport,
+  BackupPreview,
+  ImportBackupResult,
+  PurgePersonalDataResult,
   ReadinessResponse,
   Round,
+  RoundQualifiersResponse,
   Route,
   UpdateCategoryInput,
   UpdateCompetitionInput,
@@ -21,7 +25,7 @@ import type {
   UpdateRoundInput,
 } from '@climbcontest/contracts'
 
-import { apiFetch } from './client'
+import { apiDownload, apiFetch, saveBlob } from './client'
 
 export type RouteWithCategories = Route & { categoryIds: string[] }
 
@@ -142,6 +146,11 @@ export const roundsApi = {
       method: 'POST',
       body: json(input),
     }),
+  // ADR-054 : la liste des qualifiés figée à l'ouverture du tour.
+  qualifiers: (competitionId: string, roundId: string) =>
+    apiFetch<RoundQualifiersResponse>(
+      `/competitions/${competitionId}/round-status/${roundId}/qualifiers`,
+    ),
   reorder: (competitionId: string, orderedIds: string[]) =>
     apiFetch<Round[]>(`/competitions/${competitionId}/rounds/reorder`, {
       method: 'POST',
@@ -160,4 +169,42 @@ export const roundsApi = {
       `/competitions/${competitionId}/rounds/${roundId}/routes`,
       { method: 'PUT', body: json({ assignments }) },
     ),
+}
+
+/** Lot 9 — exports de résultats et sauvegarde JSON, réimport (ADR-056). */
+export const exportsApi = {
+  download: async (
+    competitionId: string,
+    file: 'results.pdf' | 'results.csv' | 'competition.json',
+    categoryId?: string,
+  ) => {
+    const query = categoryId && file !== 'competition.json' ? `?category=${categoryId}` : ''
+    const { blob, filename } = await apiDownload(
+      `/competitions/${competitionId}/exports/${file}${query}`,
+      file,
+    )
+    saveBlob(blob, filename)
+  },
+  downloadPersonalData: async (competitionId: string) => {
+    const { blob, filename } = await apiDownload(
+      `/competitions/${competitionId}/gdpr-export`,
+      'donnees-personnelles.json',
+    )
+    saveBlob(blob, filename)
+  },
+  purgePersonalData: (competitionId: string, confirmName: string) =>
+    apiFetch<PurgePersonalDataResult>(`/competitions/${competitionId}/personal-data`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmName }),
+    }),
+  previewImport: (backup: unknown) =>
+    apiFetch<BackupPreview>('/competitions/import', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'preview', backup }),
+    }),
+  commitImport: (backup: unknown) =>
+    apiFetch<ImportBackupResult>('/competitions/import', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'commit', backup }),
+    }),
 }

@@ -61,11 +61,60 @@ services:
       SMTP_PORT: 1025
       SMTP_SECURE: 'false'
       MAIL_FROM: ${MAIL_FROM}
+      # Lot 9 (ADR-058) : vidéos téléversées sur un volume, pas dans l'image.
+      STORAGE_DRIVER: local-disk
+      STORAGE_LOCAL_DIR: /data/uploads
+      VIDEO_MAX_BYTES: ${VIDEO_MAX_BYTES:-209715200}
+      # Vide en production (plafonds d'authentification normaux) ; à relever
+      # uniquement pour lancer la suite e2e complète (voir e2e/README.md).
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-}
+    volumes:
+      - uploads-data:/data/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
       mailpit:
         condition: service_started
+
+  # Sauvegarde AUTOMATIQUE de la base (Lot 9), à activer avec
+  #   docker compose --profile backup up -d
+  # Un `pg_dump` toutes les BACKUP_INTERVAL_SECONDS (6 h par défaut) dans le
+  # volume `backups-data`, relu avant d'être publié, avec rotation des plus
+  # anciennes. Les vidéos ne sont PAS incluses (utilisez `infra/scripts/backup.sh`).
+  # Copiez régulièrement ce volume HORS de la machine : une sauvegarde qui vit
+  # sur le même disque que la base ne protège pas d'une panne de ce disque.
+  backup:
+    image: postgres:16.15-alpine
+    profiles: ['backup']
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-21600}
+      BACKUP_KEEP: ${BACKUP_KEEP:-28}
+    volumes:
+      - backups-data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          f="/backups/climbcontest-$$(date +%Y%m%d-%H%M%S).dump"
+          if pg_dump -Fc > "$$f.partial" && pg_restore --list "$$f.partial" > /dev/null; then
+            mv "$$f.partial" "$$f"
+            echo "sauvegarde écrite : $$f"
+          else
+            rm -f "$$f.partial"
+            echo "ERREUR : sauvegarde échouée, rien n'a été publié" >&2
+          fi
+          ls -1t /backups/climbcontest-*.dump | tail -n +$$((BACKUP_KEEP + 1)) | xargs -r rm -f
+          sleep "$$BACKUP_INTERVAL_SECONDS"
+        done
 
   web-build:
     build:
@@ -92,5 +141,7 @@ services:
 
 volumes:
   postgres-data:
+  uploads-data:
+  backups-data:
   web-dist:
   caddy-data:

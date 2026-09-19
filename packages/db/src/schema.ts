@@ -118,6 +118,10 @@ export const competition = pgTable(
     createdBy: uuid('created_by')
       .notNull()
       .references(() => user.id),
+    // Lot 9 (ADR-051) : date de la purge des données personnelles. Nulle tant
+    // que la compétition n'a pas été purgée ; la ligne reste, sans donnée
+    // personnelle, comme trace de la purge.
+    purgedAt: timestamp('purged_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps,
   },
@@ -149,6 +153,46 @@ export const asset = pgTable(
     ...timestamps,
   },
   (table) => [check('asset_kind_check', sql`${table.kind} IN ('video')`)],
+)
+
+/**
+ * Lot 9 (ADR-052, ADR-058) — un téléversement de vidéo en cours, reprenable :
+ * l'organisateur l'envoie par morceaux, et `received_bytes` dit où reprendre
+ * après une coupure. Une ligne devient un `asset` à la fin de l'envoi ; les
+ * envois abandonnés sont purgés après `expires_at`.
+ */
+export const assetUpload = pgTable(
+  'asset_upload',
+  {
+    id: id(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competition.id),
+    routeId: uuid('route_id')
+      .notNull()
+      .references(() => route.id),
+    storageKey: text('storage_key').notNull(),
+    // Type DÉCLARÉ par le client : jamais une preuve, seule la signature réelle
+    // du fichier est vérifiée à la fin.
+    declaredMimeType: text('declared_mime_type').notNull(),
+    declaredSizeBytes: integer('declared_size_bytes').notNull(),
+    receivedBytes: integer('received_bytes').notNull().default(0),
+    status: text('status').notNull().default('uploading'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => user.id),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    check(
+      'asset_upload_status_check',
+      sql`${table.status} IN ('uploading', 'completed', 'aborted')`,
+    ),
+    check('asset_upload_size_check', sql`${table.declaredSizeBytes} > 0 AND ${table.receivedBytes} >= 0`),
+    index('asset_upload_route_id_idx').on(table.routeId),
+    index('asset_upload_status_expires_idx').on(table.status, table.expiresAt),
+  ],
 )
 
 export const category = pgTable(
@@ -277,6 +321,41 @@ export const roundRoute = pgTable(
     ...timestamps,
   },
   (table) => [primaryKey({ columns: [table.roundId, table.routeId, table.categoryId] })],
+)
+
+/**
+ * ADR-054 : la liste des qualifiés d'un tour, figée au moment où ce tour
+ * passe à `open`. `round_id` est le tour QUI REÇOIT les qualifiés, pas celui
+ * dont ils viennent (`source_round_id`). Une catégorie sans ligne ici pour un
+ * tour donné n'est pas restreinte : premier tour de la catégorie, ou tour
+ * ouvert avant le Lot 9 (calculé à la volée, comme avant).
+ */
+export const roundQualifier = pgTable(
+  'round_qualifier',
+  {
+    roundId: uuid('round_id')
+      .notNull()
+      .references(() => round.id),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => category.id),
+    competitorId: uuid('competitor_id')
+      .notNull()
+      .references(() => competitor.id),
+    sourceRoundId: uuid('source_round_id')
+      .notNull()
+      .references(() => round.id),
+    // Rang obtenu au tour source. Plusieurs qualifiés peuvent le partager
+    // (égalité à la limite : tous les ex aequo passent).
+    sourceRank: integer('source_rank').notNull(),
+    frozenAt: timestamp('frozen_at', { withTimezone: true }).notNull().defaultNow(),
+    frozenByUserId: uuid('frozen_by_user_id').references(() => user.id),
+  },
+  (table) => [
+    primaryKey({ columns: [table.roundId, table.competitorId] }),
+    check('round_qualifier_source_rank_check', sql`${table.sourceRank} >= 1`),
+    index('round_qualifier_round_category_idx').on(table.roundId, table.categoryId),
+  ],
 )
 
 export const judge = pgTable('judge', {

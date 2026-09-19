@@ -1,6 +1,8 @@
 import { ascent, category, competitor, routeCategory, type Database } from '@climbcontest/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 
+import { restrictToFrozenQualifiers } from './round-qualifiers'
+
 type CompetitorRow = typeof competitor.$inferSelect
 type AscentRow = typeof ascent.$inferSelect
 
@@ -31,13 +33,20 @@ export async function categoryLabelsByRoute(
   return map
 }
 
+/**
+ * Les compétiteurs attendus sur ces catégories. Avec `roundId`, la liste est
+ * restreinte à la liste figée des qualifiés de ce tour quand elle existe
+ * (ADR-054) — sans quoi un juge verrait aussi les non-qualifiés en
+ * demi-finale ou en finale. Sans `roundId`, aucune restriction de tour.
+ */
 export async function expectedCompetitors(
   db: Database,
   competitionId: string,
   categoryIds: string[],
+  roundId?: string,
 ): Promise<CompetitorRow[]> {
   if (categoryIds.length === 0) return []
-  return db.query.competitor.findMany({
+  const rows = await db.query.competitor.findMany({
     where: and(
       eq(competitor.competitionId, competitionId),
       inArray(competitor.categoryId, categoryIds),
@@ -45,6 +54,7 @@ export async function expectedCompetitors(
       isNull(competitor.deletedAt),
     ),
   })
+  return roundId ? restrictToFrozenQualifiers(db, roundId, rows) : rows
 }
 
 export async function activeAscentsFor(

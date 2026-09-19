@@ -7,6 +7,7 @@ import { computed } from 'vue'
 import { ApiError } from '../../../api/client'
 import { roundsApi } from '../../../api/competitions'
 import { dashboardApi } from '../../../api/dashboard'
+import PilotageRoundQualifiers from './PilotageRoundQualifiers.vue'
 
 const props = defineProps<{ competitionId: string; format: 'contest' | 'phases' }>()
 
@@ -96,23 +97,31 @@ const changeStatusMutation = useMutation({
       <li
         v-for="r in rounds"
         :key="r.roundId"
-        class="flex flex-col gap-2 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+        class="flex flex-col gap-3 rounded-lg border border-gray-200 p-4"
       >
-        <div class="flex items-center gap-2">
-          <span class="font-medium text-gray-900">{{ r.label }}</span>
-          <Badge :tone="STATUS_TONES[r.status]">{{ STATUS_LABELS[r.status] }}</Badge>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-900">{{ r.label }}</span>
+            <Badge :tone="STATUS_TONES[r.status]">{{ STATUS_LABELS[r.status] }}</Badge>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button
+              v-for="target in ROUND_STATUS_TRANSITIONS[r.status]"
+              :key="target"
+              variant="secondary"
+              :disabled="changeStatusMutation.isPending.value"
+              @click="changeStatusMutation.mutate({ roundId: r.roundId, status: target })"
+            >
+              {{ ACTION_LABELS[target] }}
+            </Button>
+          </div>
         </div>
-        <div class="flex flex-wrap gap-2">
-          <Button
-            v-for="target in ROUND_STATUS_TRANSITIONS[r.status]"
-            :key="target"
-            variant="secondary"
-            :disabled="changeStatusMutation.isPending.value"
-            @click="changeStatusMutation.mutate({ roundId: r.roundId, status: target })"
-          >
-            {{ ACTION_LABELS[target] }}
-          </Button>
-        </div>
+        <PilotageRoundQualifiers
+          v-if="props.format === 'phases'"
+          :competition-id="props.competitionId"
+          :round-id="r.roundId"
+          :status="r.status"
+        />
       </li>
     </ul>
   </div>

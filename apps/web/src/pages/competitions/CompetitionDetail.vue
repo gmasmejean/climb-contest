@@ -7,6 +7,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import { competitionsApi } from '../../api/competitions'
 import CategoriesTab from './tabs/CategoriesTab.vue'
 import CompetitorsTab from './tabs/CompetitorsTab.vue'
+import ExportsTab from './tabs/ExportsTab.vue'
 import InfosTab from './tabs/InfosTab.vue'
 import JudgesTab from './tabs/JudgesTab.vue'
 import PilotageTab from './tabs/PilotageTab.vue'
@@ -40,6 +41,7 @@ const tabs = computed(() => {
   base.push({ id: 'judges', label: 'Juges' })
   base.push({ id: 'readiness', label: 'Prêt à démarrer ?' })
   base.push({ id: 'pilotage', label: 'Pilotage' })
+  base.push({ id: 'exports', label: 'Exports' })
   return base
 })
 </script>
@@ -68,6 +70,7 @@ const tabs = computed(() => {
       <JudgesTab v-else-if="activeTab === 'judges'" :competition="competition" />
       <ReadinessTab v-else-if="activeTab === 'readiness'" :competition-id="competitionId" />
       <PilotageTab v-else-if="activeTab === 'pilotage'" :competition="competition" />
+      <ExportsTab v-else-if="activeTab === 'exports'" :competition="competition" />
     </div>
   </main>
 </template>

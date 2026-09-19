@@ -6,6 +6,15 @@ import { Hono } from 'hono'
 
 import type { AccessTokenSigner } from '../lib/jwt'
 import { notifyPublic } from '../lib/notify-public'
+import {
+  assertRoundCanBeReopened,
+  assertRoundIsEmptyForDraft,
+  deleteFrozenQualifiers,
+  getRoundQualifiersView,
+  planQualifiersForOpening,
+  saveFrozenQualifiers,
+  type QualifierPlanEntry,
+} from '../lib/round-qualifiers'
 import { isValidRoundTransition, roundHasUnresolvedConflicts } from '../lib/round-status'
 import { requireOrganizer } from '../middleware/auth'
 import { requireCompetitionAccess } from '../middleware/competition-access'
@@ -83,6 +92,18 @@ export function createRoundStatusRoutes(deps: RoundStatusRouteDeps): Hono {
         )
       }
 
+      // ADR-054 : garde-fous et figeage des qualifiés. Tout ce qui peut
+      // refuser la transition est évalué AVANT la transaction (lecture seule) ;
+      // la transaction ne fait que l'écrire.
+      let qualifierPlan: QualifierPlanEntry[] | null = null
+      if (nextStatus === 'open' && existing.status === 'draft') {
+        qualifierPlan = await planQualifiersForOpening(db, c.get('competition'), existingRow)
+      } else if (nextStatus === 'open') {
+        await assertRoundCanBeReopened(db, competitionId, existingRow)
+      } else if (nextStatus === 'draft') {
+        await assertRoundIsEmptyForDraft(db, roundId)
+      }
+
       const updated = await db.transaction(async (tx) => {
         const [row] = await tx
           .update(round)
@@ -97,8 +118,23 @@ export function createRoundStatusRoutes(deps: RoundStatusRouteDeps): Hono {
           actorType: 'organizer',
           actorId: organizer.sub,
           entityId: roundId,
-          payload: { from: existing.status, to: nextStatus },
+          payload: {
+            from: existing.status,
+            to: nextStatus,
+            ...(qualifierPlan && {
+              qualifiers: qualifierPlan.map((entry) => ({
+                categoryId: entry.categoryId,
+                count: entry.qualifiers.length,
+              })),
+            }),
+          },
         })
+
+        if (qualifierPlan) {
+          await saveFrozenQualifiers(tx, roundId, organizer.sub, qualifierPlan)
+        } else if (nextStatus === 'draft') {
+          await deleteFrozenQualifiers(tx, roundId)
+        }
 
         // Même effet de bord que l'ancien PATCH générique (ROADMAP.md Lot 7) :
         // un `ranking_updated` par catégorie concernée accompagne toujours le
@@ -119,6 +155,21 @@ export function createRoundStatusRoutes(deps: RoundStatusRouteDeps): Hono {
       return c.json(roundSchema.parse(updated))
     },
   )
+
+  // ADR-054 : la liste des qualifiés figée à l'ouverture, pour l'écran Pilotage.
+  app.get('/round-status/:roundId/qualifiers', async (c) => {
+    const competitionId = c.get('competition').id
+    const roundId = c.req.param('roundId')
+    const row = await db.query.round.findFirst({
+      where: and(
+        eq(round.id, roundId),
+        eq(round.competitionId, competitionId),
+        isNull(round.deletedAt),
+      ),
+    })
+    if (!row) throw new ApiError(404, 'Tour introuvable', "Ce tour n'existe pas.")
+    return c.json(await getRoundQualifiersView(db, competitionId, row))
+  })
 
   return app
 }

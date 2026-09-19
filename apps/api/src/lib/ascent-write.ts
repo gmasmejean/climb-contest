@@ -4,6 +4,7 @@ import { uuidv7 } from 'uuidv7'
 
 import { notifyPublic } from './notify-public'
 import { isUniqueViolation } from './pg-errors'
+import { assertCompetitorQualifiedForRound } from './round-qualifiers'
 import { ApiError } from '../middleware/problem'
 
 export type AscentActor =
@@ -137,6 +138,10 @@ export async function createAscentOrConflict(
   if (!liveTriple || !openRoundRow) {
     throw new ApiError(404, 'Tour introuvable', "Ce tour n'est pas ouvert pour cette voie.")
   }
+  // ADR-054 : commun à la saisie juge (lot) et à la saisie de secours
+  // organisateur — un compétiteur hors de la liste figée du tour est refusé,
+  // avec un motif lisible (`rejected` côté lot, 409 sinon).
+  await assertCompetitorQualifiedForRound(db, item.roundId, competitorRow)
 
   try {
     return await insertAscentTx(db, actor, item, routeRow, competitionId, competitorRow.categoryId)

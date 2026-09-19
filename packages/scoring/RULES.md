@@ -143,6 +143,25 @@ participants que prévu.
 _Exemple_ : 10 qualifiés prévus, mais les 10e et 11e sont ex aequo → les
 **11** sont qualifiés.
 
+**La liste des qualifiés est figée à l'ouverture du tour suivant.** Une fois
+ce tour ouvert, elle ne change plus : un abandon, une disqualification ou la
+correction tardive d'un résultat du tour précédent ne fait entrer ni sortir
+personne. C'est un choix de l'application, pas une règle fédérale. Si le
+règlement prévoit qu'un remplaçant est repêché, c'est l'organisateur qui le
+décide, en dehors de l'application. Le tour précédent doit être fermé avant
+d'ouvrir le suivant.
+
+> **À faire valider par un juge fédéral** (avant la première compétition
+> réelle) :
+>
+> 1. **L'égalité à la limite** ci-dessus (tous les ex aequo passent) — marquée
+>    « à confirmer » dans la spécification.
+> 2. **Un inscrit qui n'a grimpé aucune voie** (absent jamais déclaré comme tel)
+>    est classé dernier. S'il y a moins de participants réels que de places
+>    qualificatives, il se qualifie quand même. L'application ne le
+>    distingue pas d'un grimpeur ayant vraiment grimpé : l'organisateur doit
+>    déclarer les absents (statut « absent ») avant de fermer le tour.
+
 **Le classement final** est celui du **dernier tour auquel chaque grimpeur a
 participé**. Règle non négociable : **un finaliste est toujours classé
 devant un demi-finaliste non qualifié, quelle que soit sa performance en

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { competitionFormatSchema, competitionStatusSchema } from './competition'
+import { httpUrlSchema } from './route'
 import { roundStatusSchema, roundTypeSchema } from './round'
 
 /**
@@ -75,7 +76,9 @@ export const publicRouteSchema = z
     holdCount: z.number(),
     sector: z.string().nullable(),
     color: z.string().nullable(),
-    videoUrl: z.url().nullable(),
+    videoUrl: httpUrlSchema.nullable(),
+    // Lot 9 : une vidéo téléversée, lue depuis l'API (`.../routes/:id/video`).
+    hasUploadedVideo: z.boolean(),
   })
   .strict()
 export type PublicRoute = z.infer<typeof publicRouteSchema>

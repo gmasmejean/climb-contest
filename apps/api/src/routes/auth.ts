@@ -51,6 +51,8 @@ type UserRow = typeof user.$inferSelect
 export function createAuthRoutes(deps: AuthRouteDeps): Hono {
   const app = new Hono()
   const { db, mailer, env, accessTokenSigner } = deps
+  // Plafonds normaux, sauf surcharge explicite pour une pile de test (env.ts).
+  const limitOr = (normal: number) => env.AUTH_RATE_LIMIT_MAX ?? normal
 
   async function issueSession(c: Context, row: UserRow): Promise<AuthResponse> {
     const refreshToken = randomToken(32)
@@ -79,7 +81,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
 
   app.post(
     '/register',
-    authRateLimiter(10, 15 * 60 * 1000),
+    authRateLimiter(limitOr(10), 15 * 60 * 1000),
     zValidator('json', registerInputSchema, (result, c) => {
       if (!result.success) {
         return problem(c, 400, 'Inscription invalide', result.error.issues[0]?.message)
@@ -146,6 +148,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
   // déclenche ce POST.
   app.post(
     '/verify-email',
+    authRateLimiter(limitOr(20), 15 * 60 * 1000),
     zValidator('json', verifyEmailInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide')
     }),
@@ -176,7 +179,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
 
   app.post(
     '/resend-verification',
-    authRateLimiter(5, 15 * 60 * 1000),
+    authRateLimiter(limitOr(5), 15 * 60 * 1000),
     zValidator('json', resendVerificationInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide')
     }),
@@ -207,7 +210,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
 
   app.post(
     '/login',
-    authRateLimiter(10, 15 * 60 * 1000),
+    authRateLimiter(limitOr(10), 15 * 60 * 1000),
     zValidator('json', loginInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide')
     }),
@@ -242,7 +245,10 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
     },
   )
 
-  app.post('/refresh', async (c) => {
+  // Plafonds larges : tout un club partage souvent UNE adresse (wifi de la
+  // salle) et chaque organisateur rafraîchit sa session à chaque chargement de
+  // page. Le but est d'empêcher un flot, pas de gêner un usage normal.
+  app.post('/refresh', authRateLimiter(limitOr(300), 15 * 60 * 1000), async (c) => {
     const refreshToken = getCookie(c, REFRESH_COOKIE_NAME)
     if (!refreshToken) {
       throw new ApiError(401, 'Session invalide', 'Aucune session active.')
@@ -286,7 +292,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
     return c.json(result)
   })
 
-  app.post('/logout', async (c) => {
+  app.post('/logout', authRateLimiter(limitOr(120), 15 * 60 * 1000), async (c) => {
     const refreshToken = getCookie(c, REFRESH_COOKIE_NAME)
     if (refreshToken) {
       const tokenHash = hashToken(refreshToken)
@@ -350,6 +356,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
 
   app.post(
     '/invitations/accept',
+    authRateLimiter(limitOr(20), 15 * 60 * 1000),
     zValidator('json', acceptInviteInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide', result.error.issues[0]?.message)
     }),

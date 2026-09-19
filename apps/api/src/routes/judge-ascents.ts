@@ -42,6 +42,7 @@ import { assertJudgeAssignedToRoute, resolveOpenRoundForRoute } from '../lib/jud
 import { notifyPublic } from '../lib/notify-public'
 import { isUniqueViolation } from '../lib/pg-errors'
 import { requireJudge } from '../middleware/judge-auth'
+import { assertCompetitorQualifiedForRound } from '../lib/round-qualifiers'
 import { ApiError, problem } from '../middleware/problem'
 import { authRateLimiter } from '../middleware/rate-limit'
 
@@ -115,6 +116,7 @@ async function buildRouteDetail(
     db,
     currentJudge.competitionId,
     openRound.categoryIds,
+    openRound.roundId,
   )
   const ascentsByCompetitor = await activeAscentsFor(
     db,
@@ -347,6 +349,7 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
           db,
           currentJudge.competitionId,
           openRound.categoryIds,
+          openRound.roundId,
         )
         const active = await activeAscentsFor(
           db,
@@ -516,6 +519,7 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
       if (!liveTriple || !openRoundRow) {
         throw new ApiError(404, 'Tour introuvable', "Ce tour n'est pas ouvert pour cette voie.")
       }
+      await assertCompetitorQualifiedForRound(db, input.roundId, competitorRow)
 
       try {
         const created = await db.transaction(async (tx) => {

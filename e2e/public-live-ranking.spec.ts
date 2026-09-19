@@ -129,6 +129,10 @@ test('un passage noté par le juge apparaît en direct dans le classement public
   // Aucun `publicPage.reload()` ici : c'est le flux SSE qui doit porter la
   // mise à jour jusqu'à cet onglet, resté ouvert depuis avant la saisie.
   await expect(publicPage.getByText('Léa Martin')).toBeVisible({ timeout: 15_000 })
+  // Le détail par voie est dans un `<details>` fermé par défaut (ROADMAP.md
+  // Lot 7 : « dépliable ») : il faut le déplier pour que « prise 25 » soit
+  // visible au sens de Playwright.
+  await publicPage.getByText('Léa Martin').click()
   await expect(publicPage.getByText('prise 25')).toBeVisible()
 
   await judgeContext.close()
