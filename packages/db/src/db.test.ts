@@ -62,6 +62,7 @@ describe('migrations', () => {
         'ascent',
         'ascent_event',
         'asset',
+        'asset_upload',
         'category',
         'club',
         'competition',
@@ -99,7 +100,7 @@ describe('migrations', () => {
       const afterUp = await client.query(
         "select table_name from information_schema.tables where table_schema = 'public' and table_name != '_migrations_applied'",
       )
-      expect(afterUp.rows.length).toBe(17)
+      expect(afterUp.rows.length).toBe(18)
     })
   })
 })

@@ -43,6 +43,13 @@
       "when": 1789800676517,
       "tag": "0006_lot9_round_qualifier",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789806255708,
+      "tag": "0007_lot9_asset_upload",
+      "breakpoints": true
     }
   ]
 }

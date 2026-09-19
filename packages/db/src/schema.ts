@@ -151,6 +151,46 @@ export const asset = pgTable(
   (table) => [check('asset_kind_check', sql`${table.kind} IN ('video')`)],
 )
 
+/**
+ * Lot 9 (ADR-052, ADR-058) — un téléversement de vidéo en cours, reprenable :
+ * l'organisateur l'envoie par morceaux, et `received_bytes` dit où reprendre
+ * après une coupure. Une ligne devient un `asset` à la fin de l'envoi ; les
+ * envois abandonnés sont purgés après `expires_at`.
+ */
+export const assetUpload = pgTable(
+  'asset_upload',
+  {
+    id: id(),
+    competitionId: uuid('competition_id')
+      .notNull()
+      .references(() => competition.id),
+    routeId: uuid('route_id')
+      .notNull()
+      .references(() => route.id),
+    storageKey: text('storage_key').notNull(),
+    // Type DÉCLARÉ par le client : jamais une preuve, seule la signature réelle
+    // du fichier est vérifiée à la fin.
+    declaredMimeType: text('declared_mime_type').notNull(),
+    declaredSizeBytes: integer('declared_size_bytes').notNull(),
+    receivedBytes: integer('received_bytes').notNull().default(0),
+    status: text('status').notNull().default('uploading'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => user.id),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    check(
+      'asset_upload_status_check',
+      sql`${table.status} IN ('uploading', 'completed', 'aborted')`,
+    ),
+    check('asset_upload_size_check', sql`${table.declaredSizeBytes} > 0 AND ${table.receivedBytes} >= 0`),
+    index('asset_upload_route_id_idx').on(table.routeId),
+    index('asset_upload_status_expires_idx').on(table.status, table.expiresAt),
+  ],
+)
+
 export const category = pgTable(
   'category',
   {
