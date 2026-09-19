@@ -275,24 +275,30 @@ function buildRoundDetail(roundComputation: RoundComputation, competitorId: stri
     throw new Error(`Compétiteur ${competitorId} absent du tour ${roundComputation.roundId}.`)
   }
 
-  const routes = roundComputation.routes.map((routeMeta) => {
+  // Une voie sans passage ACTIF pour ce compétiteur n'a pas de détail : pas
+  // encore grimpée, ou passage en conflit non tranché (hors classement tant que
+  // l'organisateur n'a pas choisi, ADR-002). En format phases cela n'arrive
+  // jamais — des DNS sont synthétisés pour tout le roster (ADR-041) —, mais en
+  // contest c'est l'état NORMAL d'une compétition en cours. Trouvé par la
+  // répétition générale du Lot 9 : lever ici faisait répondre 500 au
+  // classement public de toute la catégorie.
+  const routes = roundComputation.routes.flatMap((routeMeta) => {
     const routeRanking = roundComputation.routeRankings.find((rr) => rr.routeId === routeMeta.routeId)
     const rankEntry = routeRanking?.entries.find((e) => e.competitorId === competitorId)
     const ascentEntry = roundComputation.ascentsByRoute.get(routeMeta.routeId)?.get(competitorId)
-    /* v8 ignore next 3 -- toute voie du tour porte une entrée pour chaque membre du roster de ce tour */
-    if (!rankEntry || !ascentEntry) {
-      throw new Error(`Voie ${routeMeta.routeId} incohérente pour le compétiteur ${competitorId}.`)
-    }
-    return {
-      routeId: routeMeta.routeId,
-      routeNumber: routeMeta.number,
-      routeName: routeMeta.name,
-      holdNumber: ascentEntry.holdNumber,
-      modifier: ascentEntry.modifier,
-      isTop: ascentEntry.isTop,
-      status: ascentEntry.status,
-      routeRank: rankEntry.rank,
-    }
+    if (!rankEntry || !ascentEntry) return []
+    return [
+      {
+        routeId: routeMeta.routeId,
+        routeNumber: routeMeta.number,
+        routeName: routeMeta.name,
+        holdNumber: ascentEntry.holdNumber,
+        modifier: ascentEntry.modifier,
+        isTop: ascentEntry.isTop,
+        status: ascentEntry.status,
+        routeRank: rankEntry.rank,
+      },
+    ]
   })
 
   return {
