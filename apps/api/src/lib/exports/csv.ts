@@ -9,14 +9,19 @@
 const BOM = String.fromCharCode(0xfeff)
 const FORMULA_PREFIXES = ['=', '+', '-', '@', '\t', '\r']
 
+/**
+ * Un tableur évalue une cellule qui commence par `=`, `+`, `-` ou `@` comme une
+ * FORMULE — même entre guillemets. On la fait précéder d'une apostrophe :
+ * lisible, et jamais exécutée.
+ */
+export function neutralizeFormula(text: string): string {
+  return FORMULA_PREFIXES.some((prefix) => text.startsWith(prefix)) ? `'${text}` : text
+}
+
 export function csvCell(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return ''
-  let text = String(value)
-  // Un nombre reste un nombre : seul du TEXTE commençant par un préfixe de
-  // formule est neutralisé.
-  if (typeof value === 'string' && FORMULA_PREFIXES.some((prefix) => text.startsWith(prefix))) {
-    text = `'${text}`
-  }
+  // Un nombre reste un nombre : seul du TEXTE est neutralisé.
+  const text = typeof value === 'string' ? neutralizeFormula(value) : String(value)
   return /[;"\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 

@@ -32,7 +32,8 @@ export function createAccessTokenSigner(secret: string): AccessTokenSigner {
         .sign(key)
     },
     async verify(token) {
-      const { payload } = await jwtVerify(token, key)
+      // Seul HS256 est émis : seul HS256 est accepté (pas HS384/HS512, même avec le bon secret).
+      const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] })
       const { sub, clubId, role } = payload
       if (
         typeof sub !== 'string' ||
@@ -83,7 +84,7 @@ export function createJudgeTokenSigner(secret: string): JudgeTokenSigner {
         .sign(key)
     },
     async verify(token) {
-      const { payload } = await jwtVerify(token, key)
+      const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] })
       const { sub, competitionId } = payload
       if (typeof sub !== 'string' || typeof competitionId !== 'string') {
         throw new InvalidJudgeTokenError()

@@ -2,6 +2,8 @@ import type { ActivityLogEntry, ActivityLogQuery } from '@climbcontest/contracts
 import { activityLog, ascent, ascentEvent, type Database } from '@climbcontest/db'
 import { eq } from 'drizzle-orm'
 
+import { neutralizeFormula } from './exports/csv'
+
 /**
  * Journal d'activité de la compétition (ROADMAP.md Lot 8) : fusion en
  * mémoire de `activity_log` (tours, compétiteurs) et `ascent_event`
@@ -112,7 +114,10 @@ export async function fetchActivityLog(
 }
 
 function csvEscape(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`
+  // Le journal reprend des motifs et des noms saisis par des humains : une
+  // formule dans l'un d'eux ne doit jamais s'exécuter dans le tableur de
+  // l'organisateur (revue de sécurité, Lot 9).
+  return `"${neutralizeFormula(value).replace(/"/g, '""')}"`
 }
 
 export function activityLogToCsv(entries: ActivityLogEntry[]): string {
