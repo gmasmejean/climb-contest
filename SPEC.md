@@ -1,10 +1,11 @@
 # SPEC.md — Spécification fonctionnelle et technique
 
 **Projet :** application de gestion de compétitions d'escalade de difficulté
-**Version :** 0.2 — arbitrages du Lot 0 intégrés, voir `DECISIONS.md`
+**Version :** 0.3 — arbitrages du Lot 0 et du Lot 9 intégrés, voir `DECISIONS.md`
 **Statut :** les points encore marqués 🟡 sont ouverts. La plupart ont été
-arbitrés pendant le Lot 0 (ADR-001 à ADR-016 dans `DECISIONS.md`) ; seule la
-politique RGPD reste à trancher avant le Lot 9.
+arbitrés pendant le Lot 0 (ADR-001 à ADR-016 dans `DECISIONS.md`) ; la politique
+RGPD l'a été au Lot 9 (ADR-051). Reste ouverte la règle d'égalité à la limite
+de qualification (§ 4.4), à faire valider par un juge fédéral.
 
 ---
 
