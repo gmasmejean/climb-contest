@@ -7,6 +7,15 @@ Le contexte métier et les règles sont dans `SPEC.md`, le découpage en lots
 dans `ROADMAP.md`, les décisions d'architecture dans `DECISIONS.md`. Ce
 fichier ne documente que le démarrage et le développement.
 
+## Documentation
+
+| Pour qui | Fichier |
+|---|---|
+| Un bénévole qui prépare et pilote une compétition | [`docs/GUIDE-ORGANISATEUR.md`](docs/GUIDE-ORGANISATEUR.md) |
+| Chaque juge, le matin (une page à imprimer) | [`docs/GUIDE-JUGE.md`](docs/GUIDE-JUGE.md) |
+| Qui installe, sauvegarde et dépanne | [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md) |
+| Les règles de cotation, à faire valider par un juge fédéral | [`packages/scoring/RULES.md`](packages/scoring/RULES.md) |
+
 ## Démarrage rapide (Docker)
 
 Prérequis : Docker et Docker Compose.
@@ -59,6 +68,10 @@ pnpm dev
 | `pnpm --filter @climbcontest/db db:migrate`      | Applique les migrations en attente                           |
 | `pnpm --filter @climbcontest/db db:migrate:down` | Annule la dernière migration                                 |
 | `pnpm --filter @climbcontest/db db:seed`         | Insère une compétition de démonstration                      |
+| `pnpm rehearsal`                                 | Répétition générale : 60 compétiteurs, coupures provoquées   |
+| `pnpm loadtest:sse`                              | 300 spectateurs sur le flux temps réel                       |
+| `infra/scripts/backup.sh`                        | Sauvegarde la base et les vidéos                             |
+| `infra/scripts/verify-restore.sh`                | Prouve qu'une sauvegarde se restaure (sans danger)           |
 
 ## Structure du monorepo
 
