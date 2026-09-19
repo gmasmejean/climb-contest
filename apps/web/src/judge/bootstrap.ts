@@ -1,7 +1,41 @@
-import type { JudgeBootstrapResponse } from '@climbcontest/contracts'
+import type { JudgeBootstrapResponse, JudgeRouteDetail } from '@climbcontest/contracts'
+import type { QueueItem } from '@climbcontest/sync'
 
 import { judgeFetch } from '../api/judge-client'
 import { judgeDb, resetJudgeDatabase } from './local-db'
+import type { QueuePayload } from './queue-payload'
+
+/**
+ * Après une actualisation, une saisie locale en `conflict` ou `rejected` doit
+ * rester « faite » et garder son avertissement (ADR-055). Le serveur, lui,
+ * n'a aucun passage ACTIF pour un conflit (les deux lignes sont hors du
+ * classement tant que l'organisateur n'a pas tranché) : sans cette
+ * conservation, le compétiteur repasserait en « À faire », sans aucun message,
+ * et le juge pourrait le ressaisir sans savoir qu'un conflit existe.
+ *
+ * Ne conserve que pour le MÊME tour : une voie qui passe à un nouveau tour
+ * repart de la vérité du serveur. Pure, testée sans base.
+ */
+export function preserveHeldAscents(
+  previous: readonly JudgeRouteDetail[],
+  fresh: readonly JudgeRouteDetail[],
+  held: readonly QueueItem<QueuePayload>[],
+): JudgeRouteDetail[] {
+  return fresh.map((detail) => {
+    const before = previous.find((p) => p.route.id === detail.route.id)
+    if (!before || !detail.round || before.round?.id !== detail.round.id) return detail
+    const competitors = detail.competitors.map((competitor) => {
+      if (competitor.ascent !== null) return competitor
+      const isHeld = held.some(
+        (item) =>
+          item.payload.routeId === detail.route.id && item.payload.competitorId === competitor.id,
+      )
+      const kept = isHeld ? before.competitors.find((c) => c.id === competitor.id)?.ascent : null
+      return kept ? { ...competitor, ascent: kept } : competitor
+    })
+    return { ...detail, competitors }
+  })
+}
 
 export interface BootstrapOptions {
   /**
@@ -46,9 +80,17 @@ export async function bootstrapJudge(
         .count()
       if (waiting > 0) return 'skipped'
     }
+    let routes = response.routes
+    if (options.onlyIfQueueIdle) {
+      const previous = (await judgeDb.routeDetails.toArray()).map((row) => row.detail)
+      const held = await judgeDb.queue
+        .filter((item) => item.state === 'conflict' || item.state === 'rejected')
+        .toArray()
+      routes = preserveHeldAscents(previous, response.routes, held)
+    }
     await judgeDb.routeDetails.clear()
     await judgeDb.routeDetails.bulkPut(
-      response.routes.map((detail) => ({ routeId: detail.route.id, detail })),
+      routes.map((detail) => ({ routeId: detail.route.id, detail })),
     )
     await judgeDb.meta.put({
       key: 'judge',

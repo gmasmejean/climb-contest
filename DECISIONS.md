@@ -1794,7 +1794,8 @@ conditions cumulées :
   automatique toutes les 30 s.
 - **File vide** : aucun élément `pending` ou `sending` dans la file. Les
   éléments `conflict` et `rejected` ne bloquent pas — le serveur les a déjà
-  traités, ils restent affichés par la file.
+  traités. Mais ils ne suffisent pas à rester visibles : voir « Conservation »
+  ci-dessous.
 - **Vérifié dans la transaction d'écriture**, pas avant le téléchargement :
   `bootstrapJudge({ onlyIfQueueIdle: true })` relit la table `queue` à
   l'intérieur de la transaction Dexie qui réécrit `routeDetails`. Une saisie
@@ -1804,6 +1805,20 @@ conditions cumulées :
 
 Quand des saisies sont en attente, l'actualisation est simplement reportée :
 elle est retentée dès que la file se vide.
+
+**Conservation des saisies en conflit ou rejetées (correction faite en
+écrivant le test e2e).** La première version supposait qu'un élément
+`conflict`/`rejected` « reste affiché par la file » après l'actualisation. Faux :
+`judge-conflict.spec.ts` a échoué. Le serveur n'a aucun passage *actif* pour
+un conflit (les deux lignes sont hors classement tant que l'organisateur n'a
+pas tranché), donc le cache frais remettait le compétiteur en « À faire », et
+seule la ligne « Fait » affiche l'avertissement de conflit : le juge aurait pu
+ressaisir un compétiteur en conflit sans rien voir. Parade
+(`preserveHeldAscents`, `judge/bootstrap.ts`) : pour un élément `conflict` ou
+`rejected`, la saisie locale est conservée telle quelle dans le cache, *pour
+le même tour uniquement*, et jamais à la place d'un passage que le serveur
+connaît. La connexion (sans `onlyIfQueueIdle`) repart toujours de la vérité du
+serveur, comme avant.
 
 **Options écartées :** rouvrir le lien à la main à chaque changement de tour
 (procédure documentée seulement — un juge qui oublie reste devant une voie

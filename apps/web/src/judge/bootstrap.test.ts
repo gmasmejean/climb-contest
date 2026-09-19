@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QueuePayload } from './queue-payload'
 
 const judgeFetch = vi.fn<() => Promise<JudgeBootstrapResponse>>()
-vi.mock('../api/judge-client', () => ({ judgeFetch: (...args: unknown[]) => judgeFetch(...(args as [])) }))
+vi.mock('../api/judge-client', () => ({
+  judgeFetch: (...args: unknown[]) => judgeFetch(...(args as [])),
+}))
 
-const { bootstrapJudge } = await import('./bootstrap')
+const { bootstrapJudge, preserveHeldAscents } = await import('./bootstrap')
 const { judgeDb } = await import('./local-db')
 
 const JUDGE_ID = '00000000-0000-4000-8000-0000000000a1'
@@ -148,5 +150,141 @@ describe('bootstrapJudge({ onlyIfQueueIdle }) — actualisation sûre (ADR-055)'
 
     await expect(bootstrapJudge({ onlyIfQueueIdle: true })).rejects.toThrow('Réseau coupé')
     expect(await storedRound()).toBeNull()
+  })
+})
+
+// --- Conservation des saisies en conflit / rejetées (ADR-055) ---
+
+const ROUND_ID = '00000000-0000-4000-8000-0000000000c1'
+const OTHER_ROUND_ID = '00000000-0000-4000-8000-0000000000c2'
+const COMPETITOR_ID = '00000000-0000-4000-8000-0000000000d1'
+
+const localAscent = {
+  id: '00000000-0000-4000-8000-0000000000e1',
+  holdNumber: 20,
+  modifier: 'none' as const,
+  isTop: false,
+  status: 'valid' as const,
+  climbTimeMs: null,
+  recordedAt: '2026-09-19T10:00:00.000Z',
+}
+
+function detailWith(
+  roundId: string | null,
+  ascent: typeof localAscent | null,
+): JudgeBootstrapResponse['routes'][number] {
+  return {
+    route: { id: ROUTE_ID, number: 3, name: null, holdCount: 40, categories: [] },
+    round: roundId ? { id: roundId, type: 'semifinal' } : null,
+    timingEnabled: false,
+    competitors: [
+      {
+        id: COMPETITOR_ID,
+        bib: 7,
+        firstName: 'Léa',
+        lastName: 'Martin',
+        categoryLabel: 'U16',
+        ascent,
+      },
+    ],
+  }
+}
+
+function heldItem(state: QueueItemState): QueueItem<QueuePayload> {
+  return {
+    ...queueItem('held', state),
+    payload: { ...queueItem('held', state).payload, competitorId: COMPETITOR_ID },
+  }
+}
+
+describe('preserveHeldAscents', () => {
+  it.each<QueueItemState>(['conflict', 'rejected'])(
+    'garde la saisie locale « faite » quand le serveur n’a aucun passage actif (%s)',
+    (state) => {
+      const merged = preserveHeldAscents(
+        [detailWith(ROUND_ID, localAscent)],
+        [detailWith(ROUND_ID, null)],
+        [heldItem(state)],
+      )
+      expect(merged[0]?.competitors[0]?.ascent).toEqual(localAscent)
+    },
+  )
+
+  it('sans élément retenu, la vérité du serveur l’emporte (le compétiteur repasse à faire)', () => {
+    const merged = preserveHeldAscents(
+      [detailWith(ROUND_ID, localAscent)],
+      [detailWith(ROUND_ID, null)],
+      [],
+    )
+    expect(merged[0]?.competitors[0]?.ascent).toBeNull()
+  })
+
+  it('ne remplace jamais un passage que le serveur connaît', () => {
+    const serverAscent = {
+      ...localAscent,
+      id: '00000000-0000-4000-8000-0000000000e2',
+      holdNumber: 33,
+    }
+    const merged = preserveHeldAscents(
+      [detailWith(ROUND_ID, localAscent)],
+      [detailWith(ROUND_ID, serverAscent)],
+      [heldItem('conflict')],
+    )
+    expect(merged[0]?.competitors[0]?.ascent).toEqual(serverAscent)
+  })
+
+  it('ne conserve rien quand la voie est passée à un autre tour', () => {
+    const merged = preserveHeldAscents(
+      [detailWith(ROUND_ID, localAscent)],
+      [detailWith(OTHER_ROUND_ID, null)],
+      [heldItem('conflict')],
+    )
+    expect(merged[0]?.competitors[0]?.ascent).toBeNull()
+  })
+
+  it('ne conserve rien quand la voie n’a plus de tour ouvert', () => {
+    const merged = preserveHeldAscents(
+      [detailWith(ROUND_ID, localAscent)],
+      [detailWith(null, null)],
+      [heldItem('conflict')],
+    )
+    expect(merged[0]?.competitors[0]?.ascent).toBeNull()
+  })
+})
+
+describe('bootstrapJudge({ onlyIfQueueIdle }) — conflit conservé de bout en bout', () => {
+  it('une saisie en conflit reste « faite » après l’actualisation', async () => {
+    judgeFetch.mockResolvedValue({
+      ...bootstrapResponse(JUDGE_ID, true),
+      routes: [detailWith(ROUND_ID, localAscent)],
+    })
+    await bootstrapJudge()
+    await judgeDb.queue.put(heldItem('conflict'))
+    judgeFetch.mockResolvedValue({
+      ...bootstrapResponse(JUDGE_ID, true),
+      routes: [detailWith(ROUND_ID, null)],
+    })
+
+    expect(await bootstrapJudge({ onlyIfQueueIdle: true })).toBe('written')
+
+    const stored = (await judgeDb.routeDetails.get(ROUTE_ID))?.detail
+    expect(stored?.competitors[0]?.ascent).toEqual(localAscent)
+  })
+
+  it('la connexion (sans option) repart toujours de la vérité du serveur', async () => {
+    judgeFetch.mockResolvedValue({
+      ...bootstrapResponse(JUDGE_ID, true),
+      routes: [detailWith(ROUND_ID, localAscent)],
+    })
+    await bootstrapJudge()
+    await judgeDb.queue.put(heldItem('conflict'))
+    judgeFetch.mockResolvedValue({
+      ...bootstrapResponse(JUDGE_ID, true),
+      routes: [detailWith(ROUND_ID, null)],
+    })
+
+    await bootstrapJudge()
+
+    expect((await judgeDb.routeDetails.get(ROUTE_ID))?.detail.competitors[0]?.ascent).toBeNull()
   })
 })
