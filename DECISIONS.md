@@ -1899,6 +1899,51 @@ les écritures non latines) — disproportionné pour une compétition de club.
 
 ---
 
+## ADR-058 — Lot 9 : téléversement de vidéos — protocole maison, stockage sur disque, S3 explicitement non livré
+
+**Date :** 2026-09-19
+**Contexte :** ADR-052 acte « refus sans transcodage, envoi reprenable, derrière
+`StorageAdapter` (local-disk + s3-compatible) ». Deux précisions prises en
+implémentant.
+
+**Décision 1 — protocole d'envoi maison, sans dépendance.** Session d'envoi en
+base (`asset_upload`), puis morceaux envoyés en `PATCH` avec l'octet de départ
+déclaré (`Upload-Offset`). Un décalage entre l'octet annoncé et l'octet reçu
+répond `409` avec l'offset attendu : le client se recale et reprend. Même
+principe que tus, sans la dépendance ni le protocole complet.
+
+**Décision 2 — `StorageAdapter` livré avec UNE implémentation, `local-disk`.**
+L'interface est définie pour deux (SPEC.md §6.1), mais l'adaptateur S3 n'est
+PAS livré : `STORAGE_DRIVER=s3` échoue explicitement au démarrage. Raison :
+`CLAUDE.md` interdit le code simulé, et un adaptateur S3 sans test contre un
+vrai serveur compatible S3 en serait un ; l'ajouter demande le SDK AWS, un
+conteneur MinIO dans la CI et le mapping des morceaux sur l'envoi multipart
+(parties de 5 Mio minimum). C'est un écart au plan de départ du lot,
+signalé à l'utilisateur. Un seul déploiement (un VPS, un volume Docker) n'en a
+pas besoin en v1.
+
+**Décision 3 — vérification à la fin, sur le contenu réel.** À la fin de
+l'envoi, la taille reçue doit égaler la taille déclarée, et la SIGNATURE des
+premiers octets doit être celle d'un conteneur accepté (`ftyp` pour mp4/mov,
+EBML pour webm). Le type MIME déclaré n'est jamais une preuve. Le fichier est
+servi avec le type vérifié et `X-Content-Type-Options: nosniff`.
+
+**Décision 4 — clé de stockage jamais dérivée d'une entrée client** :
+`competitions/<competitionId>/videos/<assetId>`. Le nom de fichier d'origine
+n'est pas conservé. L'adaptateur disque refuse toute clé qui sortirait de sa
+racine.
+
+**Décision 5 — un envoi terminé remplace le lien externe** de la voie
+(`video_url` mis à null) ; supprimer la vidéo téléversée ne le rétablit pas.
+
+**Décision 6 — lecture publique servie par l'API, avec `Range`**, sous
+`/public/:slug/routes/:routeId/video`. Un `<video>` demande des plages d'octets ;
+sans elles, pas de déplacement dans la vidéo.
+
+**Limite assumée :** le codec n'est pas vérifié (ADR-052).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
