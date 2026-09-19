@@ -4,7 +4,7 @@ import {
   publicRankingResponseSchema,
   publicRouteSchema,
 } from '@climbcontest/contracts'
-import { category, round, route, routeCategory, type Database } from '@climbcontest/db'
+import { asset, category, round, route, routeCategory, type Database } from '@climbcontest/db'
 import { zValidator } from '@hono/zod-validator'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -14,6 +14,8 @@ import type { PublicRankingCache } from '../lib/public-cache'
 import { resolvePublicCompetitionBySlug } from '../lib/public-access'
 import { assembleCategoryRanking } from '../lib/public-ranking'
 import type { RealtimeBridge } from '../lib/realtime-bridge'
+import type { StorageAdapter } from '../lib/storage'
+import { parseRange } from '../lib/video/range'
 import { ApiError, problem } from '../middleware/problem'
 import { authRateLimiter } from '../middleware/rate-limit'
 
@@ -21,6 +23,8 @@ export interface PublicRouteDeps {
   db: Database
   cache: PublicRankingCache
   bridge: RealtimeBridge
+  /** Lot 9 : absent → la lecture des vidéos téléversées répond 404. */
+  storage?: StorageAdapter | undefined
 }
 
 const HEARTBEAT_MS = 25_000
@@ -31,7 +35,11 @@ async function assertCategoryBelongsToCompetition(
   categoryId: string,
 ): Promise<void> {
   const row = await db.query.category.findFirst({
-    where: and(eq(category.id, categoryId), eq(category.competitionId, competitionId), isNull(category.deletedAt)),
+    where: and(
+      eq(category.id, categoryId),
+      eq(category.competitionId, competitionId),
+      isNull(category.deletedAt),
+    ),
   })
   if (!row) {
     throw new ApiError(404, 'Catégorie introuvable', "Cette catégorie n'existe pas.")
@@ -154,6 +162,7 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
           sector: route.sector,
           color: route.color,
           videoUrl: route.videoUrl,
+          videoAssetId: route.videoAssetId,
         })
         .from(route)
         .innerJoin(routeCategory, eq(routeCategory.routeId, route.id))
@@ -166,9 +175,57 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
         )
         .orderBy(asc(route.number))
 
-      return c.json(rows.map((row) => publicRouteSchema.parse(row)))
+      return c.json(
+        rows.map(({ videoAssetId, ...row }) =>
+          publicRouteSchema.parse({ ...row, hasUploadedVideo: videoAssetId !== null }),
+        ),
+      )
     },
   )
+
+  // Vidéo téléversée d'une voie (Lot 9, ADR-058) : servie par l'API avec
+  // `Range`, sans quoi un `<video>` ne peut pas se déplacer dans le fichier.
+  // Type = celui VÉRIFIÉ à l'envoi (jamais le type déclaré), avec `nosniff`.
+  app.get('/:slug/routes/:routeId/video', publicReadRateLimiter, async (c) => {
+    const currentCompetition = await resolvePublicCompetitionBySlug(db, c.req.param('slug'))
+    const routeRow = await db.query.route.findFirst({
+      where: and(
+        eq(route.id, c.req.param('routeId')),
+        eq(route.competitionId, currentCompetition.id),
+        isNull(route.deletedAt),
+      ),
+    })
+    const assetRow = routeRow?.videoAssetId
+      ? await db.query.asset.findFirst({ where: eq(asset.id, routeRow.videoAssetId) })
+      : undefined
+    if (!deps.storage || !assetRow || assetRow.deletedAt !== null) {
+      throw new ApiError(404, 'Vidéo introuvable', "Cette voie n'a pas de vidéo.")
+    }
+
+    const requested = parseRange(c.req.header('range'), assetRow.sizeBytes)
+    if (requested.kind === 'unsatisfiable') {
+      c.header('Content-Range', `bytes */${assetRow.sizeBytes}`)
+      return problem(c, 416, 'Plage impossible', 'Cette plage dépasse la taille de la vidéo.')
+    }
+    const range = requested.kind === 'partial' ? requested.range : undefined
+    const stored = await deps.storage.open(assetRow.storageKey, range)
+    if (!stored) throw new ApiError(404, 'Vidéo introuvable', "Cette voie n'a pas de vidéo.")
+
+    const length = range ? range.end - range.start + 1 : stored.size
+    const headers: Record<string, string> = {
+      'content-type': assetRow.mimeType,
+      'content-length': String(length),
+      'accept-ranges': 'bytes',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; sandbox",
+      // La voie garde la même URL quand la vidéo est remplacée : on ne laisse
+      // pas un cache la resservir sans la revalider.
+      'cache-control': 'no-cache',
+      etag: `"${assetRow.id}"`,
+    }
+    if (range) headers['content-range'] = `bytes ${range.start}-${range.end}/${stored.size}`
+    return new Response(stored.stream, { status: range ? 206 : 200, headers })
+  })
 
   app.get('/:slug/stream', publicStreamRateLimiter, async (c) => {
     const currentCompetition = await resolvePublicCompetitionBySlug(db, c.req.param('slug'))

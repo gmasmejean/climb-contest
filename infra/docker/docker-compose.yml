@@ -61,6 +61,12 @@ services:
       SMTP_PORT: 1025
       SMTP_SECURE: 'false'
       MAIL_FROM: ${MAIL_FROM}
+      # Lot 9 (ADR-058) : vidéos téléversées sur un volume, pas dans l'image.
+      STORAGE_DRIVER: local-disk
+      STORAGE_LOCAL_DIR: /data/uploads
+      VIDEO_MAX_BYTES: ${VIDEO_MAX_BYTES:-209715200}
+    volumes:
+      - uploads-data:/data/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -92,5 +98,6 @@ services:
 
 volumes:
   postgres-data:
+  uploads-data:
   web-dist:
   caddy-data:

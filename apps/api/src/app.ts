@@ -9,6 +9,7 @@ import type { Logger } from './lib/logger'
 import type { Mailer } from './lib/mailer'
 import { createPublicRankingCache, type PublicRankingCache } from './lib/public-cache'
 import { createNoopRealtimeBridge, type RealtimeBridge } from './lib/realtime-bridge'
+import type { StorageAdapter } from './lib/storage'
 import { errorHandler } from './middleware/problem'
 import { createAuthRoutes } from './routes/auth'
 import { createCategoryRoutes } from './routes/categories'
@@ -27,6 +28,7 @@ import { createPublicRoutes } from './routes/public'
 import { createQrCodesRoutes } from './routes/qrcodes'
 import { createRoundRoutes } from './routes/rounds'
 import { createRoundStatusRoutes } from './routes/round-status'
+import { createRouteVideoRoutes } from './routes/route-video'
 import { createRouteRoutes } from './routes/routes'
 
 export interface AppDeps {
@@ -48,6 +50,13 @@ export interface AppDeps {
    */
   publicRankingCache?: PublicRankingCache
   realtimeBridge?: RealtimeBridge
+  /**
+   * Lot 9 (ADR-058) : stockage des vidéos. Absent → les routes de téléversement
+   * ne sont pas montées (la suite de tests existante n'en a pas besoin) ;
+   * `index.ts` le fournit toujours.
+   */
+  storage?: StorageAdapter
+  videoMaxBytes?: number
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -112,6 +121,17 @@ export function createApp(deps: AppDeps): Hono {
   app.route('/api/v1/competitions/:id', createConflictsRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id', createDashboardRoutes({ ...scopedDeps, now: deps.now }))
   app.route('/api/v1/competitions/:id/ascents', createOrganizerAscentRoutes(scopedDeps))
+  if (deps.storage) {
+    app.route(
+      '/api/v1/competitions/:id/routes/:rid/video',
+      createRouteVideoRoutes({
+        ...scopedDeps,
+        storage: deps.storage,
+        maxBytes: deps.videoMaxBytes ?? 209_715_200,
+        now: deps.now,
+      }),
+    )
+  }
   app.route(
     '/api/v1/competitions/:id/exports',
     createExportRoutes({ ...scopedDeps, now: deps.now }),
@@ -130,7 +150,12 @@ export function createApp(deps: AppDeps): Hono {
   )
   app.route(
     '/api/v1/public',
-    createPublicRoutes({ db: deps.db, cache: publicRankingCache, bridge: realtimeBridge }),
+    createPublicRoutes({
+      db: deps.db,
+      cache: publicRankingCache,
+      bridge: realtimeBridge,
+      storage: deps.storage,
+    }),
   )
 
   return app

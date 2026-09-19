@@ -76,6 +76,8 @@ export const publicRouteSchema = z
     sector: z.string().nullable(),
     color: z.string().nullable(),
     videoUrl: z.url().nullable(),
+    // Lot 9 : une vidéo téléversée, lue depuis l'API (`.../routes/:id/video`).
+    hasUploadedVideo: z.boolean(),
   })
   .strict()
 export type PublicRoute = z.infer<typeof publicRouteSchema>
