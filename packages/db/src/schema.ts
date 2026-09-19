@@ -118,6 +118,10 @@ export const competition = pgTable(
     createdBy: uuid('created_by')
       .notNull()
       .references(() => user.id),
+    // Lot 9 (ADR-051) : date de la purge des données personnelles. Nulle tant
+    // que la compétition n'a pas été purgée ; la ligne reste, sans donnée
+    // personnelle, comme trace de la purge.
+    purgedAt: timestamp('purged_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps,
   },

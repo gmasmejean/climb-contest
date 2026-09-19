@@ -219,6 +219,37 @@ describe('migration 0003_judge_credentials_plaintext (DECISIONS.md ADR-027)', ()
   })
 })
 
+describe('migration 0008_lot9_competition_purged_at (ADR-051)', () => {
+  it('est réversible : le down retire competition.purged_at, le up la rétablit, nulle par défaut', async () => {
+    await withRawClient(async (client) => {
+      const hasColumn = async () => {
+        const result = await client.query(
+          "select 1 from information_schema.columns where table_name = 'competition' and column_name = 'purged_at'",
+        )
+        return result.rows.length === 1
+      }
+      expect(await hasColumn()).toBe(true)
+
+      // Un cran à la fois : on s'arrête dès que la colonne a disparu, quel que
+      // soit le nombre de migrations ajoutées par-dessus depuis.
+      let guard = 0
+      while (await hasColumn()) {
+        expect((await revertLastMigrations(client, 1)).length).toBe(1)
+        guard += 1
+        expect(guard).toBeLessThan(20)
+      }
+      expect(await hasColumn()).toBe(false)
+
+      await applyPendingMigrations(client)
+      expect(await hasColumn()).toBe(true)
+      const nullable = await client.query(
+        "select is_nullable, column_default from information_schema.columns where table_name = 'competition' and column_name = 'purged_at'",
+      )
+      expect(nullable.rows[0]).toMatchObject({ is_nullable: 'YES', column_default: null })
+    })
+  })
+})
+
 describe('contraintes et colonne calculée ascent', () => {
   async function setupAscentFixture() {
     const { demoClub, demoUser } = await insertClubAndUser()

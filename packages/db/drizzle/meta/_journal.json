@@ -50,6 +50,13 @@
       "when": 1789806255708,
       "tag": "0007_lot9_asset_upload",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789808713040,
+      "tag": "0008_lot9_competition_purged_at",
+      "breakpoints": true
     }
   ]
 }
