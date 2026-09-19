@@ -188,16 +188,20 @@ test('un organisateur résout un conflit, corrige un passage, puis publie le tou
   await page.getByRole('button', { name: 'Se connecter' }).click()
   await expect(page).toHaveURL('/')
 
-  // Navigation entièrement par clics (jamais un `page.goto` direct vers une
-  // route authentifiée profonde) : un rechargement complet à cet endroit
-  // perd la session malgré le cookie de refresh — comportement pré-existant
-  // de l'application, jamais exercé avant ce test puisqu'aucun parcours
-  // utilisateur réel n'atteint `/competitions/:id` par un lien externe ou un
-  // rechargement (toujours par un clic depuis la liste). Noté dans TODO.md.
   await page.getByRole('link', { name: 'Mes compétitions' }).click()
   await expect(page).toHaveURL('/competitions')
   await page.getByText(competitionName).click()
   await expect(page).toHaveURL(/\/competitions\//)
+
+  // Régression Lot 9 (TODO.md § Lot 8) : un rechargement complet sur une route
+  // organisateur profonde doit restaurer la session via le cookie de refresh
+  // et rester sur la page — il atterrissait sur `/` parce que `/competitions`
+  // était pris pour la page publique `/c` par un test de préfixe de chemin.
+  const detailUrl = page.url()
+  await page.reload()
+  await expect(page).toHaveURL(detailUrl)
+  await expect(page.getByRole('tab', { name: 'Pilotage' })).toBeVisible()
+
   await page.getByRole('tab', { name: 'Pilotage' }).click()
 
   // --- Conflits : choisir la valeur "prise 20" ---

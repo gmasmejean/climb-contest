@@ -28,9 +28,9 @@ Sept tests à ce jour :
   saisie (« choisir cette valeur »), corrige le passage retenu, ferme puis
   publie le tour depuis l'onglet Pilotage — le classement public reflète la
   valeur finale, sans marquage « provisoire » (`ROADMAP.md` Lot 8). Amorcé
-  par API (compétition/juge/conflit), navigue uniquement par clics UI
-  jamais un `page.goto` direct vers une route organisateur profonde,
-  voir `TODO.md` § Lot 8 pour le bug pré-existant que ça contourne.
+  par API (compétition/juge/conflit), recharge la page sur une route
+  organisateur profonde pour vérifier que la session est restaurée
+  (régression `TODO.md` § Lot 8, corrigée au Lot 9).
 
 ## Projets
 
