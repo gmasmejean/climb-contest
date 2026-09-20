@@ -2336,6 +2336,7 @@ une catégorie fait passer la compétition à « En cours »).
 ## ADR-066 — Lot 15 : photo annotée de la voie
 
 **Date :** 2026-09-20
+**Statut :** les renvois au Lot 16 (détection par couleur) sont sans suite : le lot est abandonné, ADR-069.
 **Contexte :** les juges reçoivent hors de l'application une photo de leur voie,
 annotée à la main avec les numéros de prises. On la met dans l'application : l'organisateur
 téléverse la photo et place les prises, le juge la consulte hors ligne depuis son écran de
@@ -2529,6 +2530,42 @@ le champ « Nombre de prises » s'il est déjà renseigné**.
 les prises quand on recadre après coup (complexité pour un cas que le déroulé en étapes évite) ;
 laisser le champ « Nombre de prises » modifiable à côté de l'annotation (deux sources de vérité,
 c'est exactement ce que l'organisateur ne veut pas trancher).
+
+---
+
+## ADR-069 — Lot 16 abandonné : pas de détection automatique des prises
+
+**Date :** 2026-09-20
+**Contexte :** ADR-066 renvoyait au Lot 16 la détection des prises par couleur : l'organisateur
+touche une prise pour échantillonner sa couleur, règle une tolérance, une détection par
+composantes connexes propose des taches qui alimentent l'éditeur du Lot 15 (Web Worker côté
+navigateur). Le lot était « à cadrer » et conditionné à de vraies photos de voies fournies par
+l'utilisateur ; le seul fichier image du dépôt est synthétique (`wall.jpg`). Discuté avant tout
+code.
+
+**Décision (actée avec l'utilisateur) :** le Lot 16 est **abandonné**. Le placement manuel des
+prises du Lot 15 (ADR-066, ADR-068) reste la seule façon d'annoter une voie.
+
+**Raisons évoquées en discussion :**
+
+- Le gain n'a jamais été mesuré : la détection économise la pose des prises, mais ajoute
+  l'échantillonnage, le réglage de la tolérance et la relecture des faux positifs. Sur un mur
+  chargé, cela peut coûter autant que le placement manuel.
+- Le risque porte sur la cotation : `hold_count` en dépend, ADR-068 le fait suivre l'annotation
+  et ADR-066 point 5 le fige après le premier passage. Une tache parasite non relevée ne se
+  corrige plus.
+- La détection ne règle pas la numérotation (traversées, dévers), qui reste manuelle
+  (ADR-066 point 2).
+- Sans vraies photos, le réglage se ferait à l'aveugle.
+
+**Conséquences :** aucun code à retirer (le lot n'avait rien livré), aucune migration, aucune
+préparation à conserver. ADR-066 et ADR-068 restent valables ; leurs renvois au Lot 16 sont
+historiques.
+
+**Alternatives écartées :** détection par couleur en spike avec critère go/no-go sur photos
+annotées à la main ; segmentation par modèle d'apprentissage (poids du modèle et dépendance
+disproportionnés). On pourra rouvrir la question si le placement manuel s'avère trop lent en
+conditions réelles.
 
 ---
 
