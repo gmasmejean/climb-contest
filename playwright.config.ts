@@ -21,7 +21,8 @@ export default defineConfig({
     {
       name: 'mobile',
       use: { ...devices['Pixel 5'], viewport: { width: 360, height: 740 } },
-      testMatch: /(judge-(ascent|draft)|competition-trash|round-category-status)\.spec\.ts/,
+      testMatch:
+        /(judge-(ascent|draft)|competition-trash|round-category-status|route-photo)\.spec\.ts/,
     },
   ],
 })

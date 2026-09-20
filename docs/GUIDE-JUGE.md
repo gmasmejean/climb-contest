@@ -10,7 +10,7 @@
 
 ## Noter un passage
 
-1. Sur **Vos voies**, touchez votre voie, puis le grimpeur (onglet **À faire**).
+1. Sur **Vos voies**, touchez votre voie, puis le grimpeur (onglet **À faire**). Si l'organisateur a ajouté la photo de la voie, le bouton **Voir la voie** l'affiche avec le numéro de chaque prise (même sans réseau) ; **Masquer la voie** la referme.
 2. Tapez le **numéro de la dernière prise tenue**. Ajoutez **+** si le grimpeur a commencé le mouvement vers la prise suivante.
 3. Le grimpeur est arrivé en haut ? Touchez **TOP**.
 4. Il n'a pas grimpé ? **DNS**. Il a commencé puis a dû s'arrêter (blessure…) ? **DNF**. Une chute normale se note simplement à la prise atteinte.

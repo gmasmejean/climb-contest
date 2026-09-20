@@ -446,3 +446,27 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   partent avant la transaction SQL. Si elle échoue, la compétition reste à la corbeille
   avec des vidéos « introuvables » (bénin, voulu — même ordre que la purge RGPD).
 
+## Depuis le Lot 15
+
+- **Toucher la prise sur la photo pour remplir le pavé du juge.** Idée notée en
+  cadrant le lot (ADR-066), non demandée : le juge verrait la photo et toucherait la prise
+  atteinte au lieu de taper son numéro.
+- **Plusieurs photos par voie.** Une voie haute ne tient pas toujours sur une photo. Il
+  faudrait une numérotation continue d'une photo à l'autre ; une seule photo par voie a
+  été retenue (ADR-066).
+- **Détection des prises par couleur (Lot 16).** Voir `ROADMAP.md` : à régler sur de
+  vraies photos de voies, qu'il faut fournir.
+- **Photo non publique.** Elle n'est visible que de l'organisateur et des juges affectés ;
+  la page publique ne l'affiche pas.
+- **Photo remplaçable après le premier passage.** Aujourd'hui figée (ADR-066) : un flou
+  découvert le jour J ne se corrige pas. Une option serait d'autoriser le remplacement de
+  l'image en conservant les prises (même cadrage) — pas fait, cela demande de dire à
+  l'organisateur que les numéros ne bougent pas.
+- **Ouverture au balayage vers la gauche.** Le panneau se ferme par balayage vers la
+  droite ; l'ouvrir par balayage n'existe pas (le bouton « Voir la voie » suffit).
+- **Le test e2e de la photo a échoué une fois sans qu'on sache pourquoi** (projet
+  `chromium`, juste après le redéploiement du front : le juge ne voyait pas « Léa Martin »
+  après avoir touché la voie). Non reproduit en 9 exécutions suivantes. Piste : la mise à
+  jour du service worker (ADR-061) qui recharge la page en pleine séquence.
+- **`asset.kind` accepte maintenant `route_photo`** ; le message d'erreur de la suppression
+  définitive parle encore de « vidéos » quand le stockage manque.

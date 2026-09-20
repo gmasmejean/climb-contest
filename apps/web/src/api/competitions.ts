@@ -19,6 +19,8 @@ import type {
   Round,
   RoundQualifiersResponse,
   Route,
+  RouteHold,
+  RoutePhoto,
   UpdateCategoryInput,
   UpdateCompetitionInput,
   UpdateCompetitorInput,
@@ -26,7 +28,7 @@ import type {
   UpdateRoundInput,
 } from '@climbcontest/contracts'
 
-import { apiDownload, apiFetch, saveBlob } from './client'
+import { apiDownload, apiFetch, apiRawFetch, errorFromResponse, saveBlob } from './client'
 
 export type RouteWithCategories = Route & { categoryIds: string[] }
 
@@ -136,6 +138,48 @@ export const routesApi = {
       method: 'POST',
       body: json({ orderedIds }),
     }),
+}
+
+/**
+ * Photo annotée d'une voie (Lot 15, ADR-066). Le fichier est du JPEG déjà
+ * ré-encodé par `lib/photo-resize.ts` ; le serveur le revérifie sur ses octets.
+ */
+export const routePhotoApi = {
+  upload: async (competitionId: string, routeId: string, jpeg: Blob): Promise<RoutePhoto> => {
+    const response = await apiRawFetch(`/competitions/${competitionId}/routes/${routeId}/photo`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/jpeg' },
+      body: jpeg,
+    })
+    if (!response.ok) throw await errorFromResponse(response)
+    return (await response.json()) as RoutePhoto
+  },
+  saveHolds: (competitionId: string, routeId: string, holds: RouteHold[]) =>
+    apiFetch<RoutePhoto>(`/competitions/${competitionId}/routes/${routeId}/photo/holds`, {
+      method: 'PUT',
+      body: json({ holds }),
+    }),
+  remove: async (competitionId: string, routeId: string): Promise<void> => {
+    const response = await apiRawFetch(`/competitions/${competitionId}/routes/${routeId}/photo`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) throw await errorFromResponse(response)
+  },
+  /** L'image, pour l'aperçu : le jeton passe en en-tête, un `<img src>` ne le pourrait pas. */
+  fetchImage: async (competitionId: string, routeId: string): Promise<Blob> => {
+    const response = await apiRawFetch(`/competitions/${competitionId}/routes/${routeId}/photo`)
+    if (!response.ok) throw await errorFromResponse(response)
+    return response.blob()
+  },
+  /** Fiches « voie » en PDF : toutes celles qui ont une photo, ou seulement `routeId`. */
+  downloadSheets: async (competitionId: string, routeId?: string): Promise<void> => {
+    const query = routeId ? `?routeId=${encodeURIComponent(routeId)}` : ''
+    const { blob, filename } = await apiDownload(
+      `/competitions/${competitionId}/route-sheets.pdf${query}`,
+      'fiches-voies.pdf',
+    )
+    saveBlob(blob, filename)
+  },
 }
 
 export const roundsApi = {

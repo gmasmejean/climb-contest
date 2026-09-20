@@ -10,6 +10,7 @@ import { vibrateOnConfirm } from '../../judge/haptics'
 import { useJudgeRouteDetail } from '../../judge/local-store'
 import { useAscentDraft } from '../../judge/useAscentDraft'
 import { useAscentRowState } from '../../judge/useAscentRowState'
+import RoutePhotoPanel from './RoutePhotoPanel.vue'
 
 useWakeLock()
 
@@ -26,6 +27,8 @@ type Mode = 'create' | 'correct' | 'readonly'
 // réseau pour afficher cet écran.
 const detail = useJudgeRouteDetail(routeId)
 const step = ref<'entry' | 'recap'>('entry')
+// La voie annotée (ADR-066) : panneau ouvert à la demande du juge.
+const photoOpen = ref(false)
 const nowMs = ref(Date.now())
 
 const holdNumber = ref<number | null>(null)
@@ -273,6 +276,10 @@ async function confirm(): Promise<void> {
           Saisie retrouvée : vérifiez-la avant de valider.
         </p>
 
+        <Button v-if="detail.route.photo" variant="secondary" full-width @click="photoOpen = true">
+          Voir la voie
+        </Button>
+
         <div class="flex flex-col gap-2">
           <span class="text-sm font-medium text-gray-900">Numéro de prise</span>
           <NumericKeypad
@@ -365,5 +372,14 @@ async function confirm(): Promise<void> {
         </Button>
       </template>
     </template>
+
+    <RoutePhotoPanel
+      v-if="detail?.route.photo"
+      :route-id="routeId"
+      :route-number="detail.route.number"
+      :photo="detail.route.photo"
+      :open="photoOpen"
+      @close="photoOpen = false"
+    />
   </main>
 </template>

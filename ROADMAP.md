@@ -542,6 +542,45 @@ en un clic (jamais automatique, le figeage est quasi irréversible).
 
 ---
 
+## Lot 15 — Photo annotée de la voie (livré)
+
+> Actée avec l'utilisateur : une photo par voie, numérotation par hauteur puis
+> correction manuelle, détection automatique repoussée au Lot 16. ADR-066.
+
+```
+Lot 15 : photo annotée de la voie.
+
+Organisateur : téléverser la photo d'une voie (ré-encodée en JPEG dans le
+navigateur), placer les prises dessus (numéro, position), « renuméroter de bas
+en haut », utiliser le nombre de prises placées comme nombre de prises de la
+voie, imprimer les fiches voie en PDF.
+
+Juge : bouton « Voir la voie » sur l'écran de saisie, panneau qui glisse depuis
+la droite, photo lue depuis IndexedDB (aucun accès réseau), zoom par boutons.
+
+Cas limites : photo remplacée ; numéro de prise > nombre de prises ; passage déjà
+saisi (409) ; hors ligne ; voie sans photo (pas de bouton) ; fichier trop gros ;
+fichier non JPEG ; photo retirée alors que le juge l'a en cache ; migration
+Dexie sans perte de la file d'envoi.
+```
+
+---
+
+## Lot 16 — Détection des prises par couleur (à cadrer)
+
+> Pas engagé. À régler sur de vraies photos de voies, fournies par
+> l'utilisateur : sans elles, le réglage se ferait à l'aveugle.
+
+```
+Lot 16 : l'organisateur touche une prise pour échantillonner la couleur, règle
+la tolérance ; la détection propose des taches (composantes connexes, surface
+minimale) qui alimentent l'éditeur du Lot 15, puis « renuméroter de bas en
+haut » et pré-remplissage du nombre de prises comme suggestion à confirmer
+(ADR-004 respecté). Détection dans un Web Worker côté navigateur.
+```
+
+---
+
 ## Conseils d'utilisation
 
 **Une session par lot.** Ouvre une session fraîche pour chaque lot. Les

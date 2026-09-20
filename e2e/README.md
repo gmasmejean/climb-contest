@@ -133,3 +133,13 @@ pnpm exec playwright test --project=mobile
   qualification n'est pas terminée, et la compétition ne peut pas être clôturée
   tant qu'une catégorie est ouverte. Tourne aussi à 360 px (projet `mobile`) : pas de
   défilement horizontal, cibles tactiles d'au moins 48 px.
+
+- `route-photo.spec.ts` — la photo annotée d'une voie (Lot 15, ADR-066) : un fichier
+  qui n'est pas une image est refusé en français, une vraie photo est ré-encodée
+  dans le navigateur puis enregistrée, l'organisateur place 7 prises (la 8ᵉ est
+  refusée), les renumérote de bas en haut, les enregistre et télécharge la fiche PDF ;
+  un juge télécharge la voie en ligne, passe **hors ligne**, ouvre « Voir la voie »
+  (image décodée, 7 cercles numérotés, zoom), continue à saisir et retrouve la photo
+  après un rechargement. Tourne aussi à 360 px (projet `mobile`) : pas de
+  défilement horizontal. Utilise la photo `apps/api/src/test-utils/wall.jpg`
+  (image synthétique : il n'y a pas encore de vraie photo de voie dans le dépôt).

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { createRouteInputSchema } from '@climbcontest/contracts'
-import { Button, NumberField, TextField } from '@climbcontest/ui'
+import { Button, NumberField, TextField, useToast } from '@climbcontest/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, reactive, ref } from 'vue'
 
 import { ApiError } from '../../../api/client'
-import { categoriesApi, routesApi } from '../../../api/competitions'
+import { categoriesApi, routePhotoApi, routesApi } from '../../../api/competitions'
+import RoutePhotoEditor from '../RoutePhotoEditor.vue'
 import RouteVideoUploader from '../RouteVideoUploader.vue'
 
 const props = defineProps<{ competitionId: string }>()
@@ -25,6 +26,28 @@ const { data: categories } = useQuery({
 
 async function onVideoChanged(): Promise<void> {
   await refresh()
+}
+
+// Photo annotée (Lot 15, ADR-066).
+const toast = useToast()
+const editingRoute = computed(() => routes.value?.find((r) => r.id === editingRouteId.value))
+const hasAnyPhoto = computed(() => routes.value?.some((r) => r.photoAssetId !== null) ?? false)
+const printingSheets = ref(false)
+
+async function printAllSheets(): Promise<void> {
+  printingSheets.value = true
+  try {
+    await routePhotoApi.downloadSheets(props.competitionId)
+  } catch (error) {
+    toast.show(
+      error instanceof ApiError
+        ? (error.detail ?? error.title)
+        : 'Impossible de générer les fiches. Réessayez.',
+      'error',
+    )
+  } finally {
+    printingSheets.value = false
+  }
 }
 
 async function refresh(): Promise<void> {
@@ -158,7 +181,17 @@ const categoryList = computed(() => categories.value ?? [])
 <template>
   <div class="flex flex-col gap-6">
     <p v-if="isPending" class="text-gray-600">Chargement…</p>
-    <ul v-else class="flex flex-col gap-2">
+    <div v-if="hasAnyPhoto" class="flex flex-col gap-1">
+      <div>
+        <Button variant="secondary" :disabled="printingSheets" @click="printAllSheets">
+          {{ printingSheets ? 'Génération…' : 'Imprimer les fiches voie' }}
+        </Button>
+      </div>
+      <p class="text-sm text-gray-600">
+        Un PDF, une page par voie ayant une photo, avec ses prises numérotées.
+      </p>
+    </div>
+    <ul v-if="!isPending" class="flex flex-col gap-2">
       <li
         v-for="(route, index) in routes"
         :key="route.id"
@@ -169,7 +202,8 @@ const categoryList = computed(() => categories.value ?? [])
             >Voie {{ route.number }}<span v-if="route.name"> — {{ route.name }}</span></span
           >
           <p class="text-sm text-gray-600">
-            {{ route.holdCount }} prises · {{ categoryLabels(route.categoryIds) }}
+            {{ route.holdCount }} prises · {{ categoryLabels(route.categoryIds)
+            }}<template v-if="route.photoAssetId"> · photo annotée</template>
           </p>
         </div>
         <div class="flex items-center gap-1">
@@ -212,6 +246,17 @@ const categoryList = computed(() => categories.value ?? [])
         <TextField v-model="form.color" label="Couleur (optionnelle)" />
         <TextField v-model="form.videoUrl" label="Vidéo (lien, optionnel)" />
       </div>
+      <RoutePhotoEditor
+        v-if="editingRoute"
+        :competition-id="competitionId"
+        :route-id="editingRoute.id"
+        :route-number="editingRoute.number"
+        :hold-count="editingRoute.holdCount"
+        :photo-asset-id="editingRoute.photoAssetId"
+        :saved-holds="editingRoute.photoHolds ?? []"
+        @changed="refresh"
+        @use-hold-count="(count) => (form.holdCount = count)"
+      />
       <RouteVideoUploader
         v-if="editingRouteId"
         :competition-id="competitionId"
@@ -220,7 +265,7 @@ const categoryList = computed(() => categories.value ?? [])
         @changed="onVideoChanged"
       />
       <p v-else class="text-sm text-gray-600">
-        Enregistrez la voie pour pouvoir y téléverser une vidéo.
+        Enregistrez la voie pour pouvoir y ajouter une photo annotée et une vidéo.
       </p>
       <fieldset class="flex flex-col gap-2">
         <legend class="text-sm font-medium text-gray-900">Catégories concernées</legend>

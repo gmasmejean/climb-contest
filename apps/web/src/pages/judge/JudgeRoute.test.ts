@@ -7,7 +7,7 @@ import { flushLiveQueries } from '../../test-utils/flush'
 import JudgeRoute from './JudgeRoute.vue'
 
 const routeDetail = {
-  route: { id: 'route-1', number: 3, name: null, holdCount: 40, categories: [] },
+  route: { id: 'route-1', number: 3, name: null, holdCount: 40, categories: [], photo: null },
   round: { id: 'round-1', type: 'qualification' as const },
   timingEnabled: false,
   competitors: [
