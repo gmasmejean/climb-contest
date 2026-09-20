@@ -2419,6 +2419,64 @@ serveur (le client ré-encode toujours).
 
 ---
 
+## ADR-067 — Photo de voie : choix à la création et recadrage avant l'envoi
+
+**Date :** 2026-09-20
+**Contexte :** avec ADR-066, la photo ne se téléversait qu'en modifiant une voie déjà
+créée, et telle quelle : une photo de mur prise en large, ou avec un voisin dans le
+cadre, n'était pas rattrapable (et le verrou après le premier passage empêche de la
+remplacer le jour J). Demande de l'utilisateur : choisir la photo à la création de
+la voie, et pouvoir la recadrer / zoomer après l'avoir choisie.
+
+**Décision (points 1 et 2 actés avec l'utilisateur) :**
+
+1. **Rectangle libre**, pas un cadre à proportions imposées : une voie est haute et
+   étroite, un format fixe la couperait mal. On tire les quatre coins (cibles de
+   48 px, flèches du clavier en équivalent, Maj = pas plus grand) ; zoom ×1/×2/×3
+   avec défilement, comme le panneau du juge (ADR-066 point 7). À ×1 la photo tient
+   **entière** dans l'espace disponible (mesuré, sinon sur téléphone on recadrait
+   une photo dont on ne voit pas le bas). Sur écran tactile, glisser à l'intérieur
+   de la zone fait défiler la vue zoomée : le déplacement de la zone à la souris est
+   un confort, les coins font tout (CLAUDE.md : pas de geste caché).
+2. **Même sélecteur partout** (`RoutePhotoPicker`) : à la création de la voie et dans
+   « Remplacer la photo » de l'éditeur. Le recadrage est facultatif ; sans lui, le
+   comportement d'ADR-066 est inchangé.
+3. **Le recadrage est une zone normalisée** `{ x, y, width, height }` dans [0, 1] de
+   l'image **orientée** (EXIF appliqué), comme les prises (ADR-066 point 4) :
+   indépendante de la résolution. Il est appliqué par `resizeToJpeg` **avant** la
+   réduction à 1600 px (`drawImage` source → cible) : on garde la résolution de la
+   zone choisie. **Rien ne change côté serveur ni en base** : il reçoit toujours un
+   JPEG, la zone n'est jamais stockée. Pas de migration.
+4. **L'aperçu est produit par le même `resizeToJpeg`** (côté long 640 px) : ce qu'on
+   voit est ce qui sera envoyé, et un fichier illisible est refusé **dès le choix**
+   (avant : au clic sur « Envoyer »). Un fichier refusé n'est pas retenu.
+5. **À la création, l'ordre est : réduire, créer la voie, envoyer la photo.** Réduire
+   d'abord évite de créer une voie orpheline pour un fichier illisible. La photo passe
+   par l'API existante `PUT …/routes/:rid/photo`, qui exige une voie : pas de nouveau
+   point d'API. Si l'envoi échoue (réseau), la voie **existe** : l'écran le dit, ouvre
+   la voie en modification et demande de re-choisir la photo — pas de doublon possible
+   en recliquant sur « Ajouter ».
+6. **Pas de dépendance ajoutée** : le recadrage tient en fonctions pures testées
+   (`photo-crop.ts`) et un composant (`PhotoCropDialog.vue`).
+
+**Limites connues :**
+
+- Pas de rotation ni de redressement (l'orientation EXIF est déjà appliquée).
+- Les prises se placent toujours après la création de la voie (elles dépendent de la
+  photo finale et de son id) ; l'écran l'indique.
+- Le glissement au doigt dans la zone ne la déplace pas (il fait défiler) : on la
+  déplace en tirant deux coins. Vérifié en émulation mobile 360 px avec le pointeur
+  souris de Playwright, **pas sur un vrai téléphone**.
+- Le recadrage tactile (pincer pour zoomer) n'existe pas : le zoom est par boutons.
+
+**Alternatives écartées :** cadre à proportions fixes avec déplacement de la photo
+dessous (impose un format) ; bibliothèque de recadrage tierce (dépendance pour un
+besoin de quatre coins) ; stocker la zone en base (le serveur n'en a pas l'usage, la
+photo envoyée est déjà recadrée) ; endpoint unique « créer la voie avec sa photo »
+(deux mécanismes d'envoi à maintenir pour un gain de deux requêtes).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
