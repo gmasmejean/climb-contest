@@ -1,4 +1,4 @@
-import type { RoundQualifiersResponse } from '@climbcontest/contracts'
+import type { RoundQualifiersResponse, RoundStatus } from '@climbcontest/contracts'
 import {
   ascent,
   category,
@@ -13,6 +13,7 @@ import { getQualifiers } from '@climbcontest/scoring'
 import { and, asc, desc, eq, gt, inArray, isNull, lt } from 'drizzle-orm'
 
 import { computeCategoryRounds } from './public-ranking'
+import { loadStatuses, pairKey } from './round-category'
 import { ApiError } from '../middleware/problem'
 
 /** Ce que la transaction du changement de statut fournit — `Database` complet n'est pas satisfait par un client de transaction. */
@@ -34,12 +35,13 @@ function roundLabel(row: Pick<RoundRow, 'type'>): string {
 interface PreviousRound {
   roundId: string
   type: RoundRow['type']
-  status: RoundRow['status']
+  /** ADR-065 : le statut du COUPLE (tour précédent, cette catégorie). */
+  status: RoundStatus
   qualifyingCount: number | null
 }
 
 /** Les catégories qu'un tour fait grimper, via `round_route`. */
-async function categoryIdsOfRound(db: Database, roundId: string): Promise<string[]> {
+export async function categoryIdsOfRound(db: Database, roundId: string): Promise<string[]> {
   const rows = await db
     .select({ categoryId: roundRoute.categoryId })
     .from(roundRoute)
@@ -65,7 +67,6 @@ async function previousRoundByCategory(
       categoryId: roundRoute.categoryId,
       roundId: round.id,
       type: round.type,
-      status: round.status,
       qualifyingCount: round.qualifyingCount,
     })
     .from(roundRoute)
@@ -88,10 +89,17 @@ async function previousRoundByCategory(
       byCategory.set(row.categoryId, {
         roundId: row.roundId,
         type: row.type,
-        status: row.status,
+        status: 'draft',
         qualifyingCount: row.qualifyingCount,
       })
     }
+  }
+  const statuses = await loadStatuses(
+    db,
+    [...byCategory].map(([categoryId, previous]) => ({ roundId: previous.roundId, categoryId })),
+  )
+  for (const [categoryId, previous] of byCategory) {
+    previous.status = statuses.get(pairKey(previous.roundId, categoryId)) ?? 'draft'
   }
   return byCategory
 }
@@ -107,16 +115,18 @@ export interface QualifierPlanEntry {
  * (ADR-054). Lecture seule : l'écriture est faite par `saveFrozenQualifiers`
  * dans la transaction qui change le statut.
  *
- * Refuse d'ouvrir tant que le tour précédent d'une des catégories n'est pas
- * `closed` ou `published` — sinon la liste serait calculée sur un
- * classement encore en cours de saisie.
+ * ADR-065 : ne concerne que les `categoryIds` demandées. Refuse d'ouvrir tant
+ * que le tour précédent de l'une d'elles n'est pas `closed` ou `published`
+ * POUR CETTE CATÉGORIE — sinon la liste serait calculée sur un classement
+ * encore en cours de saisie. Les autres catégories du tour précédent, qui
+ * peuvent encore grimper, ne bloquent rien.
  */
 export async function planQualifiersForOpening(
   db: Database,
   currentCompetition: CompetitionRow,
   target: RoundRow,
+  categoryIds: readonly string[],
 ): Promise<QualifierPlanEntry[]> {
-  const categoryIds = await categoryIdsOfRound(db, target.id)
   const previousByCategory = await previousRoundByCategory(
     db,
     currentCompetition.id,
@@ -166,14 +176,19 @@ export async function planQualifiersForOpening(
   return plan
 }
 
-/** Écrit la liste dans la transaction qui ouvre le tour (remplace une éventuelle liste antérieure). */
+/**
+ * Écrit la liste dans la transaction qui ouvre le tour. Remplace la liste
+ * antérieure des seules `categoryIds` ouvertes : les autres catégories du tour
+ * gardent la leur (ADR-065).
+ */
 export async function saveFrozenQualifiers(
   tx: QualifierWriter,
   roundId: string,
   actorUserId: string,
+  categoryIds: readonly string[],
   plan: readonly QualifierPlanEntry[],
 ): Promise<void> {
-  await tx.delete(roundQualifier).where(eq(roundQualifier.roundId, roundId))
+  await deleteFrozenQualifiers(tx, roundId, categoryIds)
   const rows = plan.flatMap((entry) =>
     entry.qualifiers.map((q) => ({
       roundId,
@@ -187,24 +202,35 @@ export async function saveFrozenQualifiers(
   if (rows.length > 0) await tx.insert(roundQualifier).values(rows)
 }
 
-export async function deleteFrozenQualifiers(tx: QualifierWriter, roundId: string): Promise<void> {
-  await tx.delete(roundQualifier).where(eq(roundQualifier.roundId, roundId))
+export async function deleteFrozenQualifiers(
+  tx: QualifierWriter,
+  roundId: string,
+  categoryIds: readonly string[],
+): Promise<void> {
+  if (categoryIds.length === 0) return
+  await tx
+    .delete(roundQualifier)
+    .where(
+      and(
+        eq(roundQualifier.roundId, roundId),
+        inArray(roundQualifier.categoryId, [...categoryIds]),
+      ),
+    )
 }
 
 /**
- * Rouvrir un tour dont un tour suivant a déjà été ouvert périmerait la liste
- * figée de celui-ci (ADR-054). Le message dit quoi faire.
+ * Rouvrir un tour pour une catégorie dont le tour suivant a déjà été ouvert
+ * PÉRIMERAIT la liste figée de celui-ci (ADR-054). Le message dit quoi faire.
+ * ADR-065 : seul le tour suivant DE CETTE CATÉGORIE compte.
  */
 export async function assertRoundCanBeReopened(
   db: Database,
   competitionId: string,
   target: RoundRow,
+  categoryId: string,
 ): Promise<void> {
-  const categoryIds = await categoryIdsOfRound(db, target.id)
-  if (categoryIds.length === 0) return
-
   const later = await db
-    .selectDistinct({ roundId: round.id, type: round.type, status: round.status })
+    .selectDistinct({ roundId: round.id, type: round.type })
     .from(roundRoute)
     .innerJoin(round, eq(round.id, roundRoute.roundId))
     .where(
@@ -212,13 +238,16 @@ export async function assertRoundCanBeReopened(
         eq(round.competitionId, competitionId),
         isNull(round.deletedAt),
         gt(round.displayOrder, target.displayOrder),
-        inArray(roundRoute.categoryId, categoryIds),
+        eq(roundRoute.categoryId, categoryId),
       ),
     )
     .orderBy(asc(round.type))
 
-  const started = later.filter((r) => r.status !== 'draft')
-  const first = started[0]
+  const statuses = await loadStatuses(
+    db,
+    later.map((r) => ({ roundId: r.roundId, categoryId })),
+  )
+  const first = later.find((r) => statuses.get(pairKey(r.roundId, categoryId)) !== 'draft')
   if (first) {
     throw new ApiError(
       409,
@@ -230,13 +259,19 @@ export async function assertRoundCanBeReopened(
 
 /**
  * Repasser un tour en brouillon efface sa liste figée — donc jamais tant
- * qu'il contient un passage, actif ou en conflit (ADR-054).
+ * qu'il contient un passage, actif ou en conflit (ADR-054). ADR-065 : on ne
+ * regarde que les passages des compétiteurs de la catégorie concernée.
  */
-export async function assertRoundIsEmptyForDraft(db: Database, roundId: string): Promise<void> {
+export async function assertRoundIsEmptyForDraft(
+  db: Database,
+  roundId: string,
+  categoryId: string,
+): Promise<void> {
   const rows = await db
     .select({ id: ascent.id })
     .from(ascent)
-    .where(eq(ascent.roundId, roundId))
+    .innerJoin(competitor, eq(competitor.id, ascent.competitorId))
+    .where(and(eq(ascent.roundId, roundId), eq(competitor.categoryId, categoryId)))
     .limit(1)
   if (rows.length > 0) {
     throw new ApiError(

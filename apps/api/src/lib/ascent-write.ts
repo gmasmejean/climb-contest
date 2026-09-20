@@ -1,15 +1,21 @@
-import { ascent, ascentEvent, competitor, round, roundRoute, route, type Database } from '@climbcontest/db'
+import {
+  ascent,
+  ascentEvent,
+  competitor,
+  roundRoute,
+  route,
+  type Database,
+} from '@climbcontest/db'
 import { and, eq, isNull } from 'drizzle-orm'
 import { uuidv7 } from 'uuidv7'
 
 import { notifyPublic } from './notify-public'
 import { isUniqueViolation } from './pg-errors'
+import { findRoundOpenForCategory } from './round-category'
 import { assertCompetitorQualifiedForRound } from './round-qualifiers'
 import { ApiError } from '../middleware/problem'
 
-export type AscentActor =
-  | { kind: 'judge'; judgeId: string }
-  | { kind: 'organizer'; userId: string }
+export type AscentActor = { kind: 'judge'; judgeId: string } | { kind: 'organizer'; userId: string }
 
 type AscentRow = typeof ascent.$inferSelect
 type RouteRow = typeof route.$inferSelect
@@ -126,15 +132,8 @@ export async function createAscentOrConflict(
     ),
   })
   const openRoundRow = liveTriple
-    ? await db.query.round.findFirst({
-        where: and(
-          eq(round.id, item.roundId),
-          eq(round.competitionId, competitionId),
-          eq(round.status, 'open'),
-          isNull(round.deletedAt),
-        ),
-      })
-    : null
+    ? await findRoundOpenForCategory(db, competitionId, item.roundId, competitorRow.categoryId)
+    : undefined
   if (!liveTriple || !openRoundRow) {
     throw new ApiError(404, 'Tour introuvable', "Ce tour n'est pas ouvert pour cette voie.")
   }

@@ -5,7 +5,16 @@ import {
   publicRankingResponseSchema,
   publicRouteSchema,
 } from '@climbcontest/contracts'
-import { asset, category, round, route, routeCategory, type Database } from '@climbcontest/db'
+import {
+  asset,
+  category,
+  round,
+  roundCategory,
+  roundRoute,
+  route,
+  routeCategory,
+  type Database,
+} from '@climbcontest/db'
 import { zValidator } from '@hono/zod-validator'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -15,6 +24,7 @@ import type { PublicRankingCache } from '../lib/public-cache'
 import { resolvePublicCompetitionBySlug } from '../lib/public-access'
 import { assembleCategoryRanking } from '../lib/public-ranking'
 import type { RealtimeBridge } from '../lib/realtime-bridge'
+import { statusExpression } from '../lib/round-category'
 import type { StorageAdapter } from '../lib/storage'
 import { parseRange } from '../lib/video/range'
 import { ApiError, problem } from '../middleware/problem'
@@ -66,6 +76,47 @@ function sleepOrAbort(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
+async function loadPublicRounds(db: Database, competitionId: string) {
+  const roundRows = await db
+    .select({ id: round.id, type: round.type, displayOrder: round.displayOrder })
+    .from(round)
+    .where(and(eq(round.competitionId, competitionId), isNull(round.deletedAt)))
+    .orderBy(asc(round.displayOrder))
+
+  const pairs = await db
+    .selectDistinct({
+      roundId: roundRoute.roundId,
+      categoryId: roundRoute.categoryId,
+      status: statusExpression,
+      categoryOrder: category.displayOrder,
+    })
+    .from(roundRoute)
+    .innerJoin(round, eq(round.id, roundRoute.roundId))
+    .innerJoin(category, eq(category.id, roundRoute.categoryId))
+    .leftJoin(
+      roundCategory,
+      and(
+        eq(roundCategory.roundId, roundRoute.roundId),
+        eq(roundCategory.categoryId, roundRoute.categoryId),
+      ),
+    )
+    .where(
+      and(
+        eq(round.competitionId, competitionId),
+        isNull(round.deletedAt),
+        isNull(category.deletedAt),
+      ),
+    )
+    .orderBy(asc(category.displayOrder))
+
+  return roundRows.map((row) => ({
+    ...row,
+    categories: pairs
+      .filter((pair) => pair.roundId === row.id)
+      .map(({ categoryId, status }) => ({ categoryId, status })),
+  }))
+}
+
 export function createPublicRoutes(deps: PublicRouteDeps): Hono {
   const app = new Hono()
   const { db, cache, bridge } = deps
@@ -87,18 +138,11 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
       .orderBy(asc(category.displayOrder))
 
     // Vide en contest : le round implicite n'est jamais exposé (ADR-023).
+    // ADR-065 : un état par catégorie — les U16 peuvent avoir fini quand les
+    // U18 commencent. Une catégorie sans ligne `round_category` est en brouillon.
     const rounds =
       currentCompetition.format === 'phases'
-        ? await db
-            .select({
-              id: round.id,
-              type: round.type,
-              displayOrder: round.displayOrder,
-              status: round.status,
-            })
-            .from(round)
-            .where(and(eq(round.competitionId, currentCompetition.id), isNull(round.deletedAt)))
-            .orderBy(asc(round.displayOrder))
+        ? await loadPublicRounds(db, currentCompetition.id)
         : []
 
     return c.json(

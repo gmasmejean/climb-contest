@@ -11,6 +11,7 @@ import {
   judgeRoute,
   randomToken,
   round,
+  roundCategory,
   roundQualifier,
   roundRoute,
   route,
@@ -103,6 +104,16 @@ export function checkBackupIntegrity(backup: CompetitionBackup): string[] {
         'Une affectation de voie à un tour référence un tour, une voie ou une catégorie absente du fichier.',
       )
     }
+  }
+  for (const link of backup.roundCategories) {
+    if (!roundIds.has(link.roundId) || !categoryIds.has(link.categoryId)) {
+      add('Un état de tour référence un tour ou une catégorie absente du fichier.')
+    }
+  }
+  for (const pair of duplicates(backup.roundCategories, (r) => `${r.roundId}:${r.categoryId}`)) {
+    add(
+      `Un tour porte deux états pour la même catégorie (${String(pair)}) : le fichier est corrompu.`,
+    )
   }
   for (const q of backup.roundQualifiers) {
     if (
@@ -334,8 +345,16 @@ export async function importBackup(
           style: row.style,
           displayOrder: row.displayOrder,
           qualifyingCount: row.qualifyingCount,
-          status: row.status,
           deletedAt: dateOrNull(row.deletedAt),
+        })),
+      )
+    }
+    if (backup.roundCategories.length > 0) {
+      await tx.insert(roundCategory).values(
+        backup.roundCategories.map((row) => ({
+          roundId: mapped(row.roundId),
+          categoryId: mapped(row.categoryId),
+          status: row.status,
         })),
       )
     }

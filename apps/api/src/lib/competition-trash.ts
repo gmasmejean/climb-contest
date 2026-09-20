@@ -11,6 +11,7 @@ import {
   judge,
   judgeRoute,
   round,
+  roundCategory,
   roundQualifier,
   roundRoute,
   route,
@@ -46,6 +47,7 @@ export const COMPETITION_OWNED_TABLES = [
   'ascent_event',
   'ascent',
   'round_qualifier',
+  'round_category',
   'round_route',
   'route_category',
   'judge_route',
@@ -63,7 +65,7 @@ export const COMPETITION_RUNNING_ERROR = () =>
   new ApiError(
     409,
     'Compétition en cours',
-    'Cette compétition est « En cours » : des juges peuvent être en train de saisir. Clôturez-la d’abord (Infos → Changer le statut), puis remettez-la à la corbeille.',
+    'Cette compétition est « En cours » : des juges peuvent être en train de saisir. Clôturez-la d’abord (Infos → Changer le statut), puis remettez-la à la corbeille. Si des catégories sont encore ouvertes, fermez-les avant dans l’onglet Pilotage.',
   )
 
 const NOT_FOUND = () =>
@@ -230,6 +232,7 @@ export async function permanentlyDeleteCompetition(
           inArray(roundQualifier.sourceRoundId, roundIds),
         ),
       )
+    await tx.delete(roundCategory).where(inArray(roundCategory.roundId, roundIds))
     await tx.delete(roundRoute).where(inArray(roundRoute.roundId, roundIds))
     await tx.delete(routeCategory).where(inArray(routeCategory.routeId, routeIds))
     await tx.delete(judgeRoute).where(inArray(judgeRoute.judgeId, judgeIds))

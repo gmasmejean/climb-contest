@@ -1,6 +1,7 @@
 import {
   backupPreviewSchema,
-  competitionBackupSchema,
+  parseCompetitionBackup,
+  READABLE_BACKUP_SCHEMA_VERSIONS,
   importBackupInputSchema,
   importBackupResultSchema,
 } from '@climbcontest/contracts'
@@ -57,18 +58,21 @@ export function createCompetitionImportRoutes(deps: CompetitionImportRouteDeps):
       const organizer = c.get('organizer')
       const { mode, backup: rawBackup } = c.req.valid('json')
 
-      const parsed = competitionBackupSchema.safeParse(rawBackup)
+      const parsed = parseCompetitionBackup(rawBackup)
       if (!parsed.success) {
         const version =
           typeof rawBackup === 'object' && rawBackup !== null && 'schemaVersion' in rawBackup
             ? rawBackup.schemaVersion
             : undefined
-        if (version !== undefined && version !== 1) {
+        if (
+          version !== undefined &&
+          !(READABLE_BACKUP_SCHEMA_VERSIONS as readonly unknown[]).includes(version)
+        ) {
           return problem(
             c,
             400,
             'Sauvegarde non compatible',
-            `Ce fichier est au format ${typeof version === 'number' || typeof version === 'string' ? String(version) : 'inconnu'}, cette version de l’application ne lit que le format 1.`,
+            `Ce fichier est au format ${typeof version === 'number' || typeof version === 'string' ? String(version) : 'inconnu'}, cette version de l’application ne lit que les formats ${READABLE_BACKUP_SCHEMA_VERSIONS.join(' et ')}.`,
           )
         }
         const first = parsed.error.issues

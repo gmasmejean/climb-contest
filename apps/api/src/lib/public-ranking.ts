@@ -8,6 +8,7 @@ import {
   competition,
   competitor,
   round,
+  roundCategory,
   roundQualifier,
   roundRoute,
   route,
@@ -25,6 +26,8 @@ import {
   type RouteRanking,
 } from '@climbcontest/scoring'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+
+import { statusExpression } from './round-category'
 
 type CompetitionRow = typeof competition.$inferSelect
 type RoundStatus = 'draft' | 'open' | 'closed' | 'published'
@@ -310,10 +313,12 @@ function buildRoundDetail(roundComputation: RoundComputation, competitorId: stri
 }
 
 /**
- * Tous les tours (statut ≠ `draft`) qui utilisent au moins une voie de
- * cette catégorie, dans l'ordre. Un tour `draft` n'a encore aucune voie
- * ouverte pour personne : il ne contribue à rien (cohérent avec
- * DECISIONS.md ADR-030 — le vrai pilotage d'ouverture reste au Lot 8).
+ * Tous les tours qui utilisent au moins une voie de cette catégorie ET dont
+ * le statut POUR CETTE CATÉGORIE n'est pas `draft` (ADR-065), dans l'ordre. Un
+ * tour `draft` pour cette catégorie n'a encore aucune voie ouverte pour
+ * personne : il ne contribue à rien. Le `status` rendu est celui du couple
+ * (tour, catégorie) : un classement est « provisoire » tant que l'un des
+ * tours de CETTE catégorie n'est pas publié.
  */
 async function loadContributingRounds(
   db: Database,
@@ -324,7 +329,7 @@ async function loadContributingRounds(
     .select({
       roundId: round.id,
       type: round.type,
-      status: round.status,
+      status: statusExpression,
       displayOrder: round.displayOrder,
       qualifyingCount: round.qualifyingCount,
       routeId: roundRoute.routeId,
@@ -335,6 +340,10 @@ async function loadContributingRounds(
     .from(roundRoute)
     .innerJoin(round, eq(round.id, roundRoute.roundId))
     .innerJoin(route, eq(route.id, roundRoute.routeId))
+    .leftJoin(
+      roundCategory,
+      and(eq(roundCategory.roundId, round.id), eq(roundCategory.categoryId, categoryId)),
+    )
     .where(
       and(
         eq(round.competitionId, competitionId),
@@ -360,7 +369,7 @@ async function loadContributingRounds(
       byRound.set(link.roundId, {
         roundId: link.roundId,
         type: link.type as RoundType,
-        status: link.status as RoundStatus,
+        status: link.status,
         displayOrder: link.displayOrder,
         qualifyingCount: link.qualifyingCount,
         routes: [routeMeta],

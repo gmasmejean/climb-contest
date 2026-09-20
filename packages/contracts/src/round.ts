@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { competitionStatusSchema } from './competition'
+
 export const roundTypeSchema = z.enum(['qualification', 'semifinal', 'final'])
 export const roundStyleSchema = z.enum(['flash', 'onsight'])
 export const roundStatusSchema = z.enum(['draft', 'open', 'closed', 'published'])
@@ -39,6 +41,18 @@ export const changeRoundStatusInputSchema = z.object({
   categoryIds: z.array(z.uuid()).min(1, 'Choisissez au moins une catégorie.'),
 })
 export type ChangeRoundStatusInput = z.infer<typeof changeRoundStatusInputSchema>
+
+/**
+ * ADR-065 : l'état de chaque catégorie visée après la transition, plus le
+ * statut de compétition (ouvrir une catégorie passe la compétition à « En
+ * cours » si elle ne l'était pas).
+ */
+export const changeRoundStatusResponseSchema = z.object({
+  roundId: z.uuid(),
+  categories: z.array(z.object({ categoryId: z.uuid(), status: roundStatusSchema })),
+  competitionStatus: competitionStatusSchema,
+})
+export type ChangeRoundStatusResponse = z.infer<typeof changeRoundStatusResponseSchema>
 
 /**
  * Graphe de transition (Lot 8, décidé avec l'utilisateur — DECISIONS.md) :
