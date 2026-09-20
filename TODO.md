@@ -454,8 +454,7 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **Plusieurs photos par voie.** Une voie haute ne tient pas toujours sur une photo. Il
   faudrait une numérotation continue d'une photo à l'autre ; une seule photo par voie a
   été retenue (ADR-066).
-- **Détection des prises par couleur (Lot 16).** Voir `ROADMAP.md` : à régler sur de
-  vraies photos de voies, qu'il faut fournir.
+- ~~**Détection des prises par couleur (Lot 16).**~~ Abandonnée, ADR-069.
 - **Photo non publique.** Elle n'est visible que de l'organisateur et des juges affectés ;
   la page publique ne l'affiche pas.
 - **Photo remplaçable après le premier passage.** Aujourd'hui figée (ADR-066) : un flou

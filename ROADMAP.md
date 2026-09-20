@@ -566,10 +566,11 @@ Dexie sans perte de la file d'envoi.
 
 ---
 
-## Lot 16 — Détection des prises par couleur (à cadrer)
+## Lot 16 — Détection des prises par couleur (abandonné)
 
-> Pas engagé. À régler sur de vraies photos de voies, fournies par
-> l'utilisateur : sans elles, le réglage se ferait à l'aveugle.
+> Abandonné le 2026-09-20 : le placement manuel du Lot 15 reste la seule voie
+> d'annotation. Raisons et alternatives écartées : ADR-069. Le texte ci-dessous
+> est conservé pour mémoire.
 
 ```
 Lot 16 : l'organisateur touche une prise pour échantillonner la couleur, règle
