@@ -4,8 +4,9 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { apiJson } from './support/api'
 
-// ADR-067 : la photo se choisit dès la création de la voie, et se recadre
-// (rectangle libre, coins à tirer, zoom) avant l'envoi. Vérifié dans un vrai
+// ADR-067 / ADR-068 : la photo se choisit dès la création de la voie, on décide de
+// la recadrer ou non (rectangle libre, coins à tirer, zoom), puis on y place les
+// prises : leur nombre remplace le champ « Nombre de prises ». Vérifié dans un vrai
 // navigateur, y compris à 360 px (projet `mobile`) : le recadrage passe par
 // `canvas`, que jsdom n'a pas.
 
@@ -43,7 +44,7 @@ async function drag(page: Page, from: { x: number; y: number }, to: { x: number;
   await page.mouse.up()
 }
 
-test('l’organisateur choisit et recadre la photo en créant la voie', async ({
+test('l’organisateur choisit, recadre puis annote la photo en créant la voie', async ({
   page,
   request,
 }, testInfo) => {
@@ -84,11 +85,15 @@ test('l’organisateur choisit et recadre la photo en créant la voie', async ({
   await page.getByRole('tab', { name: 'Voies' }).click()
 
   await page.getByRole('spinbutton', { name: 'Numéro' }).fill('1')
-  await page.getByRole('spinbutton', { name: 'Nombre de prises' }).fill('7')
+  // Nombre saisi À LA MAIN : l'annotation le remplacera plus bas.
+  await page.getByRole('spinbutton', { name: 'Nombre de prises' }).fill('12')
   await page.getByLabel('Photo de la voie (optionnelle)').setInputFiles(WALL_PHOTO)
 
-  // L'aperçu est la photo entière (480 × 720, plafonnée à 640 px de côté : 427 × 640)
-  // tant qu'on n'a pas recadré.
+  // Étape 2 : on demande de recadrer ou non ; on n'annote pas encore.
+  const cropStep = page.getByTestId('crop-step')
+  await expect(cropStep).toContainText('Souhaitez-vous recadrer la photo ?')
+  await expect(page.getByTestId('hold-annotator')).toHaveCount(0)
+  // L'aperçu est la photo entière (480 × 720, plafonnée à 640 px de côté : 427 × 640).
   const preview = page.getByTestId('photo-preview')
   await expect(preview).toBeVisible()
   await expect
@@ -96,7 +101,7 @@ test('l’organisateur choisit et recadre la photo en créant la voie', async ({
     .toBe(640)
 
   // --- Recadrage : on garde le centre de la photo (moitié de chaque côté) ---
-  await page.getByRole('button', { name: 'Recadrer la photo' }).click()
+  await cropStep.getByRole('button', { name: 'Recadrer la photo' }).click()
   const dialog = page.getByTestId('photo-crop-dialog')
   await expect(dialog).toBeVisible()
   await expectNoHorizontalScroll(page)
@@ -136,29 +141,68 @@ test('l’organisateur choisit et recadre la photo en créant la voie', async ({
 
   await dialog.getByRole('button', { name: 'Appliquer le recadrage' }).click()
   await expect(dialog).toBeHidden()
-  await expect(page.getByText("La photo sera recadrée avant l'envoi.")).toBeVisible()
-  // L'aperçu montre maintenant la zone recadrée : environ la moitié de 480 × 720.
-  await expect
-    .poll(() => preview.evaluate((img) => (img as HTMLImageElement).naturalWidth), {
-      timeout: 15_000,
-    })
-    .toBeLessThan(300)
-  await expectNoHorizontalScroll(page)
-  await shot('formulaire-photo-recadree')
 
-  // --- Création : la voie est créée PUIS la photo recadrée envoyée ---
+  // Étape 3 : l'annotation apparaît, sur la photo RECADRÉE (~ la moitié de 480 × 720).
+  const annotator = page.getByTestId('hold-annotator')
+  await expect(annotator).toBeVisible()
+  await expect(page.getByText('La photo est recadrée.')).toBeVisible()
+  const photoFrame = annotator.getByTestId('photo-frame')
+  await expect
+    .poll(
+      () => photoFrame.locator('img').evaluate((img) => (img as HTMLImageElement).naturalWidth),
+      {
+        timeout: 15_000,
+      },
+    )
+    .toBeLessThan(300)
+
+  // --- Placer 3 prises, du HAUT vers le bas : la numérotation sera à refaire ---
+  await photoFrame.scrollIntoViewIfNeeded()
+  const box = await photoFrame.boundingBox()
+  if (!box) throw new Error('cadre de la photo introuvable')
+  for (const [x, y] of [
+    [0.6, 0.2],
+    [0.4, 0.5],
+    [0.5, 0.82],
+  ] as const) {
+    await photoFrame.click({ position: { x: x * box.width, y: y * box.height } })
+  }
+  await expect(annotator.getByTestId('hold-counter')).toHaveText('3 prises placées')
+
+  // L'annotation PREND LE PAS sur le nombre saisi (12) : le champ n'existe plus.
+  const fromPhoto = page.getByTestId('hold-count-from-photo')
+  await expect(fromPhoto).toContainText('3')
+  await expect(fromPhoto).toContainText('Remplace les 12 saisies')
+  await expect(page.getByRole('spinbutton', { name: 'Nombre de prises' })).toHaveCount(0)
+
+  await annotator.getByRole('button', { name: 'Renuméroter de bas en haut' }).click()
+  await expectNoHorizontalScroll(page)
+  await shot('annotation-a-la-creation')
+
+  // --- Création : voie, PUIS photo recadrée, PUIS prises ---
   await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
-  await expect(page.getByText('Voie créée avec sa photo.')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('Voie créée avec sa photo et ses 3 prises.')).toBeVisible({
+    timeout: 30_000,
+  })
   await expect(page.getByText('Voie 1')).toBeVisible()
   await expect(page.getByText('photo annotée')).toBeVisible()
 
-  const routes = await apiJson<{ id: string; photoAssetId: string | null }[]>(
-    request,
-    `${base}/routes`,
-    { headers },
-  )
+  const routes = await apiJson<
+    {
+      id: string
+      holdCount: number
+      photoAssetId: string | null
+      photoHolds: { number: number; y: number }[]
+    }[]
+  >(request, `${base}/routes`, { headers })
   const created = routes[0]
   expect(created?.photoAssetId).not.toBeNull()
+  // 3 prises annotées : la voie en compte 3, pas les 12 saisis.
+  expect(created?.holdCount).toBe(3)
+  expect(created?.photoHolds).toHaveLength(3)
+  // Renumérotée de bas en haut : le numéro 1 est la prise la plus basse (y = 0.82).
+  expect(created?.photoHolds.find((hold) => hold.number === 1)?.y).toBeGreaterThan(0.7)
+
   const stored = await request.get(`${base}/routes/${created?.id}/photo`, { headers })
   expect(stored.status()).toBe(200)
   expect(stored.headers()['content-type']).toBe('image/jpeg')
@@ -169,14 +213,30 @@ test('l’organisateur choisit et recadre la photo en créant la voie', async ({
   expect(width).toBeLessThan(290)
   expect(height).toBeGreaterThan(300)
   expect(height).toBeLessThan(430)
-  // Le rapport largeur / hauteur d'origine (2:3) est conservé par une zone centrée.
   expect(width / height).toBeGreaterThan(0.55)
   expect(width / height).toBeLessThan(0.8)
 
-  // --- La même photo se choisit de nouveau pour la voie suivante (mur commun) ---
+  // --- Voie suivante : même photo (mur commun), sans recadrer ; revenir au recadrage
+  //     avec des prises placées demande confirmation, et les efface ---
   await page.getByRole('spinbutton', { name: 'Numéro' }).fill('2')
   await page.getByRole('spinbutton', { name: 'Nombre de prises' }).fill('7')
   await page.getByLabel('Photo de la voie (optionnelle)').setInputFiles(WALL_PHOTO)
-  await expect(page.getByTestId('photo-preview')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Recadrer la photo' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Continuer sans recadrer' }).click()
+  const secondFrame = page.getByTestId('hold-annotator').getByTestId('photo-frame')
+  await secondFrame.scrollIntoViewIfNeeded()
+  await secondFrame.click({ position: { x: 100, y: 200 } })
+  await expect(page.getByTestId('hold-counter')).toHaveText('1 prise placée')
+
+  await page.getByRole('button', { name: 'Modifier le recadrage' }).click()
+  const confirm = page.getByRole('dialog')
+  await expect(confirm).toContainText('La prise placée sera effacée')
+  await confirm.getByRole('button', { name: 'Garder les prises' }).click()
+  await expect(page.getByTestId('hold-counter')).toHaveText('1 prise placée')
+
+  await page.getByRole('button', { name: 'Modifier le recadrage' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Modifier le recadrage' }).click()
+  await expect(page.getByTestId('crop-step')).toBeVisible()
+  await expect(page.getByTestId('hold-annotator')).toHaveCount(0)
+  // Plus de prise : le champ « Nombre de prises » est revenu, avec la valeur saisie.
+  await expect(page.getByRole('spinbutton', { name: 'Nombre de prises' })).toHaveValue('7')
 })
