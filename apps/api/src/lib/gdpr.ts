@@ -68,6 +68,15 @@ export async function buildGdprExport(db: Database, current: CompetitionRow, now
     .where(and(eq(asset.competitionId, current.id), isNull(asset.deletedAt)))
     .orderBy(asc(route.number))
 
+  // Photos de voie (ADR-066) : un mur photographié peut montrer des grimpeurs,
+  // elles sont listées comme les vidéos.
+  const photos = await db
+    .select({ routeNumber: route.number, sizeBytes: asset.sizeBytes })
+    .from(asset)
+    .innerJoin(route, eq(route.photoAssetId, asset.id))
+    .where(and(eq(asset.competitionId, current.id), isNull(asset.deletedAt)))
+    .orderBy(asc(route.number))
+
   return {
     kind: 'export-donnees-personnelles',
     generatedAt: now.toISOString(),
@@ -83,9 +92,9 @@ export async function buildGdprExport(db: Database, current: CompetitionRow, now
       purgeAfterYears: PURGE_AFTER_YEARS,
       status: retentionStatus(current.endsOn, isoDay(now)),
     },
-    personalData: { competitors, judges, videos },
+    personalData: { competitors, judges, videos, photos },
     notes: [
-      'Les vidéos téléversées ne sont pas incluses dans ce fichier : elles peuvent montrer des compétiteurs et sont listées ci-dessus.',
+      'Les vidéos et les photos de voie téléversées ne sont pas incluses dans ce fichier : elles peuvent montrer des compétiteurs et sont listées ci-dessus.',
       'La sauvegarde complète (résultats et historique) est un autre export : elle contient ces mêmes données personnelles.',
     ],
   }
@@ -188,7 +197,14 @@ export async function purgePersonalData(
       .where(and(eq(assetUpload.competitionId, current.id), eq(assetUpload.status, 'uploading')))
     await tx
       .update(route)
-      .set({ videoAssetId: null, videoUrl: null, notes: null, updatedAt: purgedAt })
+      .set({
+        videoAssetId: null,
+        videoUrl: null,
+        photoAssetId: null,
+        photoHolds: null,
+        notes: null,
+        updatedAt: purgedAt,
+      })
       .where(eq(route.competitionId, current.id))
 
     // Motifs libres : un organisateur a pu y écrire un nom ou une blessure.

@@ -32,18 +32,21 @@ import { createPublicRoutes } from './routes/public'
 import { createQrCodesRoutes } from './routes/qrcodes'
 import { createRoundRoutes } from './routes/rounds'
 import { createRoundStatusRoutes } from './routes/round-status'
+import { createRoutePhotoRoutes } from './routes/route-photo'
+import { createRouteSheetsRoutes } from './routes/route-sheets'
 import { createRouteVideoRoutes } from './routes/route-video'
 import { createRouteRoutes } from './routes/routes'
 
 const MIB = 1024 * 1024
 
 /**
- * Deux routes gèrent leur PROPRE limite, avec un message adapté : l'import de
- * sauvegarde (25 Mio) et les morceaux de vidéo (16 Mio). La limite globale ne
- * s'y applique pas.
+ * Trois routes gèrent leur PROPRE limite, avec un message adapté : l'import de
+ * sauvegarde (25 Mio), les morceaux de vidéo (16 Mio) et la photo de voie
+ * (8 Mio, ADR-066). La limite globale ne s'y applique pas.
  */
 function hasOwnBodyLimit(method: string, path: string): boolean {
   if (method === 'POST' && path === '/api/v1/competitions/import') return true
+  if (method === 'PUT' && /\/routes\/[^/]+\/photo$/.test(path)) return true
   return method === 'PATCH' && /\/routes\/[^/]+\/video\/uploads\/[^/]+$/.test(path)
 }
 
@@ -181,6 +184,17 @@ export function createApp(deps: AppDeps): Hono {
       }),
     )
   }
+  if (deps.storage) {
+    // Photo annotée de la voie et fiches à imprimer (Lot 15, ADR-066).
+    app.route(
+      '/api/v1/competitions/:id/routes/:rid/photo',
+      createRoutePhotoRoutes({ ...scopedDeps, storage: deps.storage, now: deps.now }),
+    )
+    app.route(
+      '/api/v1/competitions/:id',
+      createRouteSheetsRoutes({ ...scopedDeps, storage: deps.storage }),
+    )
+  }
   app.route(
     '/api/v1/competitions/:id/exports',
     createExportRoutes({ ...scopedDeps, now: deps.now }),
@@ -194,6 +208,7 @@ export function createApp(deps: AppDeps): Hono {
     createJudgeAscentRoutes({
       db: deps.db,
       judgeTokenSigner: deps.judgeTokenSigner,
+      storage: deps.storage,
       now: deps.now,
     }),
   )

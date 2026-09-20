@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 import { addContestRoundRoute, removeContestRoundRoute } from '../lib/contest-round'
 import type { AccessTokenSigner } from '../lib/jwt'
 import { notifyPublic } from '../lib/notify-public'
+import { readStoredHolds } from '../lib/route-photo'
 import { isUniqueViolation } from '../lib/pg-errors'
 import { requireOrganizer } from '../middleware/auth'
 import { requireCompetitionAccess } from '../middleware/competition-access'
@@ -165,6 +166,21 @@ export function createRouteRoutes(deps: RouteRouteDeps): Hono {
             409,
             'Modification impossible',
             'Un passage existe déjà sur cette voie — son nombre de prises ne peut plus changer (ADR-004).',
+          )
+        }
+      }
+
+      // ADR-066 : une prise annotée ne peut pas dépasser le nombre de prises — le
+      // pavé du juge s'arrête à `holdCount`. On refuse plutôt que d'effacer des
+      // prises en silence.
+      const nextHoldCount = input.holdCount
+      if (nextHoldCount !== undefined && nextHoldCount < existing.holdCount) {
+        const beyond = readStoredHolds(existing).find((hold) => hold.number > nextHoldCount)
+        if (beyond) {
+          throw new ApiError(
+            409,
+            'Modification impossible',
+            `La prise ${beyond.number} est placée sur la photo : retirez-la avant de descendre à ${nextHoldCount} prises.`,
           )
         }
       }

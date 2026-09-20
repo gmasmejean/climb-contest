@@ -403,6 +403,39 @@ describe('DELETE /competitions/:id/personal-data', () => {
     expect(r?.videoUrl).toBeNull()
   })
 
+  it('supprime la photo de voie et ses prises, dans la base ET sur le disque (ADR-066)', async () => {
+    const f = await createJudgeFixture(app, mailer)
+    const put = await app.request(`${base(f)}/routes/${f.route.id}/photo`, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${f.organizerToken}` },
+      body: new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]),
+    })
+    expect(put.status).toBe(201)
+    const { assetId } = (await put.json()) as { assetId: string }
+    await app.request(`${base(f)}/routes/${f.route.id}/photo/holds`, {
+      method: 'PUT',
+      headers: authHeaders(f.organizerToken),
+      body: JSON.stringify({ holds: [{ number: 1, x: 0.5, y: 0.5 }] }),
+    })
+    const file = path.join(storageRoot, `competitions/${f.competition.id}/photos/${assetId}`)
+    expect(existsSync(file)).toBe(true)
+
+    // Le droit d'accès la liste, comme les vidéos.
+    const exported = (await (
+      await app.request(`${base(f)}/gdpr-export`, { headers: authHeaders(f.organizerToken) })
+    ).json()) as { personalData: { photos: { routeNumber: number }[] } }
+    expect(exported.personalData.photos).toEqual([expect.objectContaining({ routeNumber: 1 })])
+
+    expect((await purge(f, String(f.competition['name']))).status).toBe(200)
+
+    expect(existsSync(file)).toBe(false)
+    const [a] = await handle.db.select().from(asset).where(eq(asset.id, assetId))
+    expect(a?.deletedAt).not.toBeNull()
+    const [r] = await handle.db.select().from(route).where(eq(route.id, f.route.id))
+    expect(r?.photoAssetId).toBeNull()
+    expect(r?.photoHolds).toBeNull()
+  })
+
   it('abandonne un envoi de vidéo en cours et supprime ses octets', async () => {
     const f = await createJudgeFixture(app, mailer)
     const up = await app.request(`${base(f)}/routes/${f.route.id}/video/uploads`, {

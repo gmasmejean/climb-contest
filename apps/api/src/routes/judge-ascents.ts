@@ -39,6 +39,8 @@ import { supersedeToNewAscent } from '../lib/ascent-correction'
 import type { JudgeTokenSigner } from '../lib/jwt'
 import { assertJudgeAssignedToRoute, resolveOpenRoundForRoute } from '../lib/judge-authorization'
 import { notifyPublic } from '../lib/notify-public'
+import { openRoutePhoto, routePhotoHeaders, toJudgePhoto } from '../lib/route-photo'
+import type { StorageAdapter } from '../lib/storage'
 import { isUniqueViolation } from '../lib/pg-errors'
 import { requireJudge } from '../middleware/judge-auth'
 import { findRoundOpenForCategory } from '../lib/round-category'
@@ -49,6 +51,8 @@ import { authRateLimiter } from '../middleware/rate-limit'
 export interface JudgeAscentRouteDeps {
   db: Database
   judgeTokenSigner: JudgeTokenSigner
+  /** Stockage des fichiers : sans lui, la photo de voie (ADR-066) n'est pas servie. */
+  storage?: StorageAdapter | undefined
   /** Seam de test — ADR-007, jamais autre chose que `() => new Date()` en production. */
   now?: (() => Date) | undefined
 }
@@ -95,6 +99,7 @@ async function buildRouteDetail(
     name: routeRow.name,
     holdCount: routeRow.holdCount,
     categories: routeCategories,
+    photo: toJudgePhoto(routeRow),
   }
   if (!openRound) {
     return judgeRouteDetailSchema.parse({
@@ -386,6 +391,22 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
 
     const detail = await buildRouteDetail(db, currentJudge, routeRow, currentCompetition)
     return c.json(judgeRouteDetailSchema.parse(detail))
+  })
+
+  // Photo annotée de la voie (Lot 15, ADR-066). Le client la télécharge une fois
+  // par identifiant d'image (`route.photo.assetId`) et la garde dans IndexedDB :
+  // aucun écran de juge ne dépend de cette route pour s'afficher.
+  app.get('/routes/:routeId/photo', async (c) => {
+    const currentJudge = c.get('judge')
+    const routeRow = await assertJudgeAssignedToRoute(db, currentJudge, c.req.param('routeId'))
+    const opened = deps.storage
+      ? await openRoutePhoto(
+          { db, storage: deps.storage },
+          { competitionId: currentJudge.competitionId, routeId: routeRow.id },
+        )
+      : null
+    if (!opened) throw new ApiError(404, 'Photo introuvable', "Cette voie n'a pas de photo.")
+    return new Response(opened.stream, { status: 200, headers: routePhotoHeaders(opened) })
   })
 
   app.get('/bootstrap', async (c) => {
