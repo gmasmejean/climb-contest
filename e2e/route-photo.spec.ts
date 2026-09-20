@@ -134,8 +134,9 @@ test('l’organisateur annote la photo d’une voie, imprime la fiche ; le juge 
     mimeType: 'image/jpeg',
     buffer: Buffer.from('%PDF-1.7 ceci n’est pas une image'),
   })
-  await editor.getByRole('button', { name: 'Envoyer la photo' }).click()
+  // Refusé dès le choix (l'aperçu passe par le même ré-encodage que l'envoi).
   await expect(editor.getByRole('alert')).toContainText('pas une photo que le navigateur sait lire')
+  await expect(editor.getByRole('button', { name: 'Envoyer la photo' })).toBeDisabled()
 
   // --- Une vraie photo : ré-encodée dans le navigateur, puis enregistrée ---
   await editor.getByLabel('Choisir une photo').setInputFiles(WALL_PHOTO)
