@@ -294,15 +294,41 @@ export const round = pgTable(
     style: text('style').notNull(),
     displayOrder: integer('display_order').notNull(),
     qualifyingCount: integer('qualifying_count'),
-    status: text('status').notNull().default('draft'),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
     check('round_type_check', sql`${table.type} IN ('qualification', 'semifinal', 'final')`),
     check('round_style_check', sql`${table.style} IN ('flash', 'onsight')`),
-    check('round_status_check', sql`${table.status} IN ('draft', 'open', 'closed', 'published')`),
     uniqueIndex('round_competition_display_order_key').on(table.competitionId, table.displayOrder),
+  ],
+)
+
+/**
+ * ADR-065 : le statut d'un tour se porte par catégorie (des catégories
+ * finissent le matin, d'autres l'après-midi). Une ligne absente vaut `draft` :
+ * on n'écrit qu'à la première transition, donc rien à synchroniser avec
+ * `round_route`. Toute lecture du statut passe par `LEFT JOIN … COALESCE`
+ * (voir `apps/api/src/lib/round-category.ts`), jamais par cette table seule.
+ */
+export const roundCategory = pgTable(
+  'round_category',
+  {
+    roundId: uuid('round_id')
+      .notNull()
+      .references(() => round.id),
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => category.id),
+    status: text('status').notNull().default('draft'),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.roundId, table.categoryId] }),
+    check(
+      'round_category_status_check',
+      sql`${table.status} IN ('draft', 'open', 'closed', 'published')`,
+    ),
   ],
 )
 

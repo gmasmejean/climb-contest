@@ -2289,9 +2289,12 @@ entier). Par ailleurs, le statut de *compétition* n'avait presque aucun effet
    garde-fou de corbeille (`running`, ADR-063) suffisant.
 6. **Migration réversible** : le haut remplit `round_category` depuis l'ancien
    `round.status`, répliqué sur chaque catégorie liée au tour ; le bas recrée
-   `round.status` avec **perte assumée** quand les catégories d'un tour divergent (on
-   retient l'état le plus avancé). Sauvegarde JSON : version de schéma 2, la version 1
-   reste importable (le statut du tour est répliqué sur ses catégories).
+   `round.status` avec **perte assumée** quand les catégories d'un tour divergent
+   (`open` l'emporte dès qu'une catégorie est ouverte — une saisie en cours n'est jamais
+   coupée —, sinon l'état le plus avancé). Un tour `open` sans aucune voie n'a pas de
+   catégorie à qui répliquer son état : il redevient brouillon (sans conséquence, aucun
+   juge ne peut y saisir). Sauvegarde JSON : version de schéma 2, la version 1 reste
+   importable (le statut du tour est répliqué sur ses catégories).
 
 **Alternatives écartées :** garder `round.status` et lui ajouter un statut par catégorie
 (deux sources de vérité qui divergent — exactement le défaut qu'on corrige) ; ouverture

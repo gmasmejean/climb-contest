@@ -64,6 +64,13 @@
       "when": 1789903160679,
       "tag": "0009_lot11_competition_deletion_log",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789909984297,
+      "tag": "0010_lot12_round_category",
+      "breakpoints": true
     }
   ]
 }
