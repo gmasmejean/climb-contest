@@ -31,6 +31,14 @@ const form = reactive({
   endsOn: props.competition.endsOn,
 })
 const errors = reactive<Partial<Record<keyof typeof form, string>>>({})
+
+// Une compétition de club tient en général sur une journée : quand on change
+// la date de début, la date de fin la suit. Branché sur l'événement (et non
+// sur un `watch`) pour ne pas écraser la date de fin d'un brouillon restauré.
+// Une saisie partielle du sélecteur de date vaut '' : on n'y touche pas.
+function onStartsOnInput(value: string): void {
+  if (value !== '') form.endsOn = value
+}
 const formError = ref('')
 
 const { clearDraft } = useFormDraft(`competition-edit-${props.competition.id}`, form)
@@ -103,6 +111,7 @@ function applyStatus(): void {
           label="Date de début"
           required
           :error="errors.startsOn"
+          @update:model-value="onStartsOnInput"
         />
         <TextField
           v-model="form.endsOn"

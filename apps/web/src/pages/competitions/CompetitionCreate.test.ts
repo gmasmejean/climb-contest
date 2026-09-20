@@ -53,4 +53,57 @@ describe('CompetitionCreate', () => {
     await wrapper.find('select').setValue('phases')
     expect(wrapper.text()).not.toContain('Nombre de voies comptées')
   })
+
+  describe('date de fin', () => {
+    async function open() {
+      await router.push('/competitions/new')
+      await router.isReady()
+      return mount(CompetitionCreate, { global: { plugins: [router] } })
+    }
+
+    it('suit la date de début quand celle-ci change', async () => {
+      const wrapper = await open()
+      const [startsOn, endsOn] = wrapper.findAll<HTMLInputElement>('input[type="date"]')
+
+      await startsOn?.setValue('2026-06-10')
+      expect(endsOn?.element.value).toBe('2026-06-10')
+
+      await startsOn?.setValue('2026-06-12')
+      expect(endsOn?.element.value).toBe('2026-06-12')
+    })
+
+    it('reste modifiable à la main après la date de début', async () => {
+      const wrapper = await open()
+      const [startsOn, endsOn] = wrapper.findAll<HTMLInputElement>('input[type="date"]')
+
+      await startsOn?.setValue('2026-06-10')
+      await endsOn?.setValue('2026-06-11')
+
+      expect(endsOn?.element.value).toBe('2026-06-11')
+      expect(startsOn?.element.value).toBe('2026-06-10')
+    })
+
+    it('ignore une saisie partielle (champ date vidé)', async () => {
+      const wrapper = await open()
+      const [startsOn, endsOn] = wrapper.findAll<HTMLInputElement>('input[type="date"]')
+
+      await startsOn?.setValue('2026-06-10')
+      await startsOn?.setValue('')
+
+      expect(endsOn?.element.value).toBe('2026-06-10')
+    })
+
+    it('ne touche pas à la date de fin d’un brouillon restauré', async () => {
+      localStorage.setItem(
+        'climbcontest:draft:competition-create',
+        JSON.stringify({ startsOn: '2026-06-10', endsOn: '2026-06-11' }),
+      )
+      const wrapper = await open()
+      await wrapper.vm.$nextTick()
+      const [startsOn, endsOn] = wrapper.findAll<HTMLInputElement>('input[type="date"]')
+
+      expect(startsOn?.element.value).toBe('2026-06-10')
+      expect(endsOn?.element.value).toBe('2026-06-11')
+    })
+  })
 })
