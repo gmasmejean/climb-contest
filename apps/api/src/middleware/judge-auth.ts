@@ -1,4 +1,4 @@
-import { judge, type Database } from '@climbcontest/db'
+import { competition, judge, type Database } from '@climbcontest/db'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Context, Next } from 'hono'
 
@@ -20,7 +20,11 @@ declare module 'hono' {
  * claims pour la révocation (SPEC.md § 3.2 : « un juge révoqué est
  * déconnecté au prochain appel »). Voir DECISIONS.md ADR-026.
  */
-export function requireJudge(signer: JudgeTokenSigner, db: Database, now: () => Date = () => new Date()) {
+export function requireJudge(
+  signer: JudgeTokenSigner,
+  db: Database,
+  now: () => Date = () => new Date(),
+) {
   return async (c: Context, next: Next) => {
     const header = c.req.header('authorization')
     const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined
@@ -50,6 +54,21 @@ export function requireJudge(signer: JudgeTokenSigner, db: Database, now: () => 
         401,
         'Accès révoqué',
         'Cet accès a été révoqué par l’organisateur — contactez-le pour en obtenir un nouveau.',
+      )
+    }
+    // Compétition à la corbeille (Lot 11, ADR-063) : plus aucune saisie tant
+    // qu'elle n'est pas restaurée. Une erreur HTTP fait revenir TOUTES les
+    // saisies en file locale (`SyncEngine`, hors ligne) : rien n'est perdu, et
+    // elles remontent après restauration.
+    const live = await db.query.competition.findFirst({
+      columns: { id: true },
+      where: and(eq(competition.id, row.competitionId), isNull(competition.deletedAt)),
+    })
+    if (!live) {
+      throw new ApiError(
+        404,
+        'Compétition indisponible',
+        'Cette compétition n’est plus disponible — contactez l’organisateur. Vos saisies restent enregistrées sur ce téléphone.',
       )
     }
     c.set('judge', row)
