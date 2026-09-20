@@ -30,6 +30,14 @@ const form = reactive<FormState>({
 type ErrorField = 'name' | 'venue' | 'startsOn' | 'endsOn'
 const errorFields: readonly ErrorField[] = ['name', 'venue', 'startsOn', 'endsOn']
 const errors = reactive<Partial<Record<ErrorField, string>>>({})
+
+// Une compétition de club tient en général sur une journée : quand on change
+// la date de début, la date de fin la suit. Branché sur l'événement (et non
+// sur un `watch`) pour ne pas écraser la date de fin d'un brouillon restauré.
+// Une saisie partielle du sélecteur de date vaut '' : on n'y touche pas.
+function onStartsOnInput(value: string): void {
+  if (value !== '') form.endsOn = value
+}
 const submitting = ref(false)
 const formError = ref('')
 
@@ -104,6 +112,7 @@ async function onSubmit(): Promise<void> {
           label="Date de début"
           required
           :error="errors.startsOn"
+          @update:model-value="onStartsOnInput"
         />
         <TextField
           v-model="form.endsOn"

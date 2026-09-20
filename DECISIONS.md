@@ -2228,6 +2228,31 @@ vidée automatiquement au bout de 30 jours (irréversible sans action humaine) ;
 
 ---
 
+## ADR-064 — La date de fin suit la date de début dans le formulaire de compétition
+
+**Date :** 2026-09-20
+**Contexte :** une compétition de club se déroule en général sur une seule journée ;
+l'organisateur devait saisir deux fois la même date.
+
+**Décision :**
+
+- Quand l'organisateur **modifie la date de début** (création : `CompetitionCreate.vue` ;
+  édition : onglet Infos), la date de fin **prend la même valeur**. Elle reste
+  modifiable à la main ensuite, pour les compétitions sur plusieurs jours.
+- **Toujours**, pas seulement quand la fin est vide : sur une compétition de deux jours,
+  changer le début ramène donc la fin au même jour. Choix volontairement simple et
+  prévisible (« la fin égale le début » plutôt qu'« on conserve la durée »).
+- Branché sur l'événement de saisie de la date de début, **pas sur un `watch`** : un
+  brouillon restauré (`useFormDraft`) remplit les deux champs d'un coup et ne doit pas
+  voir sa date de fin écrasée. Un champ date vidé (saisie partielle) est ignoré.
+- Aucun changement d'API : le schéma Zod garde `endsOn >= startsOn`.
+
+**Alternatives écartées :** conserver la durée (décale la fin de 1 jour si la compétition
+en durait 2 ; plus surprenant à expliquer) ; ne remplir la fin que si elle est vide (ne
+sert pas à l'édition, où la fin est toujours déjà renseignée).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
