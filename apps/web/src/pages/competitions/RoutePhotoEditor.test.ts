@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../api/client'
+import PhotoCropDialog from '../../components/PhotoCropDialog.vue'
 
 const api = vi.hoisted(() => ({
   fetchImage: vi.fn(),
@@ -299,24 +300,42 @@ describe('RoutePhotoEditor', () => {
       await buttonNamed(wrapper, 'Envoyer la photo')?.trigger('click')
       await flushPromises()
 
-      expect(resize.resizeToJpeg).toHaveBeenCalledWith(file)
+      // Le dernier appel est l'envoi (le premier produit l'aperçu du sélecteur).
+      expect(resize.resizeToJpeg).toHaveBeenLastCalledWith(file, { crop: null })
       expect(api.upload).toHaveBeenCalledWith('comp-1', 'route-1', jpeg)
       expect(wrapper.emitted('changed')).toHaveLength(1)
     })
 
-    it('dit en français quand le fichier n’est pas une photo lisible', async () => {
+    it('refuse dès le choix, en français, un fichier qui n’est pas une photo lisible', async () => {
       const { PhotoUnreadableError } = await import('../../lib/photo-resize')
       resize.resizeToJpeg.mockRejectedValue(new PhotoUnreadableError())
       const wrapper = await mountEditor({ photoAssetId: null, savedHolds: [] })
       await chooseFile(wrapper)
-
-      await buttonNamed(wrapper, 'Envoyer la photo')?.trigger('click')
       await flushPromises()
 
       expect(wrapper.get('[role="alert"]').text()).toContain(
         'pas une photo que le navigateur sait lire',
       )
+      // Rien à envoyer : le fichier refusé n'est pas retenu.
+      expect(buttonNamed(wrapper, 'Envoyer la photo')?.attributes('disabled')).toBeDefined()
       expect(api.upload).not.toHaveBeenCalled()
+    })
+
+    it('envoie la zone recadrée', async () => {
+      const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/jpeg' })
+      resize.resizeToJpeg.mockResolvedValue(jpeg)
+      api.upload.mockResolvedValue({ assetId: 'asset-2', holds: [] })
+      const wrapper = await mountEditor({ photoAssetId: null, savedHolds: [] })
+      const file = await chooseFile(wrapper)
+      const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.6 }
+
+      wrapper.findComponent(PhotoCropDialog).vm.$emit('apply', crop)
+      await flushPromises()
+      await buttonNamed(wrapper, 'Envoyer la photo')?.trigger('click')
+      await flushPromises()
+
+      expect(resize.resizeToJpeg).toHaveBeenLastCalledWith(file, { crop })
+      expect(api.upload).toHaveBeenCalledWith('comp-1', 'route-1', jpeg)
     })
 
     it('demande confirmation avant de remplacer une photo qui porte des prises', async () => {
