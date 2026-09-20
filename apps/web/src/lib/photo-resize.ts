@@ -1,5 +1,7 @@
 import { ROUTE_PHOTO_JPEG_QUALITY, ROUTE_PHOTO_MAX_SIDE } from '@climbcontest/contracts'
 
+import { cropToPixels, FULL_CROP, type CropRect } from './photo-crop'
+
 /**
  * Taille d'une image ramenée à `maxSide` sur son grand côté, sans jamais
  * l'agrandir. Entiers, au moins 1 pixel. Pure, testée sans navigateur.
@@ -68,12 +70,15 @@ async function decode(
  */
 export async function resizeToJpeg(
   file: Blob,
-  options: { maxSide?: number; quality?: number } = {},
+  options: { maxSide?: number; quality?: number; crop?: CropRect | null } = {},
 ): Promise<Blob> {
   const { source, width, height, release } = await decode(file)
   try {
     if (width < 1 || height < 1) throw new PhotoUnreadableError()
-    const target = fitWithin(width, height, options.maxSide ?? ROUTE_PHOTO_MAX_SIDE)
+    // Recadrage (ADR-067) AVANT la réduction : on garde la résolution de la zone
+    // choisie, on ne recadre pas une image déjà réduite.
+    const { sx, sy, sw, sh } = cropToPixels(options.crop ?? FULL_CROP, width, height)
+    const target = fitWithin(sw, sh, options.maxSide ?? ROUTE_PHOTO_MAX_SIDE)
     const canvas = document.createElement('canvas')
     canvas.width = target.width
     canvas.height = target.height
@@ -82,7 +87,7 @@ export async function resizeToJpeg(
     // Fond blanc : un PNG transparent deviendrait noir en JPEG.
     context.fillStyle = '#fff'
     context.fillRect(0, 0, target.width, target.height)
-    context.drawImage(source, 0, 0, target.width, target.height)
+    context.drawImage(source, sx, sy, sw, sh, 0, 0, target.width, target.height)
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, 'image/jpeg', options.quality ?? ROUTE_PHOTO_JPEG_QUALITY),
     )
