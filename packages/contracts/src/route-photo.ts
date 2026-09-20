@@ -63,3 +63,48 @@ export function nextHoldNumber(holds: readonly RouteHold[]): number {
   while (used.has(candidate)) candidate += 1
   return candidate
 }
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
+
+/** Ajoute une prise au prochain numéro libre, sa position ramenée dans le cadre de la photo. */
+export function addHold(holds: readonly RouteHold[], x: number, y: number): RouteHold[] {
+  return [...holds, { number: nextHoldNumber(holds), x: clamp01(x), y: clamp01(y) }]
+}
+
+/** Déplace la prise `number` (son numéro ne change pas). Sans effet si elle n'existe pas. */
+export function moveHold(
+  holds: readonly RouteHold[],
+  number: number,
+  x: number,
+  y: number,
+): RouteHold[] {
+  return holds.map((hold) =>
+    hold.number === number ? { number, x: clamp01(x), y: clamp01(y) } : hold,
+  )
+}
+
+export function removeHold(holds: readonly RouteHold[], number: number): RouteHold[] {
+  return holds.filter((hold) => hold.number !== number)
+}
+
+export type ChangeHoldNumberResult =
+  { ok: true; holds: RouteHold[] } | { ok: false; reason: 'invalid' | 'taken' }
+
+/**
+ * Change le numéro de la prise `from` en `to`. Refuse un numéro déjà porté par
+ * une autre prise plutôt que d'en échanger deux en silence : l'organisateur voit
+ * le conflit et le tranche lui-même.
+ */
+export function changeHoldNumber(
+  holds: readonly RouteHold[],
+  from: number,
+  to: number,
+): ChangeHoldNumberResult {
+  if (!Number.isInteger(to) || to < 1) return { ok: false, reason: 'invalid' }
+  if (to === from) return { ok: true, holds: [...holds] }
+  if (holds.some((hold) => hold.number === to)) return { ok: false, reason: 'taken' }
+  return {
+    ok: true,
+    holds: holds.map((hold) => (hold.number === from ? { ...hold, number: to } : hold)),
+  }
+}
