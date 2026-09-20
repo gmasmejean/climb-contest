@@ -106,13 +106,19 @@ describe('GET /competitions/:id/activity-log', () => {
     await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${routeDetail.round.id}`, {
       method: 'POST',
       headers: authHeaders(fixture.organizerToken),
-      body: JSON.stringify({ status: 'closed' }),
+      body: JSON.stringify({ status: 'closed', categoryIds: [fixture.category.id] }),
     })
 
     const body = (await (await getActivityLog(fixture.organizerToken, fixture.competition.id)).json()) as {
       entries: { type: string; actorType: string; actorLabel: string | null; createdAt: string }[]
     }
-    expect(body.entries.map((e) => e.type)).toEqual(['round_status_changed', 'ascent_created'])
+    // Le plus récent d'abord : la fermeture, la saisie, puis l'ouverture faite par la fixture
+    // (ADR-065 : ouvrir une catégorie passe elle aussi par `round-status`, donc au journal).
+    expect(body.entries.map((e) => e.type)).toEqual([
+      'round_status_changed',
+      'ascent_created',
+      'round_status_changed',
+    ])
     expect(body.entries[1]?.actorType).toBe('judge')
     expect(body.entries[1]?.actorLabel).toBe('Juge Test')
     expect(body.entries[0]?.actorType).toBe('organizer')
@@ -127,7 +133,7 @@ describe('GET /competitions/:id/activity-log', () => {
     await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
       method: 'POST',
       headers: authHeaders(fixture.organizerToken),
-      body: JSON.stringify({ status: 'closed' }),
+      body: JSON.stringify({ status: 'closed', categoryIds: [fixture.category.id] }),
     })
 
     const body = (await (
@@ -149,7 +155,7 @@ describe('GET /competitions/:id/activity-log', () => {
     await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
       method: 'POST',
       headers: authHeaders(fixture.organizerToken),
-      body: JSON.stringify({ status: 'closed' }),
+      body: JSON.stringify({ status: 'closed', categoryIds: [fixture.category.id] }),
     })
 
     const response = await getActivityLog(fixture.organizerToken, fixture.competition.id, '?format=csv')

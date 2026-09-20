@@ -192,9 +192,12 @@ describe('GET /public/:slug', () => {
   it('expose les tours pour le format phases', async () => {
     const fixture = await createJudgeFixture(app, mailer, { format: 'phases', openRound: true })
     const response = await app.request(`/api/v1/public/${fixture.competition.publicSlug as string}`)
-    const body = (await response.json()) as { rounds: { status: string }[] }
+    const body = (await response.json()) as {
+      rounds: { categories: { categoryId: string; status: string }[] }[]
+    }
     expect(body.rounds).toHaveLength(1)
-    expect(body.rounds[0]?.status).toBe('open')
+    // ADR-065 : un état par catégorie.
+    expect(body.rounds[0]?.categories).toEqual([{ categoryId: fixture.category.id, status: 'open' }])
   })
 })
 
@@ -297,12 +300,12 @@ describe('GET /public/:slug/rankings', () => {
       await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
         method: 'POST',
         headers: authHeaders(fixture.organizerToken),
-        body: JSON.stringify({ status: 'closed' }),
+        body: JSON.stringify({ status: 'closed', categoryIds: [fixture.category.id] }),
       })
       await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
         method: 'POST',
         headers: authHeaders(fixture.organizerToken),
-        body: JSON.stringify({ status: 'published' }),
+        body: JSON.stringify({ status: 'published', categoryIds: [fixture.category.id] }),
       })
       // Laisse le temps au NOTIFY d'atteindre le bridge et d'invalider le cache.
       await sleep(500)

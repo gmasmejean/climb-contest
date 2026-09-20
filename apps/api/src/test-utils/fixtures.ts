@@ -91,9 +91,9 @@ export interface JudgeFixture {
 /**
  * Compétition complète pour tester l'interface juge : une catégorie, un
  * compétiteur, une voie affectée à cette catégorie, un juge assigné à cette
- * voie. Par défaut format contest (round implicite, ADR-023), ouvert (la
- * compétition passe à `running`, ce qui ouvre mécaniquement ce round —
- * DECISIONS.md ADR-030). `format: 'phases'` crée un tour explicite
+ * voie. Par défaut format contest (round implicite, ADR-023), ouvert pour sa
+ * catégorie (`openContestRound`, ADR-065 — ouvrir passe aussi la compétition
+ * à `running`). `format: 'phases'` crée un tour explicite
  * (`qualification`/`onsight`) câblé à la voie via `PUT .../rounds/:id/routes`
  * plutôt que la synchronisation automatique du contest ; `openRound: false`
  * laisse ce tour en `draft` — utile pour tester l'état « aucun tour ouvert ».
@@ -195,7 +195,7 @@ export async function createJudgeFixture(
       await app.request(`/api/v1/competitions/${competition.id}/round-status/${round.id}`, {
         method: 'POST',
         headers: authHeaders(organizerToken),
-        body: JSON.stringify({ status: 'open' }),
+        body: JSON.stringify({ status: 'open', categoryIds: [category.id] }),
       })
     }
   }
@@ -208,17 +208,95 @@ export async function createJudgeFixture(
   const judge = (await judgeResponse.json()) as { id: string; accessToken: string; pin?: string }
 
   if (format === 'contest' && openRound) {
-    // Round implicite du contest (ADR-023) : s'ouvre automatiquement quand
-    // la compétition passe à `running` (ADR-030) — aucun écran « Tours » ne
-    // l'expose en contest.
-    await app.request(`/api/v1/competitions/${competition.id}/status`, {
-      method: 'POST',
-      headers: authHeaders(organizerToken),
-      body: JSON.stringify({ status: 'running' }),
-    })
+    await openContestRound(app, organizerToken, competition.id)
   }
 
   return { organizerToken, competition, category, competitor, route, judge }
+}
+
+/**
+ * Ouvre, pour toutes ses catégories, le round implicite du contest (ADR-023).
+ * ADR-065 : le statut de compétition n'ouvre plus rien — chaque catégorie
+ * s'ouvre par `round-status`, comme en phases. L'identifiant du round n'est
+ * pas exposé en contest : on le lit sur le tableau de bord, comme le ferait
+ * l'écran Pilotage. Ouvrir passe aussi la compétition à `running`.
+ */
+export async function openContestRound(
+  app: App,
+  organizerToken: string,
+  competitionId: string,
+): Promise<void> {
+  const dashboardResponse = await app.request(`/api/v1/competitions/${competitionId}/dashboard`, {
+    headers: authHeaders(organizerToken),
+  })
+  const dashboard = (await dashboardResponse.json()) as {
+    categories: { categoryId: string; routes: { roundId: string | null }[] }[]
+  }
+  const categoriesByRound = new Map<string, Set<string>>()
+  for (const cat of dashboard.categories) {
+    for (const r of cat.routes) {
+      if (!r.roundId) continue
+      const set = categoriesByRound.get(r.roundId) ?? new Set<string>()
+      set.add(cat.categoryId)
+      categoriesByRound.set(r.roundId, set)
+    }
+  }
+  for (const [roundId, categoryIds] of categoriesByRound) {
+    const response = await app.request(
+      `/api/v1/competitions/${competitionId}/round-status/${roundId}`,
+      {
+        method: 'POST',
+        headers: authHeaders(organizerToken),
+        body: JSON.stringify({ status: 'open', categoryIds: [...categoryIds] }),
+      },
+    )
+    if (response.status !== 200) {
+      throw new Error(`openContestRound failed: ${response.status} ${await response.text()}`)
+    }
+  }
+}
+
+/**
+ * Ferme toutes les catégories ouvertes de la compétition — ce que fait un
+ * organisateur en fin de journée avant de la passer à « Clôturée » (ADR-065 :
+ * on ne quitte « En cours » que lorsque plus rien n'est ouvert).
+ */
+export async function closeOpenRounds(
+  app: App,
+  organizerToken: string,
+  competitionId: string,
+): Promise<void> {
+  const dashboardResponse = await app.request(`/api/v1/competitions/${competitionId}/dashboard`, {
+    headers: authHeaders(organizerToken),
+  })
+  const dashboard = (await dashboardResponse.json()) as {
+    categories: {
+      categoryId: string
+      routes: { roundId: string | null; roundStatus: string | null }[]
+    }[]
+  }
+  const openByRound = new Map<string, Set<string>>()
+  for (const cat of dashboard.categories) {
+    for (const r of cat.routes) {
+      if (!r.roundId || r.roundStatus !== 'open') continue
+      const set = openByRound.get(r.roundId) ?? new Set<string>()
+      set.add(cat.categoryId)
+      openByRound.set(r.roundId, set)
+    }
+  }
+  for (const [roundId, categoryIds] of openByRound) {
+    const response = await app.request(
+      `/api/v1/competitions/${competitionId}/round-status/${roundId}`,
+      {
+        method: 'POST',
+        headers: authHeaders(organizerToken),
+        body: JSON.stringify({ status: 'closed', categoryIds: [...categoryIds] }),
+      },
+    )
+    if (response.status !== 200) {
+      throw new Error(`closeOpenRounds failed: ${response.status} ${await response.text()}`)
+    }
+  }
 }
 
 export async function authenticateJudge(

@@ -24,6 +24,7 @@ import { FakeMailer } from '../test-utils/fake-mailer'
 import {
   authenticateJudge,
   authHeaders,
+  closeOpenRounds,
   createJudgeFixture,
   createTestCompetition,
   judgeAuthHeaders,
@@ -116,7 +117,12 @@ async function listIds(path: string, token: string): Promise<string[]> {
 const activeIds = (token: string) => listIds('/api/v1/competitions', token)
 const trashedIds = (token: string) => listIds('/api/v1/competitions/trash', token)
 
+/**
+ * Change le statut de compétition comme le ferait un organisateur : on ne quitte
+ * « En cours » qu'une fois les catégories fermées (ADR-065), donc on les ferme d'abord.
+ */
 async function setStatus(id: string, token: string, status: string): Promise<void> {
+  if (status !== 'running') await closeOpenRounds(app, token, id)
   const response = await app.request(`${url(id)}/status`, {
     method: 'POST',
     headers: authHeaders(token),
@@ -419,6 +425,8 @@ describe('suppression définitive', () => {
 
     const doomed = await setUpPhasesScenario(app, mailer, 2)
     const storageKey = await populateEverything(doomed)
+    // Fermer les catégories écrit au journal : à faire avant toute mesure de référence.
+    await closeOpenRounds(app, doomed.organizerToken, doomed.competitionId)
     const withDoomed = await rowCounts()
     // Ce qui appartient à la compétition supprimée, table par table. Le test ne
     // prouve quelque chose que si CHAQUE table contient des données à effacer.
