@@ -205,6 +205,7 @@ export async function computeCategoryRounds(
     const rawRows = await fetchActiveAscentsForRound(
       db,
       roundMeta.roundId,
+      categoryId,
       roundMeta.routes.map((r) => r.routeId),
     )
     const rawByRoute = new Map<string, RawAscentRow[]>()
@@ -429,9 +430,16 @@ async function loadCompetitorDisplayInfo(
   return new Map(rows.map((row) => [row.id, row]))
 }
 
+/**
+ * Une voie peut servir plusieurs catégories dans un même tour (`round_route`
+ * porte la catégorie, `ascent` non) : sans la jointure sur `competitor`, le
+ * classement d'une catégorie absorberait les passages des autres. En format
+ * phases le roster masquait le problème ; en contest, rien ne filtre ensuite.
+ */
 async function fetchActiveAscentsForRound(
   db: Database,
   roundId: string,
+  categoryId: string,
   routeIds: readonly string[],
 ): Promise<readonly RawAscentRow[]> {
   if (routeIds.length === 0) return []
@@ -447,9 +455,11 @@ async function fetchActiveAscentsForRound(
       climbTimeMs: ascent.climbTimeMs,
     })
     .from(ascent)
+    .innerJoin(competitor, eq(competitor.id, ascent.competitorId))
     .where(
       and(
         eq(ascent.roundId, roundId),
+        eq(competitor.categoryId, categoryId),
         inArray(ascent.routeId, [...routeIds]),
         isNull(ascent.supersededBy),
         isNull(ascent.conflictGroup),
