@@ -72,7 +72,7 @@ async function setUpFixture(request: APIRequestContext, accessToken: string) {
   const category = await apiJson<{ id: string }>(request, `${base}/categories`, {
     method: 'POST',
     headers,
-    data: { label: 'Cat phases e2e', sex: 'X' },
+    data: { label: CATEGORY_LABEL, sex: 'X' },
   })
 
   const competitors = new Map<Bib, string>()
@@ -180,6 +180,9 @@ async function enterHolds(
   }
 }
 
+// La catégorie de ce scénario. ADR-065 : chaque bouton de statut porte son nom (« Ouvrir — Cat… »).
+const CATEGORY_LABEL = 'Cat phases e2e'
+
 // Correspondance EXACTE sur le libellé : `hasText: 'Finale'` est une recherche
 // de sous-chaîne insensible à la casse et trouverait aussi « Demi-finale ».
 function roundCard(page: Page, label: string) {
@@ -191,7 +194,7 @@ function roundCard(page: Page, label: string) {
 
 async function changeRound(page: Page, label: string, action: string, expectedBadge: string) {
   const card = roundCard(page, label)
-  await card.getByRole('button', { name: action, exact: true }).click()
+  await card.getByRole('button', { name: `${action} — ${CATEGORY_LABEL}`, exact: true }).click()
   await expect(card.getByText(expectedBadge, { exact: true })).toBeVisible()
 }
 
@@ -225,7 +228,9 @@ test('une compétition en phases jouée de bout en bout, classement final avec c
   const judgePage = await judgeContext.newPage()
 
   // Garde-fou : on ne peut pas ouvrir la demi-finale avant la qualification.
-  await roundCard(page, 'Demi-finale').getByRole('button', { name: 'Ouvrir', exact: true }).click()
+  await roundCard(page, 'Demi-finale')
+    .getByRole('button', { name: `Ouvrir — ${CATEGORY_LABEL}`, exact: true })
+    .click()
   await expect(page.getByText('Fermez d’abord « Qualification »')).toBeVisible()
 
   // --- Qualification : deux voies ---
@@ -247,7 +252,7 @@ test('une compétition en phases jouée de bout en bout, classement final avec c
   await changeRound(page, 'Demi-finale', 'Ouvrir', 'Ouvert')
   const semifinalQualifiers = page.getByTestId(`round-qualifiers-${fixture.semifinalId}`)
   await expect(semifinalQualifiers.getByText('4 qualifiés')).toBeVisible()
-  await semifinalQualifiers.getByText('Cat phases e2e').click()
+  await semifinalQualifiers.getByText(CATEGORY_LABEL).click()
   await expect(semifinalQualifiers.getByText('Prénom4 Nom4')).toBeVisible()
   await expect(semifinalQualifiers.getByText('Prénom5 Nom5')).toHaveCount(0)
   await expect(semifinalQualifiers.getByText('Prénom6 Nom6')).toHaveCount(0)
@@ -281,7 +286,7 @@ test('une compétition en phases jouée de bout en bout, classement final avec c
   // --- Publication des trois tours ---
   for (const label of ['Qualification', 'Demi-finale', 'Finale']) {
     await roundCard(page, label)
-      .getByRole('button', { name: 'Publier les résultats', exact: true })
+      .getByRole('button', { name: `Publier les résultats — ${CATEGORY_LABEL}`, exact: true })
       .click()
     await expect(roundCard(page, label).getByText('Publié', { exact: true })).toBeVisible()
   }

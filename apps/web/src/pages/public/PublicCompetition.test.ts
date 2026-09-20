@@ -96,6 +96,56 @@ describe('PublicCompetition', () => {
     expect(localStorage.getItem('climbcontest:public-category:abc123')).toBe('cat-2')
   })
 
+  it('affiche l’état des tours pour la catégorie choisie, pas pour les autres (ADR-065)', async () => {
+    const withRounds = {
+      ...meta,
+      competition: { ...meta.competition, format: 'phases' },
+      rounds: [
+        {
+          id: 'round-1',
+          type: 'qualification',
+          displayOrder: 0,
+          categories: [
+            { categoryId: 'cat-1', status: 'closed' },
+            { categoryId: 'cat-2', status: 'open' },
+          ],
+        },
+        {
+          id: 'round-2',
+          type: 'final',
+          displayOrder: 1,
+          categories: [{ categoryId: 'cat-2', status: 'draft' }],
+        },
+      ],
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+        if (url.endsWith('/api/v1/public/abc123')) return Promise.resolve(jsonResponse(withRounds))
+        if (url.includes('/rankings?category=')) {
+          const categoryId = new URL(url, 'http://localhost').searchParams.get('category') ?? ''
+          return Promise.resolve(jsonResponse(emptyRanking(categoryId)))
+        }
+        if (url.includes('/routes?category=')) return Promise.resolve(jsonResponse([]))
+        return Promise.reject(new Error(`URL non gérée par ce test : ${url}`))
+      }),
+    )
+    const wrapper = mount(PublicCompetition, { global: { plugins: [router, VueQueryPlugin] } })
+    await flush()
+
+    // cat-1 (U16 Femme) : qualification clôturée ; la finale ne la concerne pas.
+    expect(wrapper.text()).toContain('Qualification : clôturé')
+    expect(wrapper.text()).not.toContain('Finale')
+
+    await wrapper.find('select').setValue('cat-2')
+    await flush()
+
+    // cat-2 (Sénior Homme) : qualification en cours, finale à venir.
+    expect(wrapper.text()).toContain('Qualification : en cours')
+    expect(wrapper.text()).toContain('Finale : à venir')
+  })
+
   it('bascule vers l’onglet Voies', async () => {
     const wrapper = mount(PublicCompetition, { global: { plugins: [router, VueQueryPlugin] } })
     await flush()

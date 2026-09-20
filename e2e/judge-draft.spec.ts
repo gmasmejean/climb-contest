@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
-import { apiJson } from './support/api'
+import { apiJson, openContestRound } from './support/api'
 
 // ROADMAP.md Lot 10, ADR-061 : la saisie qu'un juge a composée mais pas encore
 // confirmée survit à un rechargement de page — celui d'une mise à jour de
@@ -60,11 +60,7 @@ async function setUpJudgeFixture(request: APIRequestContext) {
       data: { displayName: 'Juge e2e', routeIds: [route.id] },
     },
   )
-  await apiJson(request, `/api/v1/competitions/${competition.id}/status`, {
-    method: 'POST',
-    headers: authHeaders,
-    data: { status: 'running' },
-  })
+  await openContestRound(request, authHeaders, `/api/v1/competitions/${competition.id}`)
   return { judgeToken: judge.accessToken, routeNumber: route.number }
 }
 

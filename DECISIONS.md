@@ -2253,6 +2253,86 @@ sert pas à l'édition, où la fin est toujours déjà renseignée).
 
 ---
 
+## ADR-065 — Lot 12 : le statut d'un tour se porte par catégorie, pas par tour
+
+**Date :** 2026-09-20
+**Contexte :** `round.status` était global. Dans une vraie compétition, des catégories
+passent le matin et finissent le matin, d'autres l'après-midi : fermer la qualification
+des U16 forçait à fermer celle des U18, et la demi-finale d'une catégorie attendait la
+fin de la qualification de toutes les autres (garde-fou d'ADR-054 posé sur le tour
+entier). Par ailleurs, le statut de *compétition* n'avait presque aucun effet
+(`TODO.md` §Lot 11) : seul `running` faisait quelque chose (ADR-030).
+
+**Décision (actée avec l'utilisateur) :**
+
+1. **Le statut vit sur le couple (tour, catégorie)** : table `round_category(round_id,
+   category_id, status)`, mêmes quatre valeurs et même graphe de transition
+   (`ROUND_STATUS_TRANSITIONS`). **Une ligne absente vaut `draft`** : on n'écrit qu'à la
+   première transition, donc rien à synchroniser avec `round_route` (contrairement au
+   round implicite d'ADR-023). `round.status` est **supprimée** : une seule source de
+   vérité.
+2. **Les garde-fous d'ADR-054 s'appliquent par catégorie** : ouvrir la demi-finale des
+   U16 exige la qualification des U16 `closed`/`published`, sans regarder les U18. Le
+   figeage des qualifiés, la réouverture, le retour en brouillon et le blocage de
+   publication par un conflit deviennent eux aussi par catégorie.
+3. **Une transition peut viser plusieurs catégories d'un coup** (`categoryIds`), pour la
+   compétition à une seule vague : un tap. Tout ou rien — un refus sur une catégorie
+   refuse l'ensemble et la nomme.
+4. **Le statut de compétition est conservé** (cinq valeurs) mais il **n'ouvre plus
+   rien** : l'effet d'ADR-030 (`running` ouvre le tour implicite du format contest) est
+   **retiré**. En contest comme en phases, l'organisateur ouvre et ferme chaque
+   catégorie dans le pilotage.
+5. **Garde-fou de cohérence** : le statut de compétition ne peut pas quitter `running`
+   tant qu'un couple est `open` (409, avec le chemin à suivre). Ouvrir un couple sur une
+   compétition qui n'est pas `running` la passe à `running` (tracé au journal
+   d'activité). Cela supprime le piège « Clôturée avec un tour ouvert » et rend le
+   garde-fou de corbeille (`running`, ADR-063) suffisant.
+6. **Migration réversible** : le haut remplit `round_category` depuis l'ancien
+   `round.status`, répliqué sur chaque catégorie liée au tour ; le bas recrée
+   `round.status` avec **perte assumée** quand les catégories d'un tour divergent
+   (`open` l'emporte dès qu'une catégorie est ouverte — une saisie en cours n'est jamais
+   coupée —, sinon l'état le plus avancé). Un tour `open` sans aucune voie n'a pas de
+   catégorie à qui répliquer son état : il redevient brouillon (sans conséquence, aucun
+   juge ne peut y saisir). Sauvegarde JSON : version de schéma 2, la version 1 reste
+   importable (le statut du tour est répliqué sur ses catégories).
+
+7. **Une voie ne sert que dans un seul tour ouvert.** Avec un statut par catégorie, la
+   qualification des U18 et la demi-finale des U16 peuvent se chevaucher, et l'écran juge
+   ne sait montrer qu'un tour par voie (`resolveOpenRoundForRoute`) — le juge ne saurait
+   plus qui grimpe. Ouvrir (ou rouvrir) une catégorie est donc refusé (409 « Voie déjà
+   utilisée ») tant qu'une de ses voies sert déjà dans un autre tour ouvert. Cela règle
+   aussi ce que `TODO.md` notait depuis le Lot 5 (deux tours ouverts sur la même voie,
+   non détectés).
+8. **Le couple n'existe que tant qu'une voie relie la catégorie au tour.** Le garde-fou du
+   point 5 ne compte que les couples ouverts qui ont encore une ligne `round_route` : si
+   l'organisateur retire toutes les voies d'une catégorie d'un tour ouvert, la ligne
+   `round_category` reste mais n'est plus visible du pilotage, elle ne bloque donc pas la
+   clôture.
+
+**Limite connue :** le garde-fou du point 5 est une requête conditionnelle unique, mais
+deux transactions simultanées (ouvrir une catégorie pendant qu'un autre organisateur
+clôture la compétition) peuvent encore se croiser dans une fenêtre de quelques
+millisecondes (niveau d'isolation `READ COMMITTED`). Rare à l'échelle d'un club ; noté
+dans `TODO.md`.
+
+**Alternatives écartées :** garder `round.status` et lui ajouter un statut par catégorie
+(deux sources de vérité qui divergent — exactement le défaut qu'on corrige) ; ouverture
+automatique du tour suivant quand le précédent se ferme (le figeage des qualifiés est
+quasi irréversible, ADR-054 : on laisse le temps de trancher un conflit ou une égalité —
+c'est le Lot 14, en un clic avec aperçu) ; supprimer le statut de compétition (le cap
+produit — recherche publique de compétitions à venir / en cours / finies — en a besoin).
+
+**Effets sur les ADR antérieurs :** remplace **ADR-030** (le statut « En cours » n'ouvre
+plus le tour implicite du contest) ; précise **ADR-054** (ses garde-fous sont par
+catégorie) et **ADR-063** point 4 (le refus de mise à la corbeille reste « En cours »,
+qui ne peut plus coexister avec une catégorie ouverte que dans le sens inverse : ouvrir
+une catégorie fait passer la compétition à « En cours »).
+
+**Suite prévue, non engagée ici :** Lot 13 (visibilité public/privé, recherche publique ;
+« privé » = non listé, lien direct valable) et Lot 14 (enchaînement guidé des tours).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

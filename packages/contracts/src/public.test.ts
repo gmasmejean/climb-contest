@@ -75,7 +75,9 @@ describe('publicRouteSchema — aucune donnée organisateur', () => {
     }
     expect(publicRouteSchema.safeParse(route).success).toBe(true)
     expect(publicRouteSchema.safeParse({ ...route, videoAssetId: otherUuid }).success).toBe(false)
-    expect(publicRouteSchema.safeParse({ ...route, hasUploadedVideo: undefined }).success).toBe(false)
+    expect(publicRouteSchema.safeParse({ ...route, hasUploadedVideo: undefined }).success).toBe(
+      false,
+    )
   })
 
   it('rejette les champs inconnus (aucune fuite de champ organisateur)', () => {
@@ -164,8 +166,17 @@ describe('publicStreamEventSchema', () => {
         type: 'round_status_changed',
         competitionId: uuid,
         roundId: otherUuid,
+        categoryIds: [uuid],
       }).success,
     ).toBe(true)
+    // ADR-065 : sans les catégories touchées, le client ne saurait pas quoi rafraîchir.
+    expect(
+      publicStreamEventSchema.safeParse({
+        type: 'round_status_changed',
+        competitionId: uuid,
+        roundId: otherUuid,
+      }).success,
+    ).toBe(false)
     expect(
       publicStreamEventSchema.safeParse({
         type: 'route_updated',
@@ -176,7 +187,10 @@ describe('publicStreamEventSchema', () => {
   })
 
   it('rejette un type d’événement inconnu', () => {
-    const result = publicStreamEventSchema.safeParse({ type: 'competitor_updated', competitionId: uuid })
+    const result = publicStreamEventSchema.safeParse({
+      type: 'competitor_updated',
+      competitionId: uuid,
+    })
     expect(result.success).toBe(false)
   })
 })

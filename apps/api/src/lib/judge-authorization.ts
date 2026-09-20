@@ -1,4 +1,12 @@
-import { judge, judgeRoute, round, roundRoute, route, type Database } from '@climbcontest/db'
+import {
+  judge,
+  judgeRoute,
+  round,
+  roundCategory,
+  roundRoute,
+  route,
+  type Database,
+} from '@climbcontest/db'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 
 import { ApiError } from '../middleware/problem'
@@ -43,19 +51,19 @@ export async function assertJudgeAssignedToRoute(
 export interface OpenRoundForRoute {
   roundId: string
   roundType: (typeof round.$inferSelect)['type']
-  // Toutes les catégories que cette voie sert DANS ce tour (round_route
-  // peut lier une même voie à plusieurs catégories pour un même tour).
+  // Les catégories que cette voie sert DANS ce tour ET pour lesquelles il est
+  // ouvert (ADR-065 : round_route peut lier une même voie à plusieurs
+  // catégories, dont certaines ouvertes le matin, d'autres pas encore).
   categoryIds: string[]
 }
 
 /**
  * Résout le tour ouvert qui utilise cette voie, pour cette compétition — au
- * plus un en pratique (Lot 5 suppose qu'un organisateur n'ouvre jamais deux
- * tours en même temps sur la même voie ; le cas contraire n'est pas détecté,
- * voir TODO.md : seul le premier tour trouvé, par `display_order`, est
- * retenu). `null` si aucun tour ouvert ne référence la voie : état
- * transitoire normal (tour pas encore ouvert, ou déjà refermé), pas une
- * erreur.
+ * plus un : ouvrir une catégorie d'un tour est refusé tant qu'une voie de ce
+ * tour sert déjà dans un autre tour ouvert (ADR-065, `assertRoutesFreeToOpen`),
+ * l'écran juge ne sachant montrer qu'un tour par voie. `null` si aucun tour
+ * ouvert ne référence la voie : état transitoire normal (tour pas encore
+ * ouvert, ou déjà refermé), pas une erreur.
  */
 export async function resolveOpenRoundForRoute(
   db: Database,
@@ -66,11 +74,18 @@ export async function resolveOpenRoundForRoute(
     .select({ roundId: round.id, roundType: round.type, categoryId: roundRoute.categoryId })
     .from(roundRoute)
     .innerJoin(round, eq(round.id, roundRoute.roundId))
+    .innerJoin(
+      roundCategory,
+      and(
+        eq(roundCategory.roundId, roundRoute.roundId),
+        eq(roundCategory.categoryId, roundRoute.categoryId),
+      ),
+    )
     .where(
       and(
         eq(roundRoute.routeId, routeId),
         eq(round.competitionId, competitionId),
-        eq(round.status, 'open'),
+        eq(roundCategory.status, 'open'),
         isNull(round.deletedAt),
       ),
     )

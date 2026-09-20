@@ -71,6 +71,7 @@ describe('migrations', () => {
         'judge',
         'judge_route',
         'round',
+        'round_category',
         'round_qualifier',
         'round_route',
         'route',
@@ -101,7 +102,7 @@ describe('migrations', () => {
       const afterUp = await client.query(
         "select table_name from information_schema.tables where table_schema = 'public' and table_name != '_migrations_applied'",
       )
-      expect(afterUp.rows.length).toBe(19)
+      expect(afterUp.rows.length).toBe(20)
     })
   })
 })
@@ -299,6 +300,147 @@ describe('migration 0009_lot11_competition_deletion_log (ADR-063)', () => {
       const count = await client.query('select count(*)::int as n from competition_deletion_log')
       expect(count.rows[0]).toEqual({ n: 0 })
     })
+  })
+})
+
+describe('migration 0010_lot12_round_category (ADR-065)', () => {
+  // Deux catégories, trois tours : `open` (U16 + U18), `closed` (U16 seulement),
+  // `draft` (U18). Écrit avec `round.status`, donc AVANT la migration 0010.
+  async function seedOldSchemaRounds(client: pg.Client) {
+    const { demoClub, demoUser } = await insertClubAndUser()
+    const [comp] = await handle.db
+      .insert(competition)
+      .values({
+        clubId: demoClub.id,
+        name: 'Migration 0010',
+        venue: 'Salle',
+        startsOn: '2026-01-01',
+        endsOn: '2026-01-01',
+        format: 'phases',
+        scoringEngineId: 'ffme-difficulty-2026',
+        publicSlug: crypto.randomUUID(),
+        createdBy: demoUser.id,
+      })
+      .returning()
+    if (!comp) throw new Error('competition insert failed')
+    const [u16, u18] = await handle.db
+      .insert(category)
+      .values([
+        { competitionId: comp.id, label: 'U16', sex: 'M', displayOrder: 0 },
+        { competitionId: comp.id, label: 'U18', sex: 'M', displayOrder: 1 },
+      ])
+      .returning()
+    const [routeRow] = await handle.db
+      .insert(route)
+      .values({ competitionId: comp.id, number: 1, holdCount: 30 })
+      .returning()
+    if (!u16 || !u18 || !routeRow) throw new Error('fixture insert failed')
+
+    async function insertRound(order: number, type: string, status: string, categoryIds: string[]) {
+      const roundId = crypto.randomUUID()
+      await client.query(
+        `insert into round (id, competition_id, type, style, display_order, status)
+         values ($1, $2, $3, 'onsight', $4, $5)`,
+        [roundId, comp?.id, type, order, status],
+      )
+      for (const categoryId of categoryIds) {
+        await client.query(
+          'insert into round_route (round_id, route_id, category_id) values ($1, $2, $3)',
+          [roundId, routeRow?.id, categoryId],
+        )
+      }
+      return roundId
+    }
+    const openId = await insertRound(0, 'qualification', 'open', [u16.id, u18.id])
+    const closedId = await insertRound(1, 'semifinal', 'closed', [u16.id])
+    const draftId = await insertRound(2, 'final', 'draft', [u18.id])
+    return { openId, closedId, draftId, u16, u18 }
+  }
+
+  it('le up réplique l’ancien statut sur chaque catégorie du tour, le down garde `open` en priorité', async () => {
+    await withRawClient(async (client) => {
+      // 0010 est la dernière migration : un seul cran, sinon ce test est à revoir.
+      expect(await revertLastMigrations(client, 1)).toEqual(['0010_lot12_round_category.sql'])
+      const { openId, closedId, draftId, u16, u18 } = await seedOldSchemaRounds(client)
+
+      await applyPendingMigrations(client)
+      const { rows: migrated } = await client.query<{
+        round_id: string
+        category_id: string
+        status: string
+      }>('select round_id, category_id, status from round_category where round_id = any($1)', [
+        [openId, closedId, draftId],
+      ])
+      // Un tour en brouillon n'écrit rien : ligne absente = brouillon.
+      expect(migrated).toHaveLength(3)
+      expect(migrated).toEqual(
+        expect.arrayContaining([
+          { round_id: openId, category_id: u16.id, status: 'open' },
+          { round_id: openId, category_id: u18.id, status: 'open' },
+          { round_id: closedId, category_id: u16.id, status: 'closed' },
+        ]),
+      )
+      const statusColumn = await client.query(
+        "select 1 from information_schema.columns where table_name = 'round' and column_name = 'status'",
+      )
+      expect(statusColumn.rows).toHaveLength(0)
+
+      // Le tour ouvert diverge : U16 fermée, U18 ouverte → le down doit garder `open`.
+      await client.query(
+        "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
+        [openId, u16.id],
+      )
+      await revertLastMigrations(client, 1)
+      const back = await client.query<{ id: string; status: string }>(
+        'select id, status from round where id = any($1)',
+        [[openId, closedId, draftId]],
+      )
+      expect(new Map(back.rows.map((row) => [row.id, row.status]))).toEqual(
+        new Map([
+          [openId, 'open'],
+          [closedId, 'closed'],
+          [draftId, 'draft'],
+        ]),
+      )
+
+      // On laisse la base au dernier état pour les tests suivants.
+      await applyPendingMigrations(client)
+    })
+  })
+
+  it('refuse un statut inconnu sur round_category', async () => {
+    const { demoClub, demoUser } = await insertClubAndUser()
+    const [comp] = await handle.db
+      .insert(competition)
+      .values({
+        clubId: demoClub.id,
+        name: 'Statut inconnu',
+        venue: 'Salle',
+        startsOn: '2026-01-01',
+        endsOn: '2026-01-01',
+        format: 'phases',
+        scoringEngineId: 'ffme-difficulty-2026',
+        publicSlug: crypto.randomUUID(),
+        createdBy: demoUser.id,
+      })
+      .returning()
+    if (!comp) throw new Error('competition insert failed')
+    const [cat] = await handle.db
+      .insert(category)
+      .values({ competitionId: comp.id, label: 'U16', sex: 'M', displayOrder: 0 })
+      .returning()
+    const [roundRow] = await handle.db
+      .insert(round)
+      .values({ competitionId: comp.id, type: 'qualification', style: 'onsight', displayOrder: 0 })
+      .returning()
+    if (!cat || !roundRow) throw new Error('fixture insert failed')
+
+    await expect(
+      handle.db.execute(sql`
+        insert into round_category (round_id, category_id, status)
+        values (${roundRow.id}, ${cat.id}, 'exploded')
+      `),
+    ).rejects.toThrow()
   })
 })
 

@@ -38,3 +38,39 @@ export async function loginApi(request: APIRequestContext, email: string, passwo
   })
   return { accessToken, headers: { authorization: `Bearer ${accessToken}` } }
 }
+
+/**
+ * Ouvre, pour toutes ses catégories, le round implicite d'un contest (ADR-023).
+ * ADR-065 : le statut de compétition « En cours » n'ouvre plus rien ; chaque
+ * catégorie s'ouvre par `round-status`, comme le fait l'écran Pilotage. Le round
+ * n'est pas exposé en contest, on lit son identifiant sur le tableau de bord.
+ * `base` = `/api/v1/competitions/<id>`.
+ */
+export async function openContestRound(
+  request: APIRequestContext,
+  headers: Record<string, string>,
+  base: string,
+): Promise<void> {
+  const dashboard = await apiJson<{
+    categories: { categoryId: string; routes: { roundId: string | null }[] }[]
+  }>(request, `${base}/dashboard`, { headers })
+  const categoriesByRound = new Map<string, Set<string>>()
+  for (const cat of dashboard.categories) {
+    for (const r of cat.routes) {
+      if (!r.roundId) continue
+      const set = categoriesByRound.get(r.roundId) ?? new Set<string>()
+      set.add(cat.categoryId)
+      categoriesByRound.set(r.roundId, set)
+    }
+  }
+  if (categoriesByRound.size === 0) {
+    throw new Error(`${base} : aucun tour à ouvrir (la voie est-elle affectée à une catégorie ?)`)
+  }
+  for (const [roundId, categoryIds] of categoriesByRound) {
+    await apiJson(request, `${base}/round-status/${roundId}`, {
+      method: 'POST',
+      headers,
+      data: { status: 'open', categoryIds: [...categoryIds] },
+    })
+  }
+}

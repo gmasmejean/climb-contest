@@ -6,6 +6,8 @@ import {
   competition,
   createDatabase,
   judge,
+  round,
+  roundCategory,
   type DatabaseHandle,
 } from '@climbcontest/db'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
@@ -260,6 +262,54 @@ describe('POST /competitions/import', () => {
     ).toHaveLength(6)
   })
 
+  it('relit une sauvegarde au format 1 : l’ancien statut du tour est répliqué sur ses catégories (ADR-065)', async () => {
+    const s = await richScenario()
+    const { backup } = await exportBackup(s)
+    // Ce qu'écrivait l'application avant ADR-065 : le statut sur le tour, pas de `roundCategories`.
+    const { roundCategories, ...rest } = backup
+    const v1 = {
+      ...rest,
+      schemaVersion: 1,
+      rounds: backup.rounds.map((r) => ({
+        ...r,
+        status: roundCategories.find((rc) => rc.roundId === r.id)?.status ?? 'draft',
+      })),
+    }
+
+    const preview = await postImport(s.organizerToken, { mode: 'preview', backup: v1 })
+    expect(preview.status).toBe(200)
+
+    const response = await postImport(s.organizerToken, { mode: 'commit', backup: v1 })
+    expect(response.status).toBe(201)
+    const { competitionId: copyId } = await json<{ competitionId: string }>(response)
+
+    const restored = await handle.db
+      .select({ type: round.type, status: roundCategory.status })
+      .from(roundCategory)
+      .innerJoin(round, eq(round.id, roundCategory.roundId))
+      .where(eq(round.competitionId, copyId))
+    // Qualification jouée puis fermée, demi-finale ouverte : un état par catégorie (une seule ici).
+    expect(restored).toHaveLength(2)
+    expect(restored).toEqual(
+      expect.arrayContaining([
+        { type: 'qualification', status: 'closed' },
+        { type: 'semifinal', status: 'open' },
+      ]),
+    )
+  })
+
+  it('l’export écrit le statut par catégorie (format 2), sans statut porté par le tour', async () => {
+    const s = await richScenario()
+    const { backup, text } = await exportBackup(s)
+
+    expect(backup.schemaVersion).toBe(2)
+    expect(backup.roundCategories).toHaveLength(2)
+    expect(backup.roundCategories.map((rc) => rc.status).sort()).toEqual(['closed', 'open'])
+    for (const r of JSON.parse(text).rounds as Record<string, unknown>[]) {
+      expect('status' in r).toBe(false)
+    }
+  })
+
   it('restaure les juges révoqués, avec un identifiant inutilisable', async () => {
     const s = await richScenario()
     const { backup } = await exportBackup(s)
@@ -378,10 +428,11 @@ describe('POST /competitions/import', () => {
     })
 
     it('un autre numéro de version, avec un message qui le dit', async () => {
-      const { response, body } = await rejectedWith((b) => ({ ...b, schemaVersion: 2 }))
+      const { response, body } = await rejectedWith((b) => ({ ...b, schemaVersion: 3 }))
       expect(response.status).toBe(400)
       expect(body.title).toBe('Sauvegarde non compatible')
-      expect(body.detail).toContain('format 2')
+      expect(body.detail).toContain('format 3')
+      expect(body.detail).toContain('formats 1 et 2')
     })
 
     it('un dossard en double, en français', async () => {

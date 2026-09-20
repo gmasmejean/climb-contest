@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { openContestRound } from './support/api'
 
 // Lot 7, plan de test (CLAUDE.md « parcours critiques en end-to-end » : « le
 // classement public se met à jour en direct ») : un juge note un passage,
@@ -77,11 +78,7 @@ async function setUpFixture(request: APIRequestContext) {
     },
   )
 
-  await apiJson(request, `/api/v1/competitions/${competition.id}/status`, {
-    method: 'POST',
-    headers: authHeaders,
-    data: { status: 'running' },
-  })
+  await openContestRound(request, authHeaders, `/api/v1/competitions/${competition.id}`)
 
   return { slug: competition.publicSlug, judgeToken: judge.accessToken, routeNumber: route.number }
 }

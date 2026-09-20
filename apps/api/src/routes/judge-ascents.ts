@@ -21,7 +21,6 @@ import {
   competitor,
   judge,
   judgeRoute,
-  round,
   roundRoute,
   route,
   type Database,
@@ -42,6 +41,7 @@ import { assertJudgeAssignedToRoute, resolveOpenRoundForRoute } from '../lib/jud
 import { notifyPublic } from '../lib/notify-public'
 import { isUniqueViolation } from '../lib/pg-errors'
 import { requireJudge } from '../middleware/judge-auth'
+import { findRoundOpenForCategory } from '../lib/round-category'
 import { assertCompetitorQualifiedForRound } from '../lib/round-qualifiers'
 import { ApiError, problem } from '../middleware/problem'
 import { authRateLimiter } from '../middleware/rate-limit'
@@ -507,15 +507,13 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
         ),
       })
       const openRoundRow = liveTriple
-        ? await db.query.round.findFirst({
-            where: and(
-              eq(round.id, input.roundId),
-              eq(round.competitionId, currentJudge.competitionId),
-              eq(round.status, 'open'),
-              isNull(round.deletedAt),
-            ),
-          })
-        : null
+        ? await findRoundOpenForCategory(
+            db,
+            currentJudge.competitionId,
+            input.roundId,
+            competitorRow.categoryId,
+          )
+        : undefined
       if (!liveTriple || !openRoundRow) {
         throw new ApiError(404, 'Tour introuvable', "Ce tour n'est pas ouvert pour cette voie.")
       }

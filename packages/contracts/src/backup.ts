@@ -12,8 +12,14 @@ import { roundStatusSchema, roundStyleSchema, roundTypeSchema } from './round'
  * fichier importé est rejeté, pas silencieusement ignoré.
  */
 
-/** Version du format. À incrémenter à toute évolution non rétrocompatible. */
-export const BACKUP_SCHEMA_VERSION = 1
+/**
+ * Version du format. À incrémenter à toute évolution non rétrocompatible.
+ * 2 (ADR-065) : le statut d'un tour se porte par catégorie (`roundCategories`),
+ * plus par tour. La version 1 reste lisible : `parseCompetitionBackup` la remonte.
+ */
+export const BACKUP_SCHEMA_VERSION = 2
+/** Versions que l'import sait lire (la dernière est celle qu'on écrit). */
+export const READABLE_BACKUP_SCHEMA_VERSIONS = [1, 2] as const
 
 const id = z.uuid()
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ.')
@@ -89,9 +95,13 @@ export const backupRoundSchema = z
     style: roundStyleSchema,
     displayOrder: z.number().int(),
     qualifyingCount: z.number().int().positive().nullable(),
-    status: roundStatusSchema,
     deletedAt: isoDateTime.nullable(),
   })
+  .strict()
+
+/** ADR-065 : ligne absente = brouillon, donc seuls les états déjà atteints sont écrits. */
+export const backupRoundCategorySchema = z
+  .object({ roundId: id, categoryId: id, status: roundStatusSchema })
   .strict()
 
 export const backupRoundRouteSchema = z
@@ -180,6 +190,7 @@ export const competitionBackupSchema = z
     routes: z.array(backupRouteSchema),
     routeCategories: z.array(backupRouteCategorySchema),
     rounds: z.array(backupRoundSchema),
+    roundCategories: z.array(backupRoundCategorySchema),
     roundRoutes: z.array(backupRoundRouteSchema),
     roundQualifiers: z.array(backupRoundQualifierSchema),
     judges: z.array(backupJudgeSchema),
@@ -189,6 +200,79 @@ export const competitionBackupSchema = z
   })
   .strict()
 export type CompetitionBackup = z.infer<typeof competitionBackupSchema>
+
+/**
+ * Format 1 (avant ADR-065) : le statut est sur le tour, et il n'y a pas de
+ * `roundCategories`. Gardé uniquement pour relire d'anciennes sauvegardes.
+ */
+const competitionBackupV1Schema = competitionBackupSchema
+  .omit({ schemaVersion: true, rounds: true, roundCategories: true })
+  .extend({
+    schemaVersion: z.literal(1),
+    rounds: z.array(backupRoundSchema.extend({ status: roundStatusSchema })),
+  })
+  .strict()
+
+/**
+ * Remonte une sauvegarde v1 en v2 : l'ancien statut du tour est répliqué sur
+ * chaque catégorie liée au tour par `roundRoutes`. Un tour en brouillon
+ * n'écrit rien (ligne absente = brouillon). Fonction pure.
+ */
+function upgradeBackupV1(v1: z.infer<typeof competitionBackupV1Schema>): CompetitionBackup {
+  const categoriesByRound = new Map<string, Set<string>>()
+  for (const link of v1.roundRoutes) {
+    const set = categoriesByRound.get(link.roundId) ?? new Set<string>()
+    set.add(link.categoryId)
+    categoriesByRound.set(link.roundId, set)
+  }
+  const roundCategories = v1.rounds
+    .filter((r) => r.status !== 'draft')
+    .flatMap((r) =>
+      [...(categoriesByRound.get(r.id) ?? [])].map((categoryId) => ({
+        roundId: r.id,
+        categoryId,
+        status: r.status,
+      })),
+    )
+  return {
+    ...v1,
+    schemaVersion: BACKUP_SCHEMA_VERSION,
+    rounds: v1.rounds.map((r) => ({
+      id: r.id,
+      type: r.type,
+      style: r.style,
+      displayOrder: r.displayOrder,
+      qualifyingCount: r.qualifyingCount,
+      deletedAt: r.deletedAt,
+    })),
+    roundCategories,
+  }
+}
+
+export type ParsedCompetitionBackup =
+  { success: true; data: CompetitionBackup } | { success: false; error: z.ZodError }
+
+/**
+ * Point d'entrée unique de lecture d'une sauvegarde : aiguille sur la version
+ * annoncée par le fichier, sans dégrader les messages d'erreur (un `z.union`
+ * les noierait). Toute version lisible ressort au format courant.
+ */
+export function parseCompetitionBackup(raw: unknown): ParsedCompetitionBackup {
+  const declared =
+    typeof raw === 'object' && raw !== null && 'schemaVersion' in raw
+      ? raw.schemaVersion
+      : undefined
+  if (declared === 1) {
+    const parsed = competitionBackupV1Schema.safeParse(raw)
+    return parsed.success
+      ? { success: true, data: upgradeBackupV1(parsed.data) }
+      : { success: false, error: parsed.error }
+  }
+  const parsed = competitionBackupSchema.safeParse(raw)
+  return parsed.success
+    ? { success: true, data: parsed.data }
+    : { success: false, error: parsed.error }
+}
 
 export const importBackupInputSchema = z.object({
   mode: z.enum(['preview', 'commit']),

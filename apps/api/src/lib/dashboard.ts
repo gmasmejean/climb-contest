@@ -1,8 +1,19 @@
 import type { DashboardAlert, DashboardResponse } from '@climbcontest/contracts'
-import { ascent, category, judge, judgeRoute, round, roundRoute, route, type Database } from '@climbcontest/db'
+import {
+  ascent,
+  category,
+  judge,
+  judgeRoute,
+  round,
+  roundCategory,
+  roundRoute,
+  route,
+  type Database,
+} from '@climbcontest/db'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 
 import { activeAscentsFor, expectedCompetitors } from './ascent-progress'
+import { statusExpression } from './round-category'
 
 const ROUTE_STALLED_THRESHOLD_MS = 15 * 60 * 1000
 const JUDGE_SILENT_THRESHOLD_MS = 10 * 60 * 1000
@@ -35,14 +46,23 @@ export async function computeDashboard(
       roundId: roundRoute.roundId,
       routeId: roundRoute.routeId,
       categoryId: roundRoute.categoryId,
-      roundStatus: round.status,
+      // ADR-065 : le statut du couple (tour, catégorie) ; ligne absente = brouillon.
+      roundStatus: statusExpression,
       roundUpdatedAt: round.updatedAt,
+      pairUpdatedAt: roundCategory.updatedAt,
       routeNumber: route.number,
       routeName: route.name,
     })
     .from(roundRoute)
     .innerJoin(round, eq(round.id, roundRoute.roundId))
     .innerJoin(route, eq(route.id, roundRoute.routeId))
+    .leftJoin(
+      roundCategory,
+      and(
+        eq(roundCategory.roundId, roundRoute.roundId),
+        eq(roundCategory.categoryId, roundRoute.categoryId),
+      ),
+    )
     .where(and(eq(round.competitionId, competitionId), isNull(round.deletedAt), isNull(route.deletedAt)))
 
   const alerts: DashboardAlert[] = []
@@ -70,7 +90,7 @@ export async function computeDashboard(
       number: rr.routeNumber,
       name: rr.routeName,
       roundId: rr.roundId,
-      roundStatus: rr.roundStatus as DashboardResponse['categories'][number]['routes'][number]['roundStatus'],
+      roundStatus: rr.roundStatus,
       done: active.size,
       expected: expected.length,
       lastAscentAt: lastAscentAt?.toISOString() ?? null,
@@ -80,10 +100,11 @@ export async function computeDashboard(
     if (rr.roundStatus === 'open') {
       const stillExpected = expected.length - active.size
       if (stillExpected > 0) {
-        // Sans passage du tout : on prend l'heure de mise à jour du tour
-        // comme approximation de « depuis l'ouverture » — le tour n'a pas de
-        // véritable horodatage d'ouverture séparé (TODO.md, limite connue).
-        const anchor = lastAscentAt ?? rr.roundUpdatedAt
+        // Sans passage du tout : on prend l'heure de mise à jour du couple
+        // (tour, catégorie) comme approximation de « depuis l'ouverture » — il
+        // n'a pas de véritable horodatage d'ouverture séparé (TODO.md, limite
+        // connue). Le repli sur le tour ne sert qu'aux lignes sans couple.
+        const anchor = lastAscentAt ?? rr.pairUpdatedAt ?? rr.roundUpdatedAt
         const elapsedMs = nowDate.getTime() - anchor.getTime()
         if (elapsedMs >= ROUTE_STALLED_THRESHOLD_MS) {
           alerts.push({

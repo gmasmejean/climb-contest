@@ -42,14 +42,36 @@ describe('updateRoundInputSchema', () => {
 })
 
 describe('changeRoundStatusInputSchema', () => {
+  const categoryId = '0192f0c0-0000-7000-8000-000000000001'
+
   it('accepte chaque valeur de statut', () => {
     for (const status of ['draft', 'open', 'closed', 'published'] as const) {
-      expect(changeRoundStatusInputSchema.safeParse({ status }).success).toBe(true)
+      expect(
+        changeRoundStatusInputSchema.safeParse({ status, categoryIds: [categoryId] }).success,
+      ).toBe(true)
     }
   })
 
   it('refuse un statut inconnu', () => {
-    expect(changeRoundStatusInputSchema.safeParse({ status: 'archived' }).success).toBe(false)
+    expect(
+      changeRoundStatusInputSchema.safeParse({ status: 'archived', categoryIds: [categoryId] })
+        .success,
+    ).toBe(false)
+  })
+
+  it('exige au moins une catégorie (ADR-065), avec un message en français', () => {
+    const missing = changeRoundStatusInputSchema.safeParse({ status: 'open' })
+    expect(missing.success).toBe(false)
+
+    const empty = changeRoundStatusInputSchema.safeParse({ status: 'open', categoryIds: [] })
+    expect(empty.success).toBe(false)
+    expect(empty.error?.issues[0]?.message).toBe('Choisissez au moins une catégorie.')
+  })
+
+  it('refuse un identifiant de catégorie qui n’est pas un uuid', () => {
+    expect(
+      changeRoundStatusInputSchema.safeParse({ status: 'open', categoryIds: ['U16'] }).success,
+    ).toBe(false)
   })
 })
 

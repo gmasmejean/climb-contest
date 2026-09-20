@@ -126,3 +126,10 @@ pnpm exec playwright test --project=mobile
   supprime définitivement derrière une confirmation. Tourne aussi dans le projet
   `mobile` (360 px) : cibles tactiles ≥ 48 px et aucun débordement horizontal
   (`ROADMAP.md` Lot 11, ADR-062 et ADR-063).
+
+- `round-category-status.spec.ts` — le statut d'un tour par catégorie (Lot 12,
+  ADR-065) : les U16 ouvrent et ferment leur qualification, passent en demi-finale
+  pendant que les U18 attendent, la demi-finale des U18 est refusée tant que leur
+  qualification n'est pas terminée, et la compétition ne peut pas être clôturée
+  tant qu'une catégorie est ouverte. Tourne aussi à 360 px (projet `mobile`) : pas de
+  défilement horizontal, cibles tactiles d'au moins 48 px.

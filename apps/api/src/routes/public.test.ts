@@ -16,6 +16,7 @@ import {
   authHeaders,
   createJudgeFixture,
   judgeAuthHeaders,
+  openContestRound,
   type JudgeFixture,
 } from '../test-utils/fixtures'
 
@@ -192,9 +193,12 @@ describe('GET /public/:slug', () => {
   it('expose les tours pour le format phases', async () => {
     const fixture = await createJudgeFixture(app, mailer, { format: 'phases', openRound: true })
     const response = await app.request(`/api/v1/public/${fixture.competition.publicSlug as string}`)
-    const body = (await response.json()) as { rounds: { status: string }[] }
+    const body = (await response.json()) as {
+      rounds: { categories: { categoryId: string; status: string }[] }[]
+    }
     expect(body.rounds).toHaveLength(1)
-    expect(body.rounds[0]?.status).toBe('open')
+    // ADR-065 : un état par catégorie.
+    expect(body.rounds[0]?.categories).toEqual([{ categoryId: fixture.category.id, status: 'open' }])
   })
 })
 
@@ -242,6 +246,50 @@ describe('GET /public/:slug/rankings', () => {
     expect(body.entries).toHaveLength(2)
     expect(body.entries[0]).toMatchObject({ rank: 1, bib: fixture.competitor.bib })
     expect(body.entries[1]).toMatchObject({ rank: 2, bib: second.bib })
+  })
+
+  it('format contest : deux catégories sur la même voie ne se mélangent pas dans leurs classements', async () => {
+    const fixture = await createJudgeFixture(app, mailer, { format: 'contest', openRound: false })
+    const categoryResponse = await app.request(`/api/v1/competitions/${fixture.competition.id}/categories`, {
+      method: 'POST',
+      headers: authHeaders(fixture.organizerToken),
+      body: JSON.stringify({ label: 'Autre catégorie', sex: 'X' }),
+    })
+    const otherCategory = (await categoryResponse.json()) as { id: string }
+    const otherCompetitor = await addCompetitor(
+      fixture.organizerToken,
+      fixture.competition.id,
+      otherCategory.id,
+      { bib: 2 },
+    )
+    // La voie sert les deux catégories : c'est le cas du bug, `ascent` n'a pas de catégorie.
+    const patchResponse = await app.request(
+      `/api/v1/competitions/${fixture.competition.id}/routes/${fixture.route.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(fixture.organizerToken),
+        body: JSON.stringify({ categoryIds: [fixture.category.id, otherCategory.id] }),
+      },
+    )
+    expect(patchResponse.status).toBe(200)
+    await openContestRound(app, fixture.organizerToken, fixture.competition.id)
+
+    const judgeJwt = await authenticateJudge(app, fixture.judge.accessToken, fixture.judge.pin)
+    const roundId = await judgeRoundId(fixture, judgeJwt)
+    await postAscent(judgeJwt, ascentItem(fixture, roundId, fixture.competitor.id, { holdNumber: 25 }))
+    await postAscent(judgeJwt, ascentItem(fixture, roundId, otherCompetitor.id, { holdNumber: 20 }))
+
+    for (const [categoryId, expectedBib] of [
+      [fixture.category.id, fixture.competitor.bib],
+      [otherCategory.id, otherCompetitor.bib],
+    ] as const) {
+      const response = await app.request(
+        `/api/v1/public/${fixture.competition.publicSlug as string}/rankings?category=${categoryId}`,
+      )
+      const body = (await response.json()) as PublicRankingBody
+      expect(body.entries).toHaveLength(1)
+      expect(body.entries[0]).toMatchObject({ rank: 1, bib: expectedBib })
+    }
   })
 
   it(
@@ -297,12 +345,12 @@ describe('GET /public/:slug/rankings', () => {
       await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
         method: 'POST',
         headers: authHeaders(fixture.organizerToken),
-        body: JSON.stringify({ status: 'closed' }),
+        body: JSON.stringify({ status: 'closed', categoryIds: [fixture.category.id] }),
       })
       await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
         method: 'POST',
         headers: authHeaders(fixture.organizerToken),
-        body: JSON.stringify({ status: 'published' }),
+        body: JSON.stringify({ status: 'published', categoryIds: [fixture.category.id] }),
       })
       // Laisse le temps au NOTIFY d'atteindre le bridge et d'invalider le cache.
       await sleep(500)

@@ -8,6 +8,7 @@ import {
   competition,
   competitor,
   round,
+  roundCategory,
   roundQualifier,
   roundRoute,
   route,
@@ -25,6 +26,8 @@ import {
   type RouteRanking,
 } from '@climbcontest/scoring'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+
+import { statusExpression } from './round-category'
 
 type CompetitionRow = typeof competition.$inferSelect
 type RoundStatus = 'draft' | 'open' | 'closed' | 'published'
@@ -202,6 +205,7 @@ export async function computeCategoryRounds(
     const rawRows = await fetchActiveAscentsForRound(
       db,
       roundMeta.roundId,
+      categoryId,
       roundMeta.routes.map((r) => r.routeId),
     )
     const rawByRoute = new Map<string, RawAscentRow[]>()
@@ -310,10 +314,12 @@ function buildRoundDetail(roundComputation: RoundComputation, competitorId: stri
 }
 
 /**
- * Tous les tours (statut ≠ `draft`) qui utilisent au moins une voie de
- * cette catégorie, dans l'ordre. Un tour `draft` n'a encore aucune voie
- * ouverte pour personne : il ne contribue à rien (cohérent avec
- * DECISIONS.md ADR-030 — le vrai pilotage d'ouverture reste au Lot 8).
+ * Tous les tours qui utilisent au moins une voie de cette catégorie ET dont
+ * le statut POUR CETTE CATÉGORIE n'est pas `draft` (ADR-065), dans l'ordre. Un
+ * tour `draft` pour cette catégorie n'a encore aucune voie ouverte pour
+ * personne : il ne contribue à rien. Le `status` rendu est celui du couple
+ * (tour, catégorie) : un classement est « provisoire » tant que l'un des
+ * tours de CETTE catégorie n'est pas publié.
  */
 async function loadContributingRounds(
   db: Database,
@@ -324,7 +330,7 @@ async function loadContributingRounds(
     .select({
       roundId: round.id,
       type: round.type,
-      status: round.status,
+      status: statusExpression,
       displayOrder: round.displayOrder,
       qualifyingCount: round.qualifyingCount,
       routeId: roundRoute.routeId,
@@ -335,6 +341,10 @@ async function loadContributingRounds(
     .from(roundRoute)
     .innerJoin(round, eq(round.id, roundRoute.roundId))
     .innerJoin(route, eq(route.id, roundRoute.routeId))
+    .leftJoin(
+      roundCategory,
+      and(eq(roundCategory.roundId, round.id), eq(roundCategory.categoryId, categoryId)),
+    )
     .where(
       and(
         eq(round.competitionId, competitionId),
@@ -360,7 +370,7 @@ async function loadContributingRounds(
       byRound.set(link.roundId, {
         roundId: link.roundId,
         type: link.type as RoundType,
-        status: link.status as RoundStatus,
+        status: link.status,
         displayOrder: link.displayOrder,
         qualifyingCount: link.qualifyingCount,
         routes: [routeMeta],
@@ -420,9 +430,16 @@ async function loadCompetitorDisplayInfo(
   return new Map(rows.map((row) => [row.id, row]))
 }
 
+/**
+ * Une voie peut servir plusieurs catégories dans un même tour (`round_route`
+ * porte la catégorie, `ascent` non) : sans la jointure sur `competitor`, le
+ * classement d'une catégorie absorberait les passages des autres. En format
+ * phases le roster masquait le problème ; en contest, rien ne filtre ensuite.
+ */
 async function fetchActiveAscentsForRound(
   db: Database,
   roundId: string,
+  categoryId: string,
   routeIds: readonly string[],
 ): Promise<readonly RawAscentRow[]> {
   if (routeIds.length === 0) return []
@@ -438,9 +455,11 @@ async function fetchActiveAscentsForRound(
       climbTimeMs: ascent.climbTimeMs,
     })
     .from(ascent)
+    .innerJoin(competitor, eq(competitor.id, ascent.competitorId))
     .where(
       and(
         eq(ascent.roundId, roundId),
+        eq(competitor.categoryId, categoryId),
         inArray(ascent.routeId, [...routeIds]),
         isNull(ascent.supersededBy),
         isNull(ascent.conflictGroup),

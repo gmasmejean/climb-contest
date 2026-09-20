@@ -212,7 +212,7 @@ describe('GET /competitions/:id/dashboard', () => {
     await app.request(`/api/v1/competitions/${fixture.competition.id}/round-status/${roundId}`, {
       method: 'POST',
       headers: authHeaders(fixture.organizerToken),
-      body: JSON.stringify({ status: 'closed' }),
+      body: JSON.stringify({ status: 'closed', categoryIds: [fixture.category.id] }),
     })
 
     const body = (await (await getDashboard(fixture.organizerToken, fixture.competition.id)).json()) as DashboardBody

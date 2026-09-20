@@ -1,21 +1,31 @@
-import { changeRoundStatusInputSchema, roundSchema } from '@climbcontest/contracts'
-import { activityLog, round, roundRoute, type Database } from '@climbcontest/db'
+import {
+  changeRoundStatusInputSchema,
+  changeRoundStatusResponseSchema,
+  type RoundStatus,
+} from '@climbcontest/contracts'
+import { activityLog, category, competition, round, type Database } from '@climbcontest/db'
 import { zValidator } from '@hono/zod-validator'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
 
 import type { AccessTokenSigner } from '../lib/jwt'
 import { notifyPublic } from '../lib/notify-public'
+import { loadStatuses, pairKey, setStatus } from '../lib/round-category'
 import {
   assertRoundCanBeReopened,
   assertRoundIsEmptyForDraft,
+  categoryIdsOfRound,
   deleteFrozenQualifiers,
   getRoundQualifiersView,
   planQualifiersForOpening,
   saveFrozenQualifiers,
   type QualifierPlanEntry,
 } from '../lib/round-qualifiers'
-import { isValidRoundTransition, roundHasUnresolvedConflicts } from '../lib/round-status'
+import {
+  assertRoutesFreeToOpen,
+  isValidRoundTransition,
+  roundHasUnresolvedConflicts,
+} from '../lib/round-status'
 import { requireOrganizer } from '../middleware/auth'
 import { requireCompetitionAccess } from '../middleware/competition-access'
 import { ApiError, problem } from '../middleware/problem'
@@ -55,9 +65,11 @@ export function createRoundStatusRoutes(deps: RoundStatusRouteDeps): Hono {
     }),
     async (c) => {
       const organizer = c.get('organizer')
-      const competitionId = c.get('competition').id
+      const currentCompetition = c.get('competition')
+      const competitionId = currentCompetition.id
       const roundId = c.req.param('roundId')
-      const { status: nextStatus } = c.req.valid('json')
+      const { status: nextStatus, categoryIds: requestedIds } = c.req.valid('json')
+      const categoryIds = [...new Set(requestedIds)]
 
       const existingRow = await db.query.round.findFirst({
         where: and(
@@ -67,92 +79,173 @@ export function createRoundStatusRoutes(deps: RoundStatusRouteDeps): Hono {
         ),
       })
       if (!existingRow) throw new ApiError(404, 'Tour introuvable', "Ce tour n'existe pas.")
-      // `round.status` est un `text` + CHECK en base (ADR-018), pas un enum
-      // natif — `roundSchema.parse` restreint le type à l'union littérale
-      // réelle plutôt qu'un `string` générique.
-      const existing = roundSchema.parse(existingRow)
 
-      if (existing.status === nextStatus) {
-        return c.json(existing)
-      }
-
-      if (!isValidRoundTransition(existing.status, nextStatus)) {
-        throw new ApiError(
-          409,
-          'Transition impossible',
-          `Un tour « ${existing.status} » ne peut pas passer directement à « ${nextStatus} ».`,
+      // Les catégories visées doivent faire partie de CE tour (au moins une voie
+      // via `round_route`) et de cette compétition.
+      const linked = new Set(await categoryIdsOfRound(db, roundId))
+      const found = await db
+        .select({ id: category.id, label: category.label })
+        .from(category)
+        .where(
+          and(
+            inArray(category.id, categoryIds),
+            eq(category.competitionId, competitionId),
+            isNull(category.deletedAt),
+          ),
         )
+      const labelById = new Map(found.map((row) => [row.id, row.label]))
+      for (const categoryId of categoryIds) {
+        if (!labelById.has(categoryId) || !linked.has(categoryId)) {
+          throw new ApiError(
+            404,
+            'Catégorie introuvable',
+            "Cette catégorie ne fait pas partie de ce tour : ajoutez d'abord au moins une voie pour elle.",
+          )
+        }
       }
 
-      if (nextStatus === 'published' && (await roundHasUnresolvedConflicts(db, roundId))) {
-        throw new ApiError(
-          409,
-          'Conflit non résolu',
-          'Ce tour contient au moins un conflit de saisie non résolu — tranchez-le avant de publier les résultats.',
+      const before = await loadStatuses(
+        db,
+        categoryIds.map((categoryId) => ({ roundId, categoryId })),
+      )
+      const statusOf = (categoryId: string): RoundStatus =>
+        before.get(pairKey(roundId, categoryId)) ?? 'draft'
+
+      // Tout ce qui peut refuser la transition est évalué AVANT la transaction
+      // (lecture seule) ; la transaction ne fait que l'écrire. Tout ou rien : un
+      // refus sur une catégorie refuse l'ensemble, et la nomme dès qu'il y en a
+      // plusieurs.
+      const changes: { categoryId: string; label: string; from: RoundStatus }[] = []
+      const plans: QualifierPlanEntry[] = []
+      for (const categoryId of categoryIds) {
+        const from = statusOf(categoryId)
+        if (from === nextStatus) continue
+        const label = labelById.get(categoryId) ?? categoryId
+        try {
+          if (!isValidRoundTransition(from, nextStatus)) {
+            throw new ApiError(
+              409,
+              'Transition impossible',
+              `Un tour « ${from} » ne peut pas passer directement à « ${nextStatus} ».`,
+            )
+          }
+          if (
+            nextStatus === 'published' &&
+            (await roundHasUnresolvedConflicts(db, roundId, categoryId))
+          ) {
+            throw new ApiError(
+              409,
+              'Conflit non résolu',
+              'Ce tour contient au moins un conflit de saisie non résolu — tranchez-le avant de publier les résultats.',
+            )
+          }
+          if (nextStatus === 'open') {
+            if (from === 'draft') {
+              // ADR-054 : figeage des qualifiés, calculé pour cette seule catégorie.
+              plans.push(
+                ...(await planQualifiersForOpening(db, currentCompetition, existingRow, [
+                  categoryId,
+                ])),
+              )
+            } else {
+              await assertRoundCanBeReopened(db, competitionId, existingRow, categoryId)
+            }
+            await assertRoutesFreeToOpen(db, competitionId, roundId, categoryId)
+          } else if (nextStatus === 'draft') {
+            await assertRoundIsEmptyForDraft(db, roundId, categoryId)
+          }
+        } catch (error) {
+          if (error instanceof ApiError && categoryIds.length > 1) {
+            throw new ApiError(
+              error.status,
+              error.title,
+              `${label} : ${error.detail ?? error.title}`,
+            )
+          }
+          throw error
+        }
+        changes.push({ categoryId, label, from })
+      }
+
+      // Une fois la transition acceptée, toutes les catégories visées valent
+      // `nextStatus` (celles qui l'avaient déjà n'ont pas bougé).
+      const respond = (competitionStatus: typeof currentCompetition.status) =>
+        c.json(
+          changeRoundStatusResponseSchema.parse({
+            roundId,
+            categories: categoryIds.map((categoryId) => ({ categoryId, status: nextStatus })),
+            competitionStatus,
+          }),
         )
-      }
 
-      // ADR-054 : garde-fous et figeage des qualifiés. Tout ce qui peut
-      // refuser la transition est évalué AVANT la transaction (lecture seule) ;
-      // la transaction ne fait que l'écrire.
-      let qualifierPlan: QualifierPlanEntry[] | null = null
-      if (nextStatus === 'open' && existing.status === 'draft') {
-        qualifierPlan = await planQualifiersForOpening(db, c.get('competition'), existingRow)
-      } else if (nextStatus === 'open') {
-        await assertRoundCanBeReopened(db, competitionId, existingRow)
-      } else if (nextStatus === 'draft') {
-        await assertRoundIsEmptyForDraft(db, roundId)
-      }
+      // Rien à changer : idempotent, comme avant — aucune écriture ni événement.
+      if (changes.length === 0) return respond(currentCompetition.status)
 
-      const updated = await db.transaction(async (tx) => {
-        const [row] = await tx
-          .update(round)
-          .set({ status: nextStatus, updatedAt: new Date() })
-          .where(eq(round.id, roundId))
-          .returning()
-        if (!row) throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour le tour.')
+      // ADR-065 : ouvrir une catégorie fait démarrer la compétition (tracé au journal).
+      const promotedFrom =
+        nextStatus === 'open' && currentCompetition.status !== 'running'
+          ? currentCompetition.status
+          : null
+      const changedIds = changes.map((change) => change.categoryId)
 
-        await tx.insert(activityLog).values({
-          competitionId,
-          eventType: 'round_status_changed',
-          actorType: 'organizer',
-          actorId: organizer.sub,
-          entityId: roundId,
-          payload: {
-            from: existing.status,
-            to: nextStatus,
-            ...(qualifierPlan && {
-              qualifiers: qualifierPlan.map((entry) => ({
-                categoryId: entry.categoryId,
-                count: entry.qualifiers.length,
-              })),
-            }),
-          },
-        })
+      await db.transaction(async (tx) => {
+        for (const change of changes) {
+          await setStatus(tx, roundId, change.categoryId, nextStatus)
+          const frozen = plans.find((plan) => plan.categoryId === change.categoryId)
+          await tx.insert(activityLog).values({
+            competitionId,
+            eventType: 'round_status_changed',
+            actorType: 'organizer',
+            actorId: organizer.sub,
+            entityId: roundId,
+            payload: {
+              from: change.from,
+              to: nextStatus,
+              categoryId: change.categoryId,
+              categoryLabel: change.label,
+              ...(frozen && {
+                qualifiers: [{ categoryId: frozen.categoryId, count: frozen.qualifiers.length }],
+              }),
+              ...(promotedFrom && { competitionStatusFrom: promotedFrom }),
+            },
+          })
+        }
 
-        if (qualifierPlan) {
-          await saveFrozenQualifiers(tx, roundId, organizer.sub, qualifierPlan)
+        if (nextStatus === 'open') {
+          const openedFromDraft = changes.filter((change) => change.from === 'draft')
+          await saveFrozenQualifiers(
+            tx,
+            roundId,
+            organizer.sub,
+            openedFromDraft.map((change) => change.categoryId),
+            plans,
+          )
         } else if (nextStatus === 'draft') {
-          await deleteFrozenQualifiers(tx, roundId)
+          await deleteFrozenQualifiers(tx, roundId, changedIds)
+        }
+
+        if (promotedFrom) {
+          await tx
+            .update(competition)
+            .set({ status: 'running', updatedAt: new Date() })
+            .where(eq(competition.id, competitionId))
         }
 
         // Même effet de bord que l'ancien PATCH générique (ROADMAP.md Lot 7) :
         // un `ranking_updated` par catégorie concernée accompagne toujours le
         // `round_status_changed`.
-        await notifyPublic(tx, { type: 'round_status_changed', competitionId, roundId })
-        const categoryLinks = await tx
-          .select({ categoryId: roundRoute.categoryId })
-          .from(roundRoute)
-          .where(eq(roundRoute.roundId, roundId))
-        const categoryIds = new Set(categoryLinks.map((link) => link.categoryId))
-        for (const categoryId of categoryIds) {
+        await notifyPublic(tx, {
+          type: 'round_status_changed',
+          competitionId,
+          roundId,
+          categoryIds: changedIds,
+        })
+        for (const categoryId of changedIds) {
           await notifyPublic(tx, { type: 'ranking_updated', competitionId, categoryId })
         }
-
-        return row
       })
 
-      return c.json(roundSchema.parse(updated))
+      return respond(promotedFrom ? 'running' : currentCompetition.status)
     },
   )
 

@@ -71,11 +71,17 @@ afterEach(async () => {
   )
 })
 
-async function postStatus(accessToken: string, competitionId: string, roundId: string, status: string) {
+async function postStatus(
+  accessToken: string,
+  competitionId: string,
+  roundId: string,
+  status: string,
+  categoryIds: string[],
+) {
   return app.request(`/api/v1/competitions/${competitionId}/round-status/${roundId}`, {
     method: 'POST',
     headers: authHeaders(accessToken),
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, categoryIds }),
   })
 }
 
@@ -86,10 +92,14 @@ async function draftPhasesRound() {
     `/api/v1/competitions/${fixture.competition.id}/rounds`,
     { headers: authHeaders(fixture.organizerToken) },
   )
-  const rounds = (await routesResponse.json()) as { id: string; status: string }[]
+  const rounds = (await routesResponse.json()) as { id: string }[]
   const roundId = rounds[0]?.id
   if (!roundId) throw new Error('Tour introuvable dans la fixture.')
-  return { fixture, roundId }
+  const categoryIds = [fixture.category.id]
+  /** Passe la (seule) catégorie du tour à `status`. */
+  const to = (status: string) =>
+    postStatus(fixture.organizerToken, fixture.competition.id, roundId, status, categoryIds)
+  return { fixture, roundId, categoryIds, to }
 }
 
 async function createConflict(fixture: JudgeFixture, roundId: string) {
@@ -117,84 +127,56 @@ async function createConflict(fixture: JudgeFixture, roundId: string) {
   })
 }
 
-describe('POST /competitions/:id/rounds/:roundId/status', () => {
-  it('ouvre un tour brouillon', async () => {
-    const { fixture, roundId } = await draftPhasesRound()
-    const response = await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'open')
+describe('POST /competitions/:id/round-status/:roundId', () => {
+  it('ouvre un tour brouillon pour la catégorie demandée', async () => {
+    const { to, roundId, categoryIds } = await draftPhasesRound()
+    const response = await to('open')
     expect(response.status).toBe(200)
-    expect(((await response.json()) as { status: string }).status).toBe('open')
+    expect(await response.json()).toEqual({
+      roundId,
+      categories: [{ categoryId: categoryIds[0], status: 'open' }],
+      competitionStatus: 'running',
+    })
   })
 
   it('refuse de sauter directement de draft à published', async () => {
-    const { fixture, roundId } = await draftPhasesRound()
-    const response = await postStatus(
-      fixture.organizerToken,
-      fixture.competition.id,
-      roundId,
-      'published',
-    )
-    expect(response.status).toBe(409)
+    const { to } = await draftPhasesRound()
+    expect((await to('published')).status).toBe(409)
   })
 
   it('refuse de rouvrir un tour publié sans passer par closed', async () => {
-    const { fixture, roundId } = await draftPhasesRound()
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'open')
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'closed')
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'published')
+    const { to } = await draftPhasesRound()
+    await to('open')
+    await to('closed')
+    await to('published')
 
-    const response = await postStatus(
-      fixture.organizerToken,
-      fixture.competition.id,
-      roundId,
-      'draft',
-    )
-    expect(response.status).toBe(409)
+    expect((await to('draft')).status).toBe(409)
   })
 
   it('permet de rouvrir un tour fermé, et de dépublier un tour publié', async () => {
-    const { fixture, roundId } = await draftPhasesRound()
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'open')
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'closed')
+    const { to } = await draftPhasesRound()
+    await to('open')
+    await to('closed')
 
-    const reopened = await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'open')
-    expect(reopened.status).toBe(200)
+    expect((await to('open')).status).toBe(200)
 
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'closed')
-    const published = await postStatus(
-      fixture.organizerToken,
-      fixture.competition.id,
-      roundId,
-      'published',
-    )
-    expect(published.status).toBe(200)
-
-    const unpublished = await postStatus(
-      fixture.organizerToken,
-      fixture.competition.id,
-      roundId,
-      'closed',
-    )
-    expect(unpublished.status).toBe(200)
+    await to('closed')
+    expect((await to('published')).status).toBe(200)
+    expect((await to('closed')).status).toBe(200)
   })
 
   it('bloque la publication tant qu’un conflit de saisie n’est pas résolu', async () => {
-    const { fixture, roundId } = await draftPhasesRound()
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'open')
+    const { fixture, roundId, to } = await draftPhasesRound()
+    await to('open')
     await createConflict(fixture, roundId)
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'closed')
+    await to('closed')
 
-    const response = await postStatus(
-      fixture.organizerToken,
-      fixture.competition.id,
-      roundId,
-      'published',
-    )
-    expect(response.status).toBe(409)
+    expect((await to('published')).status).toBe(409)
   })
 
   it('fonctionne aussi pour le tour implicite du format contest (ADR-040)', async () => {
-    // Format contest : la compétition passant à `running` ouvre déjà le
-    // round implicite (ADR-030) — on part directement de `open`.
+    // Format contest : la fixture ouvre le round implicite par catégorie
+    // (`openContestRound`, ADR-065) — on part directement de `open`.
     const fixture = await createJudgeFixture(app, mailer, { format: 'contest' })
     const judgeJwt = await authenticateJudge(app, fixture.judge.accessToken, fixture.judge.pin)
     const routeDetail = (await (
@@ -203,27 +185,101 @@ describe('POST /competitions/:id/rounds/:roundId/status', () => {
       })
     ).json()) as { round: { id: string } }
     const roundId = routeDetail.round.id
+    const to = (status: string) =>
+      postStatus(fixture.organizerToken, fixture.competition.id, roundId, status, [
+        fixture.category.id,
+      ])
 
-    const closed = await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'closed')
-    expect(closed.status).toBe(200)
-    const published = await postStatus(
-      fixture.organizerToken,
-      fixture.competition.id,
-      roundId,
-      'published',
-    )
-    expect(published.status).toBe(200)
+    expect((await to('closed')).status).toBe(200)
+    expect((await to('published')).status).toBe(200)
   })
 
-  it('écrit une entrée dans le journal d’activité', async () => {
-    const { fixture, roundId } = await draftPhasesRound()
-    await postStatus(fixture.organizerToken, fixture.competition.id, roundId, 'open')
+  it('écrit une entrée par catégorie dans le journal d’activité', async () => {
+    const { to, roundId, categoryIds, fixture } = await draftPhasesRound()
+    await to('open')
 
     const row = await handle.db.query.activityLog.findFirst({
       where: (log, { eq }) => eq(log.entityId, roundId),
     })
     expect(row?.eventType).toBe('round_status_changed')
     expect(row?.actorType).toBe('organizer')
-    expect(row?.payload).toMatchObject({ from: 'draft', to: 'open' })
+    expect(row?.payload).toMatchObject({
+      from: 'draft',
+      to: 'open',
+      categoryId: categoryIds[0],
+      categoryLabel: fixture.category.label,
+    })
+  })
+
+  it('est idempotent : redemander l’état actuel ne change rien et n’écrit rien', async () => {
+    const { to, roundId } = await draftPhasesRound()
+    await to('open')
+    const before = await handle.db.query.activityLog.findMany({
+      where: (log, { eq }) => eq(log.entityId, roundId),
+    })
+
+    const again = await to('open')
+    expect(again.status).toBe(200)
+    const after = await handle.db.query.activityLog.findMany({
+      where: (log, { eq }) => eq(log.entityId, roundId),
+    })
+    expect(after).toHaveLength(before.length)
+  })
+
+  it('ouvrir une catégorie fait démarrer la compétition, et le journal le dit (ADR-065)', async () => {
+    const { fixture, to } = await draftPhasesRound()
+    const before = await handle.db.query.competition.findFirst({
+      where: (c, { eq }) => eq(c.id, fixture.competition.id),
+    })
+    expect(before?.status).toBe('draft')
+
+    await to('open')
+
+    const after = await handle.db.query.competition.findFirst({
+      where: (c, { eq }) => eq(c.id, fixture.competition.id),
+    })
+    expect(after?.status).toBe('running')
+    const log = await handle.db.query.activityLog.findFirst({
+      where: (l, { eq }) => eq(l.competitionId, fixture.competition.id),
+    })
+    expect(log?.payload).toMatchObject({ competitionStatusFrom: 'draft' })
+  })
+
+  it('refuse une liste de catégories vide, avec un message en français', async () => {
+    const { fixture, roundId } = await draftPhasesRound()
+    const response = await postStatus(
+      fixture.organizerToken,
+      fixture.competition.id,
+      roundId,
+      'open',
+      [],
+    )
+    expect(response.status).toBe(400)
+    expect(((await response.json()) as { detail: string }).detail).toBe(
+      'Choisissez au moins une catégorie.',
+    )
+  })
+
+  it('refuse une catégorie qui ne fait pas partie du tour', async () => {
+    const { fixture, roundId } = await draftPhasesRound()
+    const stranger = await app.request(
+      `/api/v1/competitions/${fixture.competition.id}/categories`,
+      {
+        method: 'POST',
+        headers: authHeaders(fixture.organizerToken),
+        body: JSON.stringify({ label: 'Hors tour', sex: 'X' }),
+      },
+    )
+    const { id: strangerId } = (await stranger.json()) as { id: string }
+
+    const response = await postStatus(
+      fixture.organizerToken,
+      fixture.competition.id,
+      roundId,
+      'open',
+      [strangerId],
+    )
+    expect(response.status).toBe(404)
+    expect(((await response.json()) as { title: string }).title).toBe('Catégorie introuvable')
   })
 })

@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext } from '@playwright/test'
 
-import { apiJson, loginApi, registerAndVerifyOrganizer } from './support/api'
+import { apiJson, loginApi, openContestRound, registerAndVerifyOrganizer } from './support/api'
 
 // Lot 9, point 4 — mode dégradé : que voit CHAQUE acteur quand le serveur est
 // injoignable ? (ADR-009 : pas de mode « zéro internet » à construire ; on
@@ -49,7 +49,7 @@ async function setUpPlayedContest(request: APIRequestContext, headers: Record<st
     headers,
     data: { displayName: 'Juge dégradé', routeIds: [route.id] },
   })
-  await apiJson(request, `${base}/status`, { method: 'POST', headers, data: { status: 'running' } })
+  await openContestRound(request, headers, base)
   const { token } = await apiJson<{ token: string }>(request, '/api/v1/judge/auth', {
     method: 'POST',
     data: { token: judge.accessToken },

@@ -13,6 +13,7 @@ import {
   judge,
   judgeRoute,
   round,
+  roundCategory,
   roundQualifier,
   roundRoute,
   route,
@@ -80,6 +81,17 @@ export async function buildCompetitionBackup(
     })
     .from(roundRoute)
     .innerJoin(round, eq(round.id, roundRoute.roundId))
+    .where(eq(round.competitionId, competitionId))
+  // ADR-065 : seuls les couples (tour, catégorie) déjà passés par une
+  // transition ont une ligne ; l'absence vaut brouillon, à la relecture aussi.
+  const roundCategories = await db
+    .select({
+      roundId: roundCategory.roundId,
+      categoryId: roundCategory.categoryId,
+      status: roundCategory.status,
+    })
+    .from(roundCategory)
+    .innerJoin(round, eq(round.id, roundCategory.roundId))
     .where(eq(round.competitionId, competitionId))
   const roundQualifiers = await db
     .select({
@@ -180,8 +192,12 @@ export async function buildCompetitionBackup(
       style: row.style as CompetitionBackup['rounds'][number]['style'],
       displayOrder: row.displayOrder,
       qualifyingCount: row.qualifyingCount,
-      status: row.status as CompetitionBackup['rounds'][number]['status'],
       deletedAt: isoOrNull(row.deletedAt),
+    })),
+    roundCategories: roundCategories.map((row) => ({
+      roundId: row.roundId,
+      categoryId: row.categoryId,
+      status: row.status as CompetitionBackup['roundCategories'][number]['status'],
     })),
     roundRoutes,
     roundQualifiers: roundQualifiers.map((row) => ({ ...row, frozenAt: iso(row.frozenAt) })),

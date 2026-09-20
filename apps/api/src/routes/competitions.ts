@@ -4,14 +4,21 @@ import {
   createCompetitionInputSchema,
   updateCompetitionInputSchema,
 } from '@climbcontest/contracts'
-import { competition, judge, randomToken, round, roundRoute, type Database } from '@climbcontest/db'
+import {
+  competition,
+  judge,
+  randomToken,
+  round,
+  roundCategory,
+  roundRoute,
+  type Database,
+} from '@climbcontest/db'
 import { getScoringEngine } from '@climbcontest/scoring'
 import { zValidator } from '@hono/zod-validator'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 
 import type { AccessTokenSigner } from '../lib/jwt'
-import { notifyPublic } from '../lib/notify-public'
 import { computeReadiness } from '../lib/readiness'
 import { requireCompetitionAccess } from '../middleware/competition-access'
 import { requireOrganizer } from '../middleware/auth'
@@ -40,6 +47,15 @@ const PUBLIC_SLUG_LENGTH = 22
  * l'organisateur. Voir DECISIONS.md.
  */
 const PHASES_DEFAULT_SCORING_CONFIG = { routesCounted: 1 }
+
+/** Libellés français des statuts, pour les messages d'erreur (miroir de l'interface). */
+const COMPETITION_STATUS_LABELS = {
+  draft: 'Brouillon',
+  open: 'Ouverte',
+  running: 'En cours',
+  closed: 'Clôturée',
+  archived: 'Archivée',
+} as const
 
 export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
   const app = new Hono()
@@ -192,45 +208,43 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
       const current = c.get('competition')
       const { status } = c.req.valid('json')
 
-      const updated = await db.transaction(async (tx) => {
-        const [row] = await tx
-          .update(competition)
-          .set({ status, updatedAt: new Date() })
-          .where(eq(competition.id, current.id))
-          .returning()
-        if (!row) {
-          throw new ApiError(500, 'Erreur interne', 'Impossible de mettre à jour le statut.')
-        }
-        // Round implicite du format contest (ADR-023) : invisible pour
-        // l'organisateur, donc sans écran « Tours » pour l'ouvrir lui-même
-        // (contrairement au format phases, Lot 8). Ouvrir la compétition
-        // ouvre mécaniquement son unique round au passage — voir
-        // DECISIONS.md ADR-030.
-        if (row.format === 'contest' && status === 'running') {
-          const [implicitRound] = await tx
-            .update(round)
-            .set({ status: 'open', updatedAt: new Date() })
-            .where(and(eq(round.competitionId, row.id), isNull(round.deletedAt)))
-            .returning()
-          if (implicitRound) {
-            await notifyPublic(tx, {
-              type: 'round_status_changed',
-              competitionId: row.id,
-              roundId: implicitRound.id,
-            })
-            const categoryLinks = await tx
-              .select({ categoryId: roundRoute.categoryId })
-              .from(roundRoute)
-              .where(eq(roundRoute.roundId, implicitRound.id))
-            const categoryIds = new Set(categoryLinks.map((link) => link.categoryId))
-            for (const categoryId of categoryIds) {
-              await notifyPublic(tx, { type: 'ranking_updated', competitionId: row.id, categoryId })
-            }
-          }
-        }
-        return row
-      })
-      return c.json(competitionSchema.parse(updated))
+      // ADR-065 : le statut de compétition n'ouvre plus aucun tour (fin de
+      // l'effet d'ADR-030) ; chaque catégorie s'ouvre et se ferme dans le
+      // pilotage. En contrepartie, on ne quitte « En cours » que si plus aucune
+      // catégorie n'est ouverte. Une seule requête conditionnelle : un tour
+      // ouvert en même temps ne contourne pas la vérification.
+      // Un couple n'existe pour l'organisateur que tant qu'une voie relie la catégorie
+      // au tour (`round_route`) : sans elle, la ligne ouverte est un orphelin invisible
+      // du pilotage, qui ne doit pas bloquer la clôture.
+      const nothingOpen = sql`not exists (
+        select 1 from ${roundCategory}
+        join ${round} on ${round.id} = ${roundCategory.roundId}
+        where ${round.competitionId} = ${competition.id}
+          and ${round.deletedAt} is null
+          and ${roundCategory.status} = 'open'
+          and exists (
+            select 1 from ${roundRoute}
+            where ${roundRoute.roundId} = ${roundCategory.roundId}
+              and ${roundRoute.categoryId} = ${roundCategory.categoryId}
+          )
+      )`
+      const [row] = await db
+        .update(competition)
+        .set({ status, updatedAt: new Date() })
+        .where(
+          status === 'running'
+            ? eq(competition.id, current.id)
+            : and(eq(competition.id, current.id), nothingOpen),
+        )
+        .returning()
+      if (!row) {
+        throw new ApiError(
+          409,
+          'Des catégories sont encore ouvertes',
+          `Fermez d’abord les catégories ouvertes (onglet Pilotage) avant de passer la compétition à « ${COMPETITION_STATUS_LABELS[status]} ».`,
+        )
+      }
+      return c.json(competitionSchema.parse(row))
     },
   )
 

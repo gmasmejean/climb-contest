@@ -14,7 +14,12 @@ import { createAccessTokenSigner, createJudgeTokenSigner } from '../lib/jwt'
 import type { Logger } from '../lib/logger'
 import { LocalDiskStorage } from '../lib/storage'
 import { FakeMailer } from '../test-utils/fake-mailer'
-import { authHeaders, authenticateJudge, registerLoggedInOrganizer } from '../test-utils/fixtures'
+import {
+  authHeaders,
+  authenticateJudge,
+  openContestRound,
+  registerLoggedInOrganizer,
+} from '../test-utils/fixtures'
 
 /**
  * Revue de sécurité des trois frontières (organisateur, juge, public) —
@@ -146,7 +151,7 @@ async function buildWorld(format: 'contest' | 'phases', token?: string): Promise
   if (format === 'contest') {
     // Un passage réel : sans lui, le compétiteur n'apparaît pas sur la page
     // publique, et « aucune donnée privée n'y fuit » ne prouverait rien.
-    await api('POST', `${base}/status`, organizerToken, { status: 'running' })
+    await openContestRound(app, organizerToken, competition.id)
     const detail = (await (
       await api('GET', `/api/v1/judge/routes/${route.id}`, judgeJwt)
     ).json()) as {
@@ -475,7 +480,10 @@ describe('isolement entre deux compétitions du même club', () => {
     await api('PUT', `${base}/rounds/${round.id}/routes`, token, {
       assignments: [{ routeId: other.routeId, categoryId: other.categoryId }],
     })
-    await api('POST', `${base}/round-status/${round.id}`, token, { status: 'open' })
+    await api('POST', `${base}/round-status/${round.id}`, token, {
+      status: 'open',
+      categoryIds: [other.categoryId],
+    })
     const ascent = (await (
       await api('POST', `${base}/ascents`, token, {
         roundId: round.id,
@@ -517,7 +525,11 @@ describe('isolement entre deux compétitions du même club', () => {
       ['PATCH', `/rounds/${victim.roundId}`, { style: 'flash' }],
       ['GET', `/rounds/${victim.roundId}/routes`],
       ['PUT', `/rounds/${victim.roundId}/routes`, { assignments: [] }],
-      ['POST', `/round-status/${victim.roundId}`, { status: 'closed' }],
+      [
+        'POST',
+        `/round-status/${victim.roundId}`,
+        { status: 'closed', categoryIds: [victim.categoryId] },
+      ],
       ['GET', `/round-status/${victim.roundId}/qualifiers`],
       [
         'PATCH',
@@ -595,14 +607,20 @@ describe('isolement entre deux compétitions du même club', () => {
     const rounds = (await (await api('GET', `${base}/rounds`, token)).json()) as {
       id: string
       style: string
-      status: string
     }[]
+    // ADR-065 : le statut d'un tour est par catégorie, on le lit sur le tableau de bord.
+    const dashboard = (await (await api('GET', `${base}/dashboard`, token)).json()) as {
+      categories: { routes: { roundStatus: string | null }[] }[]
+    }
 
     expect(competitors.map((c) => [c.firstName, c.status])).toEqual([['Léa', 'registered']])
     expect(categories.map((c) => c.label)).toEqual(['Cat'])
     expect(routesList.map((r) => r.name)).toEqual([null])
     expect(judgesList).toHaveLength(1)
     expect(judgesList[0]?.revokedAt ?? null).toBeNull()
-    expect(rounds.map((r) => [r.style, r.status])).toEqual([['onsight', 'open']])
+    expect(rounds.map((r) => r.style)).toEqual(['onsight'])
+    expect(dashboard.categories.flatMap((c) => c.routes.map((r) => r.roundStatus))).toEqual([
+      'open',
+    ])
   })
 })

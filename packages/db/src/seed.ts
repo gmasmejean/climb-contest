@@ -18,6 +18,7 @@ import {
   judge,
   judgeRoute,
   round,
+  roundCategory,
   roundRoute,
   route,
   routeCategory,
@@ -128,7 +129,6 @@ async function main(): Promise<void> {
         type: 'qualification',
         style: 'onsight',
         displayOrder: 0,
-        status: 'open',
       })
       .returning()
     if (!qualification) throw new Error('Échec de la création du tour de démonstration.')
@@ -139,6 +139,12 @@ async function main(): Promise<void> {
           .insert(roundRoute)
           .values({ roundId: qualification.id, routeId: r.id, categoryId: cat.id })
       }
+    }
+    // Le tour de démonstration est ouvert pour chaque catégorie (ADR-065).
+    for (const cat of categories) {
+      await db
+        .insert(roundCategory)
+        .values({ roundId: qualification.id, categoryId: cat.id, status: 'open' })
     }
 
     let bib = 1

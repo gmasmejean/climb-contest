@@ -129,10 +129,11 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   l'appareil redémarre avant réessai réussi, la saisie est perdue et devra
   être ressaisie. La durabilité complète (survie à la fermeture d'onglet,
   file IndexedDB, retries automatiques) est le Lot 6.
-- **Plusieurs tours ouverts simultanément sur la même voie.** Non détecté ni
-  signalé : `GET /judge/routes` et `GET /judge/routes/:routeId` résolvent
-  silencieusement le premier tour ouvert trouvé (`order by display_order`).
-  Assumé hors périmètre par décision explicite pour ce lot.
+- ~~**Plusieurs tours ouverts simultanément sur la même voie.**~~ Résolu au Lot 12
+  (ADR-065, point 7) : ouvrir une catégorie est refusé tant qu'une de ses voies sert
+  déjà dans un autre tour ouvert. Reste non gardé : modifier les voies d'un tour
+  (`PUT .../rounds/:id/routes`) **après** son ouverture peut recréer la situation ;
+  l'écran juge retombe alors sur le premier tour trouvé (`order by display_order`).
 - **`POST /judge/ascents/batch`** — endpoint batch pour la synchronisation
   hors ligne, Lot 6 (voir DECISIONS.md ADR-029).
 - ~~Motif obligatoire sur les corrections organisateur~~ Résolu au Lot 8 :
@@ -414,13 +415,21 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 
 ## Depuis le Lot 11
 
-- **Le statut de compétition n'a presque aucun effet.** Seul `running` fait quelque
-  chose (il ouvre le tour implicite du format contest, ADR-030) ; `open`, `closed` et
-  `archived` ne sont lus par personne, et les transitions sont libres (n'importe quel
-  statut vers n'importe quel autre, sans contrôle). Le juge dépend du statut du **tour**,
-  le public aussi. À décider : donner un sens à `open` (inscriptions ? lien public
-  visible ?), verrouiller `closed`/`archived` en écriture, ou retirer les statuts
-  inutiles. Constaté en préparant la corbeille (ADR-063), pas traité.
+- **Le statut de compétition reste presque un libellé.** Lot 12 (ADR-065) : « En cours »
+  n'ouvre plus rien, mais on ne le quitte plus tant qu'une catégorie est ouverte, et
+  ouvrir une catégorie passe la compétition à « En cours ». `open`, `closed` et
+  `archived` ne sont toujours lus par personne et les autres transitions sont libres.
+  À décider avec le Lot 13 : donner un sens à `open` (« inscriptions ouvertes » = « à
+  venir » dans la recherche publique), et éventuellement verrouiller `closed`/`archived`
+  en écriture.
+- **Le garde-fou de clôture peut être croisé** par deux requêtes simultanées (ouvrir une
+  catégorie pendant qu'un autre organisateur clôture la compétition), dans une fenêtre
+  de quelques millisecondes (ADR-065). Un verrou de ligne sur la compétition le
+  fermerait ; pas fait, le risque est négligeable à l'échelle d'un club.
+- **Publication par catégorie sans test de conflit croisé.** Les tests couvrent le
+  scénario matin / après-midi, le tout-ou-rien et la publication par catégorie, mais pas
+  « un conflit chez les U18 ne retient pas la publication des U16 » (il faut un second
+  appareil juge pour le créer). La règle est dans `roundHasUnresolvedConflicts`.
 - **La corbeille ne refuse que `running`.** Un tour resté « ouvert » sur une
   compétition marquée « Clôturée » peut être mis à la corbeille avec des juges en train
   de saisir. Sans perte (les saisies restent en file locale et remontent après

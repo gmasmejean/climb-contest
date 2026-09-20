@@ -123,7 +123,7 @@ export function postRoundStatus(
     app.request(`/api/v1/competitions/${s.competitionId}/round-status/${roundId}`, {
       method: 'POST',
       headers: authHeaders(s.organizerToken),
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, categoryIds: [s.categoryId] }),
     }),
   )
 }

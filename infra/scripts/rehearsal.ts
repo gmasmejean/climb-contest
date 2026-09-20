@@ -221,10 +221,19 @@ async function setUp(): Promise<Setup> {
     judges.push({ id: created.id, token: created.accessToken, jwt: auth.token, routeNumbers })
   }
 
-  await json(`${base}/status`, {
+  // ADR-065 : le statut « En cours » n'ouvre plus le round implicite du contest ;
+  // chaque catégorie s'ouvre par `round-status`. Son identifiant se lit sur le tableau de bord.
+  const dashboard = await json<{
+    categories: { routes: { roundId: string | null }[] }[]
+  }>(`${base}/dashboard`, { headers })
+  const implicitRoundId = dashboard.categories
+    .flatMap((cat) => cat.routes)
+    .find((r) => r.roundId !== null)?.roundId
+  if (!implicitRoundId) throw new Error('Aucun tour à ouvrir : aucune voie n’est affectée.')
+  await json(`${base}/round-status/${implicitRoundId}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ status: 'running' }),
+    body: JSON.stringify({ status: 'open', categoryIds }),
   })
   const detail = await json<{ round: { id: string } }>(`/api/v1/judge/routes/${routeIds[0]}`, {
     headers: { authorization: `Bearer ${judges[0]!.jwt}` },

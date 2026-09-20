@@ -1,7 +1,8 @@
 import type { Competition } from '@climbcontest/contracts'
+import { useToast } from '@climbcontest/ui'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
-import { mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import InfosTab from './InfosTab.vue'
 
@@ -94,5 +95,38 @@ describe('InfosTab — date de fin', () => {
 
     expect(startsOn?.element.value).toBe('2026-08-01')
     expect(endsOn?.element.value).toBe('2026-08-02')
+  })
+})
+
+describe('InfosTab — changement de statut', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('montre tel quel le refus du serveur tant qu’une catégorie est ouverte (ADR-065)', async () => {
+    const detail =
+      'Fermez d’abord les catégories ouvertes (onglet Pilotage) avant de passer la compétition à « Clôturée ».'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ title: 'Des catégories sont encore ouvertes', detail }), {
+            status: 409,
+            headers: { 'content-type': 'application/json' },
+          }),
+        ),
+      ),
+    )
+    const { toasts } = useToast()
+    toasts.splice(0, toasts.length)
+
+    const wrapper = open()
+    await wrapper.get('select').setValue('closed')
+    const apply = wrapper.findAll('button').find((b) => b.text() === 'Appliquer')
+    await apply?.trigger('click')
+    await flushPromises()
+
+    expect(toasts.map((t) => t.text)).toContain(detail)
+    expect(toasts.find((t) => t.text === detail)?.variant).toBe('error')
   })
 })

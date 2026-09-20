@@ -487,6 +487,61 @@ Lot 11 : retrouver une compétition dans la liste, et pouvoir en supprimer.
 
 ---
 
+## Lot 12 — Statut par tour et par catégorie
+
+> Lot ajouté après le Lot 11, pour le cap « le public retrouve les compétitions
+> à venir, en cours, finies ». Décision : ADR-065. Les Lots 13 et 14 en découlent.
+
+```
+Lot 12 : une catégorie qui finit le matin ne doit pas attendre celles de l'après-midi.
+
+1. Le statut d'un tour (brouillon, ouvert, fermé, publié) se porte par couple
+   (tour, catégorie). Une transition peut viser plusieurs catégories d'un coup.
+
+2. Les garde-fous d'ADR-054 (tour précédent terminé, réouverture, retour en
+   brouillon, conflit bloquant la publication) et le figeage des qualifiés
+   s'appliquent par catégorie.
+
+3. Le statut de compétition n'ouvre plus aucun tour. Il ne peut pas quitter
+   « En cours » tant qu'une catégorie est ouverte.
+
+4. Le pilotage présente une grille tour × catégorie, en contest comme en phases.
+   Le classement public est provisoire ou définitif par catégorie.
+
+5. Migration réversible, sauvegarde JSON en version 2 (la version 1 reste lisible).
+
+6. Tests : scénario matin / après-midi, garde-fous par catégorie, migration dans
+   les deux sens, e2e à 360 px.
+```
+
+---
+
+## Lot 13 — Visibilité et recherche publique (à cadrer)
+
+> Pas engagé. « Privé » = non listé, le lien direct reste valable.
+
+```
+Lot 13 : un champ public / privé, et une recherche publique des compétitions
+(à venir = « Ouverte », en cours, terminées). Préalable RGPD à trancher avant
+d'exposer des listes de compétiteurs (mineurs). Les inscriptions en ligne
+elles-mêmes sont un lot ultérieur ; SPEC.md § Hors périmètre est à réécrire.
+```
+
+---
+
+## Lot 14 — Enchaînement guidé des tours (à cadrer)
+
+> Pas engagé. Le serveur refuse déjà d'ouvrir un tour dont le précédent n'est
+> pas terminé (ADR-054) ; il reste l'interface.
+
+```
+Lot 14 : « Ouvrir » désactivé avec sa raison ; à la fermeture d'une catégorie,
+proposition « Ouvrir la demi-finale — N qualifiés » avec aperçu de la liste,
+en un clic (jamais automatique, le figeage est quasi irréversible).
+```
+
+---
+
 ## Conseils d'utilisation
 
 **Une session par lot.** Ouvre une session fraîche pour chaque lot. Les

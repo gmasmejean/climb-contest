@@ -86,10 +86,10 @@ function validBackup(): CompetitionBackup {
         style: 'onsight',
         displayOrder: 0,
         qualifyingCount: 1,
-        status: 'closed',
         deletedAt: null,
       },
     ],
+    roundCategories: [{ roundId: uuid(5), categoryId: uuid(1), status: 'closed' }],
     roundRoutes: [{ roundId: uuid(5), routeId: uuid(4), categoryId: uuid(1) }],
     roundQualifiers: [],
     judges: [{ id: uuid(6), displayName: 'Juge', routeIds: [uuid(4)], deletedAt: null }],
@@ -261,7 +261,7 @@ describe('competitionBackupSchema', () => {
   })
 
   it('refuse un autre numéro de version', () => {
-    expect(competitionBackupSchema.safeParse({ ...validBackup(), schemaVersion: 2 }).success).toBe(
+    expect(competitionBackupSchema.safeParse({ ...validBackup(), schemaVersion: 3 }).success).toBe(
       false,
     )
   })

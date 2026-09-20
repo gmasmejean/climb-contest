@@ -2,6 +2,7 @@ import type {
   Category,
   ChangeCompetitorStatusInput,
   ChangeRoundStatusInput,
+  ChangeRoundStatusResponse,
   ChangeStatusInput,
   Competition,
   Competitor,
@@ -147,7 +148,7 @@ export const roundsApi = {
       body: json(input),
     }),
   changeStatus: (competitionId: string, roundId: string, input: ChangeRoundStatusInput) =>
-    apiFetch<Round>(`/competitions/${competitionId}/round-status/${roundId}`, {
+    apiFetch<ChangeRoundStatusResponse>(`/competitions/${competitionId}/round-status/${roundId}`, {
       method: 'POST',
       body: json(input),
     }),
