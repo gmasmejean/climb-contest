@@ -530,3 +530,35 @@ export const activityLog = pgTable(
     index('activity_log_competition_id_idx').on(table.competitionId),
   ],
 )
+
+/**
+ * Lot 11 — trace des mises à la corbeille, restaurations et suppressions
+ * définitives d'une compétition (CLAUDE.md, règle n°3 : « toute saisie
+ * destructive laisse une trace »). `competition_id` n'est volontairement PAS
+ * une clé étrangère : la ligne doit survivre à la suppression définitive de la
+ * compétition. Aucune donnée personnelle de compétiteur ou de juge — le nom de
+ * la compétition suffit à reconnaître ce qui a été supprimé. Voir ADR-063.
+ */
+export const competitionDeletionLog = pgTable(
+  'competition_deletion_log',
+  {
+    id: id(),
+    competitionId: uuid('competition_id').notNull(),
+    clubId: uuid('club_id')
+      .notNull()
+      .references(() => club.id),
+    competitionName: text('competition_name').notNull(),
+    action: text('action').notNull(),
+    actorUserId: uuid('actor_user_id')
+      .notNull()
+      .references(() => user.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'competition_deletion_log_action_check',
+      sql`${table.action} IN ('trashed', 'restored', 'deleted')`,
+    ),
+    index('competition_deletion_log_club_id_idx').on(table.clubId, table.createdAt),
+  ],
+)

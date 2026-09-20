@@ -66,6 +66,7 @@ describe('migrations', () => {
         'category',
         'club',
         'competition',
+        'competition_deletion_log',
         'competitor',
         'judge',
         'judge_route',
@@ -100,7 +101,7 @@ describe('migrations', () => {
       const afterUp = await client.query(
         "select table_name from information_schema.tables where table_schema = 'public' and table_name != '_migrations_applied'",
       )
-      expect(afterUp.rows.length).toBe(18)
+      expect(afterUp.rows.length).toBe(19)
     })
   })
 })
@@ -246,6 +247,57 @@ describe('migration 0008_lot9_competition_purged_at (ADR-051)', () => {
         "select is_nullable, column_default from information_schema.columns where table_name = 'competition' and column_name = 'purged_at'",
       )
       expect(nullable.rows[0]).toMatchObject({ is_nullable: 'YES', column_default: null })
+    })
+  })
+})
+
+describe('migration 0009_lot11_competition_deletion_log (ADR-063)', () => {
+  async function hasTable(client: pg.Client): Promise<boolean> {
+    const result = await client.query(
+      "select 1 from information_schema.tables where table_name = 'competition_deletion_log'",
+    )
+    return result.rows.length === 1
+  }
+
+  it('garde une trace même quand la compétition n’existe plus (pas de clé étrangère)', async () => {
+    const { demoClub, demoUser } = await insertClubAndUser()
+    await handle.db.execute(sql`
+      insert into competition_deletion_log (id, competition_id, club_id, competition_name, action, actor_user_id)
+      values (gen_random_uuid(), gen_random_uuid(), ${demoClub.id}, 'Coupe supprimée', 'deleted', ${demoUser.id})
+    `)
+    const rows = await handle.db.execute(
+      sql`select action from competition_deletion_log where club_id = ${demoClub.id}`,
+    )
+    expect(rows.rows).toEqual([{ action: 'deleted' }])
+  })
+
+  it('refuse une action inconnue', async () => {
+    const { demoClub, demoUser } = await insertClubAndUser()
+    await expect(
+      handle.db.execute(sql`
+        insert into competition_deletion_log (id, competition_id, club_id, competition_name, action, actor_user_id)
+        values (gen_random_uuid(), gen_random_uuid(), ${demoClub.id}, 'Coupe', 'exploded', ${demoUser.id})
+      `),
+    ).rejects.toThrow()
+  })
+
+  it('est réversible : le down supprime la table, le up la recrée vide', async () => {
+    await withRawClient(async (client) => {
+      expect(await hasTable(client)).toBe(true)
+
+      // Un cran à la fois, comme pour la migration 0008.
+      let guard = 0
+      while (await hasTable(client)) {
+        expect((await revertLastMigrations(client, 1)).length).toBe(1)
+        guard += 1
+        expect(guard).toBeLessThan(20)
+      }
+      expect(await hasTable(client)).toBe(false)
+
+      await applyPendingMigrations(client)
+      expect(await hasTable(client)).toBe(true)
+      const count = await client.query('select count(*)::int as n from competition_deletion_log')
+      expect(count.rows[0]).toEqual({ n: 0 })
     })
   })
 })

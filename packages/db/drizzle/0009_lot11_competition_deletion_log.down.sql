@@ -1,0 +1,1 @@
+DROP TABLE "competition_deletion_log";
