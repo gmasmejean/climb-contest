@@ -18,6 +18,8 @@
 
 Le grimpeur passe dans l'onglet **Fait**. Ça vibre et un message le confirme.
 
+Si l'écran se recharge pendant que vous saisissez (mise à jour de l'application), un message **« Saisie retrouvée »** apparaît : vos valeurs sont revenues, **relisez-les** avant de continuer. Elles ne sont gardées que **10 minutes**.
+
 ## Se tromper
 
 Vous pouvez **corriger votre dernière saisie** tant que vous n'en avez pas fait une autre, et dans les **5 minutes**. Après, prévenez l'organisateur : il corrige avec une explication.

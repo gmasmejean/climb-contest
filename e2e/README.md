@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Seize tests à ce jour :
+Dix-huit tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -61,11 +61,18 @@ Seize tests à ce jour :
   rétablit, la connexion et la liste disent quoi faire, et la page publique garde
   son classement avec un indicateur honnête (« Reconnexion… », puis « En direct »).
 
+- `judge-draft.spec.ts` — une saisie tapée mais pas encore confirmée survit à un
+  vrai rechargement de la page (retour à l'étape de saisie, avec le message
+  « Saisie retrouvée », puis confirmation normale, après quoi aucun brouillon ne
+  reste) ; un brouillon vieilli de plus de 10 minutes n'est pas restauré
+  (`ROADMAP.md` Lot 10, ADR-061). Tourne en émulation mobile 360 px.
+
 ## Projets
 
-- `chromium` — bureau, tous les tests sauf `judge-ascent.spec.ts`.
-- `mobile` — `judge-ascent.spec.ts` uniquement, viewport 360×740 (le plus
-  étroit visé par `CLAUDE.md`).
+- `chromium` — bureau, tous les tests sauf `judge-ascent.spec.ts` et
+  `judge-draft.spec.ts`.
+- `mobile` — `judge-ascent.spec.ts` et `judge-draft.spec.ts` uniquement,
+  viewport 360×740 (le plus étroit visé par `CLAUDE.md`).
 
 ## Note sur l'exécution en parallèle
 

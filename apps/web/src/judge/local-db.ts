@@ -2,6 +2,7 @@ import type { JudgeRouteDetail } from '@climbcontest/contracts'
 import type { QueueItem } from '@climbcontest/sync'
 import Dexie, { type Table } from 'dexie'
 
+import { purgeAscentDraft } from './ascent-draft'
 import type { QueuePayload } from './queue-payload'
 
 export interface StoredRouteDetail {
@@ -62,4 +63,6 @@ export async function resetJudgeDatabase(): Promise<void> {
   await judgeDb.queue.clear()
   await judgeDb.meta.clear()
   await judgeDb.lastSubmission.clear()
+  // Le brouillon de saisie (ADR-061) appartient au juge précédent.
+  purgeAscentDraft()
 }

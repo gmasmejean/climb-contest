@@ -12,14 +12,14 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /judge-ascent\.spec\.ts/,
+      testIgnore: /judge-(ascent|draft)\.spec\.ts/,
     },
-    // ROADMAP.md Lot 5, point 7 : parcours juge en émulation mobile, 360px
+    // ROADMAP.md Lot 5, point 7 et Lot 10 : parcours juge en émulation mobile, 360px
     // de large (l'écran le plus étroit visé par CLAUDE.md § « accessibilité »).
     {
       name: 'mobile',
       use: { ...devices['Pixel 5'], viewport: { width: 360, height: 740 } },
-      testMatch: /judge-ascent\.spec\.ts/,
+      testMatch: /judge-(ascent|draft)\.spec\.ts/,
     },
   ],
 })
