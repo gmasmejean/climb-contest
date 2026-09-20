@@ -6,7 +6,10 @@ import { computed, reactive, ref } from 'vue'
 
 import { ApiError } from '../../../api/client'
 import { categoriesApi, routePhotoApi, routesApi } from '../../../api/competitions'
+import type { PickedPhoto } from '../../../lib/photo-crop'
+import { PhotoUnreadableError, resizeToJpeg } from '../../../lib/photo-resize'
 import RoutePhotoEditor from '../RoutePhotoEditor.vue'
+import RoutePhotoPicker from '../RoutePhotoPicker.vue'
 import RouteVideoUploader from '../RouteVideoUploader.vue'
 
 const props = defineProps<{ competitionId: string }>()
@@ -66,6 +69,8 @@ function emptyForm() {
   }
 }
 const form = reactive(emptyForm())
+// Photo choisie à la création (ADR-067) ; en modification, l'éditeur a la sienne.
+const picked = ref<PickedPhoto | null>(null)
 const editingRouteId = ref<string | null>(null)
 const editingHasVideo = computed(
   () => routes.value?.find((r) => r.id === editingRouteId.value)?.videoAssetId != null,
@@ -84,17 +89,50 @@ function buildPayload() {
   }
 }
 
+function messageOf(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) return error.detail ?? error.title
+  if (error instanceof PhotoUnreadableError) return error.message
+  return fallback
+}
+
+// La photo passe par la voie : on la réduit AVANT de créer (un fichier illisible
+// ne laisse pas de voie sans photo), puis on l'envoie une fois la voie créée. Si
+// l'envoi échoue, la voie existe : on le dit et on ouvre la voie pour renvoyer.
 const { mutate: createRoute, isPending: isCreating } = useMutation({
-  mutationFn: () => routesApi.create(props.competitionId, buildPayload()),
-  onSuccess: async () => {
-    Object.assign(form, emptyForm())
+  mutationFn: async () => {
+    const chosen = picked.value
+    const jpeg = chosen ? await resizeToJpeg(chosen.file, { crop: chosen.crop }) : null
+    const route = await routesApi.create(props.competitionId, buildPayload())
+    if (!jpeg) return { route, photo: 'none' as const }
+    try {
+      await routePhotoApi.upload(props.competitionId, route.id, jpeg)
+      return { route, photo: 'sent' as const }
+    } catch (error) {
+      return {
+        route,
+        photo: 'failed' as const,
+        reason: messageOf(error, 'Vérifiez le réseau et réessayez.'),
+      }
+    }
+  },
+  onSuccess: async (result) => {
     await refresh()
+    if (result.photo === 'failed') {
+      startEdit(result.route)
+      formError.value = `La voie a été créée, mais sa photo n'a pas pu être envoyée. ${result.reason} Choisissez-la de nouveau ci-dessous.`
+      return
+    }
+    Object.assign(form, emptyForm())
+    picked.value = null
+    if (result.photo === 'sent') {
+      toast.show(
+        'Voie créée avec sa photo. Ouvrez « Modifier » pour y placer les prises.',
+        'success',
+      )
+    }
   },
   onError: (error) => {
-    formError.value =
-      error instanceof ApiError
-        ? (error.detail ?? error.title)
-        : 'Une erreur inattendue est survenue.'
+    formError.value = messageOf(error, 'Une erreur inattendue est survenue.')
   },
 })
 
@@ -136,6 +174,7 @@ function startEdit(route: {
   categoryIds: string[]
 }): void {
   editingRouteId.value = route.id
+  picked.value = null
   form.number = route.number
   form.name = route.name ?? ''
   form.holdCount = route.holdCount
@@ -147,6 +186,7 @@ function startEdit(route: {
 
 function cancelEdit(): void {
   editingRouteId.value = null
+  picked.value = null
   Object.assign(form, emptyForm())
   formError.value = ''
 }
@@ -264,9 +304,12 @@ const categoryList = computed(() => categories.value ?? [])
         :has-video="editingHasVideo"
         @changed="onVideoChanged"
       />
-      <p v-else class="text-sm text-gray-600">
-        Enregistrez la voie pour pouvoir y ajouter une photo annotée et une vidéo.
-      </p>
+      <RoutePhotoPicker
+        v-else
+        v-model="picked"
+        label="Photo de la voie (optionnelle)"
+        hint="Vous pourrez la recadrer. Une fois la voie ajoutée, « Modifier » permet d'y placer les prises et d'ajouter une vidéo."
+      />
       <fieldset class="flex flex-col gap-2">
         <legend class="text-sm font-medium text-gray-900">Catégories concernées</legend>
         <label
@@ -286,7 +329,7 @@ const categoryList = computed(() => categories.value ?? [])
       <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
       <div class="flex gap-3">
         <Button type="submit" :disabled="isCreating || isUpdating">
-          {{ editingRouteId ? 'Enregistrer' : 'Ajouter' }}
+          {{ editingRouteId ? 'Enregistrer' : isCreating ? 'Ajout en cours…' : 'Ajouter' }}
         </Button>
         <Button v-if="editingRouteId" variant="secondary" @click="cancelEdit">Annuler</Button>
       </div>

@@ -8,13 +8,15 @@ import {
   renumberByHeight,
   type RouteHold,
 } from '@climbcontest/contracts'
-import { Button, FileInput, Modal, NumberField, useToast } from '@climbcontest/ui'
+import { Button, Modal, NumberField, useToast } from '@climbcontest/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { ApiError } from '../../api/client'
 import { routePhotoApi } from '../../api/competitions'
 import HoldMarker from '../../components/HoldMarker.vue'
+import type { PickedPhoto } from '../../lib/photo-crop'
 import { PhotoUnreadableError, resizeToJpeg } from '../../lib/photo-resize'
+import RoutePhotoPicker from './RoutePhotoPicker.vue'
 
 /**
  * Photo annotée d'une voie (Lot 15, ADR-066) : téléversement (ré-encodé en JPEG
@@ -107,21 +109,21 @@ function messageOf(caught: unknown, fallback: string): string {
 }
 
 // --- Envoi, remplacement, suppression de la photo.
-const file = ref<File | null>(null)
+const picked = ref<PickedPhoto | null>(null)
 const sending = ref(false)
 const confirmingReplace = ref(false)
 const confirmingDelete = ref(false)
 
 async function send(): Promise<void> {
-  const chosen = file.value
+  const chosen = picked.value
   if (!chosen) return
   confirmingReplace.value = false
   error.value = ''
   sending.value = true
   try {
-    const jpeg = await resizeToJpeg(chosen)
+    const jpeg = await resizeToJpeg(chosen.file, { crop: chosen.crop })
     await routePhotoApi.upload(props.competitionId, props.routeId, jpeg)
-    file.value = null
+    picked.value = null
     toast.show('Photo enregistrée.', 'success')
     emit('changed')
   } catch (caught) {
@@ -419,11 +421,10 @@ const plural = (n: number, one: string, many: string) => (n > 1 ? many : one)
       juge pourra l'afficher depuis son téléphone, même sans réseau.
     </p>
 
-    <FileInput
-      v-model="file"
+    <RoutePhotoPicker
+      v-model="picked"
       :label="props.photoAssetId ? 'Remplacer la photo' : 'Choisir une photo'"
-      accept="image/*"
-      hint="La voie en entier, prise de face. La photo est réduite avant l'envoi."
+      hint="La voie en entier, prise de face. Vous pourrez la recadrer. La photo est réduite avant l'envoi."
     />
     <p v-if="props.photoAssetId && props.savedHolds.length > 0" class="text-sm text-amber-800">
       Remplacer la photo efface les prises déjà placées.
@@ -432,7 +433,7 @@ const plural = (n: number, one: string, many: string) => (n > 1 ? many : one)
     <p v-if="error" role="alert" class="text-sm text-red-700">{{ error }}</p>
 
     <div class="flex flex-wrap gap-3">
-      <Button :disabled="!file || sending" @click="askSend">
+      <Button :disabled="!picked || sending" @click="askSend">
         {{
           sending
             ? 'Envoi en cours…'
