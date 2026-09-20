@@ -29,6 +29,8 @@ import {
 import { createSelectSchema } from 'drizzle-zod'
 import { z } from 'zod'
 
+import { routePhotoHoldsSchema } from './route-photo'
+
 export const clubSchema = createSelectSchema(club)
 
 /**
@@ -51,7 +53,9 @@ export const competitorSchema = createSelectSchema(competitor, {
   status: z.enum(['registered', 'present', 'withdrawn', 'disqualified']),
 })
 export type Competitor = z.infer<typeof competitorSchema>
-export const routeSchema = createSelectSchema(route)
+export const routeSchema = createSelectSchema(route, {
+  photoHolds: routePhotoHoldsSchema.nullable(),
+})
 export type Route = z.infer<typeof routeSchema>
 export const routeCategorySchema = createSelectSchema(routeCategory)
 export const roundSchema = createSelectSchema(round, {

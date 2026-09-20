@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { ascentSchema } from './entities'
+import { routePhotoSchema } from './route-photo'
 
 /**
  * Champs communs à la création et à la correction d'un passage — reflètent
@@ -197,6 +198,10 @@ export const judgeRouteDetailSchema = z.object({
     // `GET /routes` côté client (SPEC.md § 6.3 — plus aucune lecture réseau
     // après le bootstrap initial), qui exposait déjà cette information.
     categories: z.array(judgeRouteCategorySchema),
+    // Lot 15 (ADR-066) : l'identifiant de la photo et ses prises, pas les octets
+    // (le client les télécharge à part, une fois par identifiant). `default(null)` :
+    // un détail mis en cache par la version précédente n'a pas ce champ.
+    photo: routePhotoSchema.nullable().default(null),
   }),
   round: z
     .object({ id: z.uuid(), type: z.enum(['qualification', 'semifinal', 'final']) })
