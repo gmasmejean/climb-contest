@@ -2422,6 +2422,7 @@ serveur (le client ré-encode toujours).
 ## ADR-067 — Photo de voie : choix à la création et recadrage avant l'envoi
 
 **Date :** 2026-09-20
+**Statut :** le point 5 (échec d'envoi : ouvrir la voie en modification) et la deuxième limite (« les prises se placent toujours après la création ») sont remplacés par ADR-068.
 **Contexte :** avec ADR-066, la photo ne se téléversait qu'en modifiant une voie déjà
 créée, et telle quelle : une photo de mur prise en large, ou avec un voisin dans le
 cadre, n'était pas rattrapable (et le verrou après le premier passage empêche de la
@@ -2474,6 +2475,60 @@ dessous (impose un format) ; bibliothèque de recadrage tierce (dépendance pour
 besoin de quatre coins) ; stocker la zone en base (le serveur n'en a pas l'usage, la
 photo envoyée est déjà recadrée) ; endpoint unique « créer la voie avec sa photo »
 (deux mécanismes d'envoi à maintenir pour un gain de deux requêtes).
+
+---
+
+## ADR-068 — Annoter la photo dès la création de la voie ; le nombre de prises suit l'annotation
+
+**Date :** 2026-09-20
+**Contexte :** retour de l'utilisateur après ADR-067 : la photo se choisit à la création **pour
+que l'organisateur annote la voie tout de suite**, devant le mur, sans compter les prises. Le
+nombre de prises de la voie doit se déduire de l'annotation, et **l'annotation prend le pas sur
+le champ « Nombre de prises » s'il est déjà renseigné**.
+
+**Décision :**
+
+1. **Un déroulé en trois temps, dans cet ordre** (actée avec l'utilisateur) : choisir l'image →
+   décider de la recadrer ou non → l'annoter. « Continuer sans recadrer » et la validation du
+   dialogue de recadrage mènent à l'annotation. Ma première lecture (recadrer à tout moment,
+   en recalant les prises) est abandonnée.
+2. **Les prises se placent sur l'image finale, recadrage compris** (coordonnées normalisées,
+   ADR-066 point 4). Revenir au recadrage depuis l'annotation est possible mais **efface les
+   prises, après confirmation** (comme remplacer une photo, ADR-066 point 9). Choisir un autre
+   fichier reprend au début.
+3. **Le nombre de prises est celui de l'annotation.** Dès qu'une prise est placée, le champ
+   « Nombre de prises » est remplacé par le plus haut numéro placé, avec la mention « D'après
+   les prises placées sur la photo » et, si une valeur avait été saisie, « Remplace les N
+   saisies ». Si on retire toutes les prises, le champ revient avec la valeur saisie. Une
+   numérotation à trou (une prise oubliée) compte jusqu'au plus haut numéro, ce que
+   `PUT …/photo/holds` exige (ADR-066 point 9) ; l'écran signale le trou. En modification d'une
+   voie, rien ne change : « Utiliser N comme nombre de prises » reste explicite (ADR-066).
+4. **Envoi en trois temps, reprenable :** voie (avec le nombre déduit), puis photo, puis prises.
+   La photo est réduite AVANT de créer la voie (ADR-067). Si le réseau lâche en route, la voie
+   créée est retenue : l'écran dit ce qui n'est pas parti, **garde la photo et les prises
+   placées**, et « Ajouter » reprend (mise à jour de la voie, puis ce qui manque) sans créer de
+   doublon. « Annuler » abandonne la reprise ; la voie reste dans la liste, modifiable.
+   Remplace le comportement d'ADR-067 point 5, qui perdait les prises placées.
+5. **Un composant commun `HoldAnnotator`** porte poser / glisser / renuméroter / numéro / clavier,
+   utilisé par l'éditeur d'une voie enregistrée (avec plafond : le nombre de prises) et par la
+   création (sans plafond). Extrait de `RoutePhotoEditor` avec l'accord de l'utilisateur ; les
+   tests et l'e2e du Lot 15 passent inchangés. `RoutePhotoPicker` expose deux emplacements
+   (`preview`, `actions`) pour composer ce déroulé.
+6. **Aucun changement d'API ni de base :** trois appels existants (`POST /routes`,
+   `PUT …/photo`, `PUT …/photo/holds`).
+
+**Limites connues :**
+
+- Trois requêtes : si l'onglet est fermé entre deux, la voie existe sans photo ou sans prises ;
+  l'éditeur (Modifier) permet de terminer.
+- Les prises se placent sur un aperçu de 640 px de côté long, sans zoom : à vérifier sur un mur
+  chargé (le zoom existe dans le recadrage, pas dans le placement, comme dans l'éditeur).
+- Vérifié en émulation mobile 360 px, **pas sur un vrai téléphone devant un mur**.
+
+**Alternatives écartées :** créer la voie dès le choix de la photo (voies orphelines) ; recaler
+les prises quand on recadre après coup (complexité pour un cas que le déroulé en étapes évite) ;
+laisser le champ « Nombre de prises » modifiable à côté de l'annotation (deux sources de vérité,
+c'est exactement ce que l'organisateur ne veut pas trancher).
 
 ---
 

@@ -230,13 +230,17 @@ explicitement).
 ## Photo annotée de la voie
 
 Une voie peut porter **une photo**, sur laquelle l'organisateur place les prises
-numérotées. La photo se choisit **dès la création de la voie** (champ « Photo de la
-voie (optionnelle) » du formulaire « Ajouter une voie ») ou plus tard (voies →
-Modifier → « Choisir une photo » / « Remplacer la photo ») ; les prises se placent
-ensuite, voie ouverte en modification. Avant l'envoi, « Recadrer la photo » ouvre un
-écran de recadrage : un rectangle libre dont on tire les quatre coins (aussi aux
-flèches du clavier), avec zoom ×1 / ×2 / ×3 pour être précis ; l'aperçu montre
-exactement ce qui sera envoyé, « Retirer le recadrage » revient à la photo entière.
+numérotées. Elle se choisit **dès la création de la voie** (champ « Photo de la voie
+(optionnelle) » du formulaire « Ajouter une voie ») ou plus tard (voies → Modifier →
+« Choisir une photo » / « Remplacer la photo »). À la création, le déroulé est : **1.** choisir
+l'image ; **2.** décider de la recadrer ou non (« Recadrer la photo » ou « Continuer sans
+recadrer ») ; **3.** placer les prises dessus. **Le nombre de prises de la voie est alors celui
+des prises placées** : il remplace le champ « Nombre de prises », même déjà rempli (ADR-068).
+Revenir au recadrage depuis le placement efface les prises, après confirmation. « Ajouter »
+enregistre la voie, puis sa photo, puis ses prises ; si le réseau lâche en route, rien n'est
+perdu et un second clic termine sans doublon. Le recadrage est un
+écran dédié : un rectangle libre dont on tire les quatre coins (aussi aux flèches du clavier),
+avec zoom ×1 / ×2 / ×3 pour être précis ; « Retirer le recadrage » revient à la photo entière.
 La zone est découpée dans la photo d'origine **avant** la réduction (ADR-067). La photo est réduite et
 ré-encodée en JPEG **dans le navigateur** (côté long 1600 px, environ 300 Ko :
 orientation appliquée, GPS retiré) ; le serveur n'accepte que du JPEG, reconnu à
@@ -246,7 +250,7 @@ traversée ou un dévers). Les modifications ne partent qu'à « Enregistrer les
 prises ». Une prise ne peut pas porter un numéro supérieur au nombre de prises de
 la voie. Remplacer la photo **efface** les prises. **Dès qu'un passage existe sur
 la voie, la photo et les prises sont figées**, comme le nombre de prises
-(ADR-066, ADR-067 et ADR-004).
+(ADR-066, ADR-067, ADR-068 et ADR-004).
 
 « Imprimer les fiches voie » (en haut de l'onglet Voies) donne un PDF, une page A4
 par voie ayant une photo, avec la photo annotée ; « Imprimer la fiche de cette
@@ -310,5 +314,5 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   depuis l'onglet Pilotage ; une compétition en phases jouée de bout en bout
   (qualification à deux voies, demi-finale, finale, classement final avec
   contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
-  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise ; la photo annotée d'une voie, de l'organisateur au juge hors ligne (aussi à 360 px) ; le choix et le recadrage de la photo à la création de la voie (aussi à 360 px) —
+  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise ; la photo annotée d'une voie, de l'organisateur au juge hors ligne (aussi à 360 px) ; le choix, le recadrage et l'annotation de la photo à la création de la voie, avec le nombre de prises déduit (aussi à 360 px) —
   la purge des données personnelles ; le mode dégradé quand le serveur est injoignable ; la recherche dans la liste, la corbeille, la restauration et la suppression définitive d'une compétition (aussi à 360 px) ; voir `e2e/README.md` pour les lancer.
