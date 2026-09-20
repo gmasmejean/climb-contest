@@ -29,7 +29,15 @@ export type UpdateRoundInput = z.infer<typeof updateRoundInputSchema>
  * volontairement en dehors du routeur `rounds.ts` qui reste réservé au format
  * phases (`requirePhasesFormat`).
  */
-export const changeRoundStatusInputSchema = z.object({ status: roundStatusSchema })
+export const changeRoundStatusInputSchema = z.object({
+  status: roundStatusSchema,
+  /**
+   * ADR-065 : le statut se porte par catégorie. Une compétition à une seule
+   * vague les passe toutes d'un coup ; sinon l'organisateur en choisit une
+   * (les U16 du matin, les U18 de l'après-midi). Tout ou rien côté serveur.
+   */
+  categoryIds: z.array(z.uuid()).min(1, 'Choisissez au moins une catégorie.'),
+})
 export type ChangeRoundStatusInput = z.infer<typeof changeRoundStatusInputSchema>
 
 /**

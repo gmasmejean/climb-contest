@@ -189,7 +189,10 @@ export const assetUpload = pgTable(
       'asset_upload_status_check',
       sql`${table.status} IN ('uploading', 'completed', 'aborted')`,
     ),
-    check('asset_upload_size_check', sql`${table.declaredSizeBytes} > 0 AND ${table.receivedBytes} >= 0`),
+    check(
+      'asset_upload_size_check',
+      sql`${table.declaredSizeBytes} > 0 AND ${table.receivedBytes} >= 0`,
+    ),
     index('asset_upload_route_id_idx').on(table.routeId),
     index('asset_upload_status_expires_idx').on(table.status, table.expiresAt),
   ],

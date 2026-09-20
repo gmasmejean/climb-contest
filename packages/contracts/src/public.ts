@@ -40,7 +40,8 @@ export const publicRoundSchema = z
     id: z.uuid(),
     type: roundTypeSchema,
     displayOrder: z.number(),
-    status: roundStatusSchema,
+    // ADR-065 : un état par catégorie (les U16 peuvent avoir fini quand les U18 commencent).
+    categories: z.array(z.object({ categoryId: z.uuid(), status: roundStatusSchema }).strict()),
   })
   .strict()
 export type PublicRound = z.infer<typeof publicRoundSchema>
@@ -153,10 +154,20 @@ export type PublicRankingResponse = z.infer<typeof publicRankingResponseSchema>
  * chemin que le chargement initial et le repli en sondage.
  */
 export const publicStreamEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('ranking_updated'), competitionId: z.uuid(), categoryId: z.uuid() }).strict(),
   z
-    .object({ type: z.literal('round_status_changed'), competitionId: z.uuid(), roundId: z.uuid() })
+    .object({ type: z.literal('ranking_updated'), competitionId: z.uuid(), categoryId: z.uuid() })
     .strict(),
-  z.object({ type: z.literal('route_updated'), competitionId: z.uuid(), routeId: z.uuid() }).strict(),
+  z
+    .object({
+      type: z.literal('round_status_changed'),
+      competitionId: z.uuid(),
+      roundId: z.uuid(),
+      // ADR-065 : les catégories dont l'état vient de changer.
+      categoryIds: z.array(z.uuid()),
+    })
+    .strict(),
+  z
+    .object({ type: z.literal('route_updated'), competitionId: z.uuid(), routeId: z.uuid() })
+    .strict(),
 ])
 export type PublicStreamEvent = z.infer<typeof publicStreamEventSchema>

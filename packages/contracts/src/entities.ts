@@ -57,7 +57,6 @@ export const routeCategorySchema = createSelectSchema(routeCategory)
 export const roundSchema = createSelectSchema(round, {
   type: z.enum(['qualification', 'semifinal', 'final']),
   style: z.enum(['flash', 'onsight']),
-  status: z.enum(['draft', 'open', 'closed', 'published']),
 })
 export type Round = z.infer<typeof roundSchema>
 export const roundRouteSchema = createSelectSchema(roundRoute)
