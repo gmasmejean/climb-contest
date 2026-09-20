@@ -10,6 +10,7 @@ import {
   randomToken,
   round,
   roundCategory,
+  roundRoute,
   type Database,
 } from '@climbcontest/db'
 import { getScoringEngine } from '@climbcontest/scoring'
@@ -212,12 +213,20 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
       // pilotage. En contrepartie, on ne quitte « En cours » que si plus aucune
       // catégorie n'est ouverte. Une seule requête conditionnelle : un tour
       // ouvert en même temps ne contourne pas la vérification.
+      // Un couple n'existe pour l'organisateur que tant qu'une voie relie la catégorie
+      // au tour (`round_route`) : sans elle, la ligne ouverte est un orphelin invisible
+      // du pilotage, qui ne doit pas bloquer la clôture.
       const nothingOpen = sql`not exists (
         select 1 from ${roundCategory}
         join ${round} on ${round.id} = ${roundCategory.roundId}
         where ${round.competitionId} = ${competition.id}
           and ${round.deletedAt} is null
           and ${roundCategory.status} = 'open'
+          and exists (
+            select 1 from ${roundRoute}
+            where ${roundRoute.roundId} = ${roundCategory.roundId}
+              and ${roundRoute.categoryId} = ${roundCategory.categoryId}
+          )
       )`
       const [row] = await db
         .update(competition)

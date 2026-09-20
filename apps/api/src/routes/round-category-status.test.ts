@@ -415,6 +415,25 @@ describe('statut de compétition et catégories ouvertes (ADR-065)', () => {
     expect((await changeStatus(s, 'running')).status).toBe(200)
   })
 
+  it('une catégorie sans plus aucune voie dans le tour ne bloque pas la clôture (couple orphelin)', async () => {
+    const s = await twoCategories()
+    await setStatus(s, s.qualificationId, 'open', [s.u16])
+
+    // L'organisateur retire les voies des U16 de la qualification : le couple n'existe plus
+    // pour le pilotage (qui le déduit de `round_route`) mais sa ligne reste « ouverte ».
+    const removed = await app.request(
+      `/api/v1/competitions/${s.competitionId}/rounds/${s.qualificationId}/routes`,
+      {
+        method: 'PUT',
+        headers: authHeaders(s.organizerToken),
+        body: JSON.stringify({ assignments: [{ routeId: s.routeQ, categoryId: s.u18 }] }),
+      },
+    )
+    expect(removed.status).toBe(200)
+
+    expect((await changeStatus(s, 'closed')).status).toBe(200)
+  })
+
   it('rouvrir une catégorie sur une compétition clôturée la remet « En cours »', async () => {
     const s = await twoCategories()
     await setStatus(s, s.qualificationId, 'open', [s.u16])

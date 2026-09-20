@@ -46,16 +46,6 @@ export async function loadStatuses(
   return statuses
 }
 
-/** Le statut effectif d'un seul couple. */
-export async function loadStatus(
-  db: Pick<Database, 'select'>,
-  roundId: string,
-  categoryId: string,
-): Promise<RoundStatus> {
-  const statuses = await loadStatuses(db, [{ roundId, categoryId }])
-  return statuses.get(pairKey(roundId, categoryId)) ?? 'draft'
-}
-
 /**
  * Le tour, s'il existe dans cette compétition (hors corbeille) ET est ouvert
  * pour cette catégorie — c'est la condition d'une saisie de passage. `undefined`
@@ -83,26 +73,6 @@ export async function findRoundOpenForCategory(
     )
     .limit(1)
   return row?.round
-}
-
-/** Y a-t-il, dans cette compétition, au moins un couple (tour, catégorie) ouvert ? */
-export async function hasOpenRoundCategory(
-  db: Pick<Database, 'select'>,
-  competitionId: string,
-): Promise<boolean> {
-  const [row] = await db
-    .select({ roundId: roundCategory.roundId })
-    .from(roundCategory)
-    .innerJoin(round, eq(round.id, roundCategory.roundId))
-    .where(
-      and(
-        eq(round.competitionId, competitionId),
-        isNull(round.deletedAt),
-        eq(roundCategory.status, 'open'),
-      ),
-    )
-    .limit(1)
-  return row !== undefined
 }
 
 /** Écrit (ou met à jour) le statut d'un couple — à appeler dans la transaction du changement. */
