@@ -4,6 +4,7 @@ import {
   DEFAULT_LIST_VIEW,
   applyListView,
   isDefaultListView,
+  toLocalDay,
   parseListView,
   serializeListView,
   type ListView,
@@ -269,5 +270,13 @@ describe('parseListView / serializeListView', () => {
       dir: 'desc',
     })
     expect(parseListView(serializeListView(original))).toEqual(original)
+  })
+})
+
+describe('toLocalDay', () => {
+  it('donne la date du calendrier local, pas la date UTC', () => {
+    expect(toLocalDay(new Date(2026, 8, 20, 0, 30))).toBe('2026-09-20')
+    expect(toLocalDay(new Date(2026, 8, 20, 23, 59))).toBe('2026-09-20')
+    expect(toLocalDay(new Date(2026, 0, 5, 12, 0))).toBe('2026-01-05')
   })
 })

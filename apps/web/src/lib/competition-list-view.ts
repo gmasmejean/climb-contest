@@ -57,6 +57,16 @@ export const DEFAULT_LIST_VIEW: ListView = {
   dir: 'desc',
 }
 
+/**
+ * `YYYY-MM-DD` du jour LOCAL. `toISOString()` donnerait la date UTC : à 0 h 30
+ * heure de Paris, « aujourd'hui » serait encore hier.
+ */
+export function toLocalDay(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
 /** Minuscules, sans accents, sans espaces aux extrémités. */
 function normalize(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
