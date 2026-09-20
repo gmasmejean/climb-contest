@@ -152,7 +152,7 @@ export const asset = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps,
   },
-  (table) => [check('asset_kind_check', sql`${table.kind} IN ('video')`)],
+  (table) => [check('asset_kind_check', sql`${table.kind} IN ('video', 'route_photo')`)],
 )
 
 /**
@@ -262,6 +262,11 @@ export const route = pgTable(
     color: text('color'),
     videoUrl: text('video_url'),
     videoAssetId: uuid('video_asset_id').references(() => asset.id),
+    // Lot 15 (ADR-066) : photo annotée. `photo_holds` est une liste
+    // `{ number, x, y }` (x, y normalisés dans [0, 1]) validée par Zod aux
+    // frontières ; la colonne reste un jsonb non typé, comme `scoring_config`.
+    photoAssetId: uuid('photo_asset_id').references(() => asset.id),
+    photoHolds: jsonb('photo_holds'),
     notes: text('notes'),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     ...timestamps,

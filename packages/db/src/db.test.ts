@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createDatabase, type DatabaseHandle } from './client'
 import { applyPendingMigrations, revertLastMigrations } from './migrate-shared'
-import { ascent, category, club, competition, competitor, round, route, user } from './schema'
+import { ascent, asset, category, club, competition, competitor, round, route, user } from './schema'
 
 let container: StartedPostgreSqlContainer
 let handle: DatabaseHandle
@@ -330,10 +330,13 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         { competitionId: comp.id, label: 'U18', sex: 'M', displayOrder: 1 },
       ])
       .returning()
-    const [routeRow] = await handle.db
-      .insert(route)
-      .values({ competitionId: comp.id, number: 1, holdCount: 30 })
-      .returning()
+    // SQL brut : à ce stade 0011 est annulée, or le schéma Drizzle sait déjà
+    // écrire `photo_asset_id` / `photo_holds`, colonnes qui n'existent pas encore.
+    const routeInsert = await client.query<{ id: string }>(
+      'insert into route (id, competition_id, number, hold_count) values ($1, $2, 1, 30) returning id',
+      [crypto.randomUUID(), comp.id],
+    )
+    const routeRow = routeInsert.rows[0]
     if (!u16 || !u18 || !routeRow) throw new Error('fixture insert failed')
 
     async function insertRound(order: number, type: string, status: string, categoryIds: string[]) {
@@ -359,8 +362,12 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
 
   it('le up réplique l’ancien statut sur chaque catégorie du tour, le down garde `open` en priorité', async () => {
     await withRawClient(async (client) => {
-      // 0010 est la dernière migration : un seul cran, sinon ce test est à revoir.
-      expect(await revertLastMigrations(client, 1)).toEqual(['0010_lot12_round_category.sql'])
+      // 0011 (Lot 15) a été posée par-dessus 0010 : deux crans. À réviser si une
+      // migration est ajoutée après 0011.
+      expect(await revertLastMigrations(client, 2)).toEqual([
+        '0011_lot15_route_photo.sql',
+        '0010_lot12_round_category.sql',
+      ])
       const { openId, closedId, draftId, u16, u18 } = await seedOldSchemaRounds(client)
 
       await applyPendingMigrations(client)
@@ -390,7 +397,7 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
         [openId, u16.id],
       )
-      await revertLastMigrations(client, 1)
+      await revertLastMigrations(client, 2)
       const back = await client.query<{ id: string; status: string }>(
         'select id, status from round where id = any($1)',
         [[openId, closedId, draftId]],
@@ -441,6 +448,110 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         values (${roundRow.id}, ${cat.id}, 'exploded')
       `),
     ).rejects.toThrow()
+  })
+})
+
+describe('migration 0011_lot15_route_photo (ADR-066)', () => {
+  async function seedRouteWithPhoto() {
+    const { demoClub, demoUser } = await insertClubAndUser()
+    const [comp] = await handle.db
+      .insert(competition)
+      .values({
+        clubId: demoClub.id,
+        name: 'Migration 0011',
+        venue: 'Salle',
+        startsOn: '2026-01-01',
+        endsOn: '2026-01-01',
+        format: 'contest',
+        scoringEngineId: 'ffme-difficulty-2026',
+        publicSlug: crypto.randomUUID(),
+        createdBy: demoUser.id,
+      })
+      .returning()
+    if (!comp) throw new Error('competition insert failed')
+    const [photo] = await handle.db
+      .insert(asset)
+      .values({
+        competitionId: comp.id,
+        kind: 'route_photo',
+        storageKey: `competitions/${comp.id}/photos/test`,
+        mimeType: 'image/jpeg',
+        sizeBytes: 1234,
+        uploadedBy: demoUser.id,
+      })
+      .returning()
+    if (!photo) throw new Error('asset insert failed')
+    const [routeRow] = await handle.db
+      .insert(route)
+      .values({
+        competitionId: comp.id,
+        number: 1,
+        holdCount: 3,
+        photoAssetId: photo.id,
+        photoHolds: [{ number: 1, x: 0.5, y: 0.9 }],
+      })
+      .returning()
+    if (!routeRow) throw new Error('route insert failed')
+    return { comp, demoUser, photo, routeRow }
+  }
+
+  it('accepte une photo et son annotation, refuse un type d\'asset inconnu', async () => {
+    const { comp, demoUser, routeRow } = await seedRouteWithPhoto()
+    expect(routeRow.photoHolds).toEqual([{ number: 1, x: 0.5, y: 0.9 }])
+
+    await expect(
+      handle.db.insert(asset).values({
+        competitionId: comp.id,
+        kind: 'audio',
+        storageKey: 'competitions/x/audio/1',
+        mimeType: 'audio/mpeg',
+        sizeBytes: 1,
+        uploadedBy: demoUser.id,
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('est réversible : le down retire les colonnes et les assets route_photo, le up les rétablit', async () => {
+    await seedRouteWithPhoto()
+    await withRawClient(async (client) => {
+      const hasColumn = async (name: string) => {
+        const result = await client.query(
+          "select 1 from information_schema.columns where table_name = 'route' and column_name = $1",
+          [name],
+        )
+        return result.rows.length === 1
+      }
+      const photoAssetCount = async () => {
+        const result = await client.query<{ count: string }>(
+          "select count(*) from asset where kind = 'route_photo'",
+        )
+        return Number(result.rows[0]?.count)
+      }
+      expect(await hasColumn('photo_asset_id')).toBe(true)
+      expect(await hasColumn('photo_holds')).toBe(true)
+      expect(await photoAssetCount()).toBeGreaterThan(0)
+
+      let guard = 0
+      while (await hasColumn('photo_asset_id')) {
+        expect((await revertLastMigrations(client, 1)).length).toBe(1)
+        guard += 1
+        expect(guard).toBeLessThan(20)
+      }
+      expect(await hasColumn('photo_holds')).toBe(false)
+      // Perte assumée du down : les assets route_photo sont supprimés.
+      expect(await photoAssetCount()).toBe(0)
+      // Le CHECK d'avant refuse de nouveau le type route_photo.
+      await expect(
+        client.query(
+          `insert into asset (competition_id, kind, storage_key, mime_type, size_bytes, uploaded_by)
+           select id, 'route_photo', 'k', 'image/jpeg', 1, created_by from competition limit 1`,
+        ),
+      ).rejects.toThrow()
+
+      await applyPendingMigrations(client)
+      expect(await hasColumn('photo_asset_id')).toBe(true)
+      expect(await hasColumn('photo_holds')).toBe(true)
+    })
   })
 })
 
