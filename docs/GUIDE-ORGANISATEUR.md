@@ -27,6 +27,8 @@ Onglet **Compétiteurs** :
 ### Voies
 Onglet **Voies** : numéro, nom, nombre de prises, secteur, couleur, et les **catégories concernées**. Un lien YouTube ou Vimeo peut être ajouté, ou une vidéo téléversée en modifiant la voie (MP4, MOV ou WebM ; l'envoi reprend tout seul après une coupure). Le nombre de prises ne peut plus être changé dès qu'un passage a été noté.
 
+**Photo annotée** : en modifiant une voie, ajoutez la photo que les juges reçoivent d'habitude (« Choisir une photo », puis « Envoyer la photo »). Touchez la photo pour placer chaque prise, glissez-la pour la déplacer, touchez-la pour changer son numéro ou la supprimer. **Renuméroter de bas en haut** classe les prises d'après leur hauteur : vérifiez sur une traversée ou un dévers. Pensez à **Enregistrer les prises**. Les juges pourront afficher cette voie depuis leur téléphone, même sans réseau ; **Imprimer les fiches voie** donne un PDF, une page par voie. Attention : dès qu'un passage est noté sur la voie, la photo et les prises ne peuvent plus changer ; remplacer la photo efface les prises.
+
 ### Tours (format phases)
 Onglet **Tours** : créez qualification, demi-finale, finale ; indiquez **combien de qualifiés** passent au tour suivant, et quelles voies servent à quelle catégorie.
 

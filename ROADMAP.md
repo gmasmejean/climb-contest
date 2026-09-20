@@ -542,7 +542,7 @@ en un clic (jamais automatique, le figeage est quasi irréversible).
 
 ---
 
-## Lot 15 — Photo annotée de la voie
+## Lot 15 — Photo annotée de la voie (livré)
 
 > Actée avec l'utilisateur : une photo par voie, numérotation par hauteur puis
 > correction manuelle, détection automatique repoussée au Lot 16. ADR-066.

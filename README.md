@@ -70,7 +70,7 @@ pnpm dev
 | `pnpm --filter @climbcontest/db db:seed`         | Insère une compétition de démonstration                      |
 | `pnpm rehearsal`                                 | Répétition générale : 60 compétiteurs, coupures provoquées   |
 | `pnpm loadtest:sse`                              | 300 spectateurs sur le flux temps réel                       |
-| `infra/scripts/backup.sh`                        | Sauvegarde la base et les vidéos                             |
+| `infra/scripts/backup.sh`                        | Sauvegarde la base et les vidéos et photos                   |
 | `infra/scripts/verify-restore.sh`                | Prouve qu'une sauvegarde se restaure (sans danger)           |
 
 ## Structure du monorepo
@@ -208,7 +208,7 @@ toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
 Les compétiteurs sont souvent mineurs. Dans l'onglet **Exports**, le
 **propriétaire** du club peut exporter tout ce qui identifie une personne, puis
 **supprimer** les données personnelles d'une compétition : noms, années de
-naissance, clubs, licences, vidéos et motifs saisis. Les résultats restent, sans
+naissance, clubs, licences, vidéos, photos de voie et motifs saisis. Les résultats restent, sans
 personne derrière ; la ligne de la compétition reste comme trace de la purge.
 Il faut retaper le nom exact de la compétition, et l'action est irréversible.
 La liste des compétitions rappelle au bout de 2 ans, puis 5 ans. Rien n'est
@@ -226,6 +226,31 @@ les octets déjà envoyés : rechoisir le même fichier reprend. Taille maximale
 `uploads-data` — à inclure dans vos sauvegardes. Voir DECISIONS.md ADR-052 et
 ADR-058 (le stockage S3 n'est pas livré : `STORAGE_DRIVER=s3` échoue
 explicitement).
+
+## Photo annotée de la voie
+
+Une voie peut porter **une photo**, sur laquelle l'organisateur place les prises
+numérotées (voies → Modifier → « Choisir une photo »). La photo est réduite et
+ré-encodée en JPEG **dans le navigateur** (côté long 1600 px, environ 300 Ko :
+orientation appliquée, GPS retiré) ; le serveur n'accepte que du JPEG, reconnu à
+ses octets. Toucher la photo pose une prise, la glisser la déplace, « Renuméroter
+de bas en haut » classe les prises d'après leur hauteur (à vérifier sur une
+traversée ou un dévers). Les modifications ne partent qu'à « Enregistrer les
+prises ». Une prise ne peut pas porter un numéro supérieur au nombre de prises de
+la voie. Remplacer la photo **efface** les prises. **Dès qu'un passage existe sur
+la voie, la photo et les prises sont figées**, comme le nombre de prises
+(ADR-066 et ADR-004).
+
+« Imprimer les fiches voie » (en haut de l'onglet Voies) donne un PDF, une page A4
+par voie ayant une photo, avec la photo annotée ; « Imprimer la fiche de cette
+voie » n'en imprime qu'une.
+
+Côté juge, l'écran de saisie a un bouton **Voir la voie** : un panneau plein écran
+glisse depuis la droite, avec zoom ×1 / ×2 / ×3. La photo est **gardée dans le
+téléphone** (IndexedDB) au moment de l'amorçage : elle s'affiche sans réseau. Si
+elle n'a pas encore été téléchargée, le panneau le dit et la saisie continue. Les
+photos sont sur le volume `uploads-data`, comme les vidéos. Voir DECISIONS.md
+ADR-066.
 
 ## Liste des compétitions et corbeille
 
@@ -278,5 +303,5 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   depuis l'onglet Pilotage ; une compétition en phases jouée de bout en bout
   (qualification à deux voies, demi-finale, finale, classement final avec
   contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
-  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise —
+  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise ; la photo annotée d'une voie, de l'organisateur au juge hors ligne (aussi à 360 px) —
   la purge des données personnelles ; le mode dégradé quand le serveur est injoignable ; la recherche dans la liste, la corbeille, la restauration et la suppression définitive d'une compétition (aussi à 360 px) ; voir `e2e/README.md` pour les lancer.

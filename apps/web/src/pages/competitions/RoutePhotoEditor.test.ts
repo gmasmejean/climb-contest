@@ -79,13 +79,16 @@ async function tapPhoto(wrapper: VueWrapper, x: number, y: number) {
 }
 
 describe('RoutePhotoEditor', () => {
+  let revokeObjectURL: ReturnType<typeof vi.fn<(url: string) => void>>
+
   beforeEach(() => {
     for (const fn of Object.values(api)) fn.mockReset()
     resize.resizeToJpeg.mockReset()
     api.fetchImage.mockResolvedValue(new Blob([new Uint8Array([0xff, 0xd8, 0xff])]))
     api.saveHolds.mockResolvedValue({ assetId: 'asset-1', holds: saved })
     URL.createObjectURL = vi.fn(() => 'blob:editor-photo')
-    URL.revokeObjectURL = vi.fn()
+    revokeObjectURL = vi.fn<(url: string) => void>()
+    URL.revokeObjectURL = revokeObjectURL
   })
 
   afterEach(() => {
@@ -393,6 +396,6 @@ describe('RoutePhotoEditor', () => {
 
     wrapper.unmount()
 
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:editor-photo')
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:editor-photo')
   })
 })

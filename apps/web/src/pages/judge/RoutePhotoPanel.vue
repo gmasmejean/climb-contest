@@ -29,7 +29,23 @@ const url = useRoutePhotoUrl(
 const ZOOMS = [1, 2, 3] as const
 const zoom = ref<(typeof ZOOMS)[number]>(1)
 
-const closeButton = ref<InstanceType<typeof Button> | null>(null)
+const panel = ref<HTMLElement | null>(null)
+const scroller = ref<HTMLElement | null>(null)
+
+// Zoomer garde au centre de l'écran ce qui y était : sans cela la vue reste
+// collée en haut à gauche, alors que les prises sont au milieu de la photo.
+async function setZoom(level: (typeof ZOOMS)[number]): Promise<void> {
+  const el = scroller.value
+  const centerX =
+    el && el.scrollWidth > 0 ? (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth : 0.5
+  const centerY =
+    el && el.scrollHeight > 0 ? (el.scrollTop + el.clientHeight / 2) / el.scrollHeight : 0.5
+  zoom.value = level
+  await nextTick()
+  if (!el) return
+  el.scrollLeft = centerX * el.scrollWidth - el.clientWidth / 2
+  el.scrollTop = centerY * el.scrollHeight - el.clientHeight / 2
+}
 let previouslyFocused: HTMLElement | null = null
 
 watch(
@@ -40,7 +56,7 @@ watch(
       previouslyFocused =
         document.activeElement instanceof HTMLElement ? document.activeElement : null
       await nextTick()
-      closeButton.value?.$el.focus()
+      panel.value?.querySelector<HTMLElement>('[data-close]')?.focus()
     } else {
       previouslyFocused?.focus()
       previouslyFocused = null
@@ -75,6 +91,7 @@ function onTouchEnd(event: TouchEvent): void {
   >
     <div
       v-if="props.open"
+      ref="panel"
       role="dialog"
       aria-modal="true"
       :aria-label="`Voie ${props.routeNumber} annotée`"
@@ -86,9 +103,7 @@ function onTouchEnd(event: TouchEvent): void {
     >
       <header class="flex items-center justify-between gap-2 bg-white px-4 py-2">
         <h2 class="text-lg font-bold text-gray-900">Voie {{ props.routeNumber }}</h2>
-        <Button ref="closeButton" variant="secondary" @click="emit('close')">
-          Masquer la voie
-        </Button>
+        <Button data-close variant="secondary" @click="emit('close')"> Masquer la voie </Button>
       </header>
 
       <div class="flex gap-2 bg-white px-4 pb-2" role="group" aria-label="Zoom">
@@ -98,13 +113,13 @@ function onTouchEnd(event: TouchEvent): void {
           :variant="zoom === level ? 'primary' : 'secondary'"
           :aria-pressed="zoom === level"
           full-width
-          @click="zoom = level"
+          @click="setZoom(level)"
         >
           ×{{ level }}
         </Button>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-auto overscroll-contain">
+      <div ref="scroller" class="min-h-0 flex-1 overflow-auto overscroll-contain">
         <div v-if="url" class="relative" :style="{ width: `${zoom * 100}%` }">
           <img
             :src="url"

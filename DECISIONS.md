@@ -2367,13 +2367,50 @@ couleur est le Lot 16 (à régler sur de vraies photos) ; ce lot ne la prépare 
    dans le cache HTTP du service worker. Le `NetworkFirst` de l'API expire au bout de 24 h,
    ce qui contredirait « aucun écran de juge ne dépend du réseau ». L'amorçage juge ne
    renvoie que l'identifiant et les prises ; le client télécharge l'image (en-tête Bearer)
-   quand l'identifiant a changé. Un échec de téléchargement n'échoue pas l'amorçage.
-   La migration Dexie v1→v2 ne touche jamais à la file d'envoi.
+   quand l'identifiant a changé, **en arrière-plan** : les voies sont utilisables sans
+   attendre la photo. Un échec de téléchargement n'échoue pas l'amorçage et sera réessayé à
+   l'actualisation suivante. La migration Dexie v1→v2 ne touche jamais à la file d'envoi
+   (testée avec 12 saisies en attente). **Octets bruts (`ArrayBuffer`) et non `Blob`** : c'est
+   ce qu'IndexedDB conserve de façon fiable sur les téléphones anciens ; le `Blob` d'affichage
+   est reconstruit à l'ouverture du panneau. Une photo remplacée qu'on n'arrive pas à
+   retélécharger est **retirée** du téléphone : elle ne correspond plus aux numéros annoncés.
 7. **Juge : bouton visible « Voir la voie », panneau qui glisse depuis la droite,** zoom par
    boutons ×1/×2/×3 et défilement. Le balayage horizontal ferme le panneau en plus du bouton,
    jamais à la place (`CLAUDE.md` : pas de geste caché).
 8. **Fiches voie : PDF côté serveur** (`pdf-lib`, comme `qrcode-pdf.ts`), une page A4 par voie
    ayant une photo. L'export JSON exclut photo et annotation, comme `video_asset_id`.
+
+9. **Cohérence avec `hold_count`.** Une prise annotée ne peut pas porter un numéro supérieur au
+   nombre de prises de la voie (le pavé du juge s'y arrête) : `PUT …/photo/holds` répond 400,
+   et `PATCH /routes/:id` refuse (409) de descendre le nombre de prises sous la plus haute
+   prise placée, plutôt que d'effacer des prises en silence. Une annotation partielle est
+   acceptée (l'écran signale « 12 prises placées sur 15 »). **Remplacer la photo efface les
+   prises** (elles étaient placées sur l'ancienne image) : l'écran le dit et demande
+   confirmation avant. Un bouton « Utiliser N comme nombre de prises » reporte le nombre de
+   prises placées dans le champ du formulaire ; il ne change la voie qu'à « Enregistrer »
+   (et reste soumis au verrou d'ADR-004) — c'est la seule part du pré-remplissage du nombre
+   de prises livrée ici, le reste (détection) est le Lot 16.
+10. **Données personnelles.** Une photo de mur peut montrer des grimpeurs : la purge RGPD
+    supprime les fichiers et vide `photo_asset_id` / `photo_holds`, l'export d'accès les
+    liste (`personalData.photos`), et la suppression définitive d'une compétition les efface
+    comme les vidéos (elle supprime tous les `asset` de la compétition).
+11. **Points d'API :** `PUT/GET/DELETE /competitions/:id/routes/:rid/photo`,
+    `PUT …/photo/holds`, `GET /competitions/:id/route-sheets.pdf[?routeId=]`,
+    `GET /judge/routes/:id/photo`, et `photo: { assetId, holds } | null` dans le détail de
+    voie de l'amorçage juge (`.default(null)` : un détail mis en cache par la version
+    précédente n'a pas ce champ).
+
+**Limites connues :**
+
+- Aucune vraie photo de voie n'a servi : les tests et la capture utilisent une image
+  synthétique (`apps/api/src/test-utils/wall.jpg`). La lisibilité des numéros sur de vraies
+  photos (mur chargé, prises serrées) est à juger en conditions réelles ; les numéros se
+  chevauchent si deux prises sont très proches, et le zoom ×2/×3 est là pour ça.
+- La fiche PDF ne montre pas les prises non annotées et n'a pas de version noir et blanc
+  dédiée (anneau blanc puis noir, pastille blanche : lisible imprimé en niveaux de gris,
+  non vérifié sur papier).
+- Le verrou après le premier passage empêche de remplacer une photo floue découverte le
+  jour J.
 
 **Alternatives écartées :** annotation « cuite » dans l'image (corriger un numéro obligerait
 à renvoyer la photo) ; cache HTTP du service worker (expiration) ; protocole d'envoi par
