@@ -1174,6 +1174,7 @@ avec ADR-014 : `packages/sync` reste à zéro dépendance de production, comme
 
 ## ADR-035 — Gel de l'ACTIVATION du service worker, pas de son installation
 
+**Statut :** le gel est remplacé par ADR-061 (2026-09-20) ; `registerType: 'prompt'` et la dépendance `workbox-window` restent.
 **Date :** 2026-09-18
 **Contexte :** ROADMAP.md Lot 6 exige qu'une nouvelle version ne s'installe
 jamais pendant qu'une saisie est en attente. `vite-plugin-pwa` était
@@ -2026,6 +2027,97 @@ compétition. Audit fait acteur par acteur, puis corrigé et couvert par
 alors que le serveur est injoignable est renvoyé à l'écran de connexion, faute de
 pouvoir restaurer sa session. Le message est désormais clair, mais il doit
 attendre le retour du réseau pour continuer.
+
+---
+
+## ADR-061 — Lot 10 : une nouvelle version s'active tout de suite, la saisie en cours survit au rechargement
+
+**Date :** 2026-09-20
+**Contexte :** ADR-035 gelait l'activation d'une nouvelle version tant que la file
+de synchronisation contenait un élément `pending` ou `sending` (`ROADMAP.md` Lot 6,
+point 2 : « ne s'installe JAMAIS pendant qu'une saisie est en attente »). En
+relisant le code pour comprendre pourquoi une appli restait périmée après un
+`docker compose up --build` :
+
+- **La file n'était pas en danger.** Chaque saisie est écrite dans IndexedDB avant
+  tout réseau (ADR-012) ; l'état `sending` n'existe qu'en mémoire (`sendOne`, dans
+  `packages/sync/src/engine.ts`) : en base l'élément reste `pending`, donc un
+  rechargement en plein envoi le renvoie. Le serveur est idempotent sur l'`id`
+  de la saisie (`apps/api/src/lib/ascent-write.ts`, statut `duplicate`). Recharger
+  avec une file non vide ne perd rien.
+- **Ce qu'un rechargement perdait vraiment, le gel ne le protégeait pas.** L'écran
+  de saisie (`JudgeAscentEntry.vue`) garde prise, modificateur, TOP, statut et
+  temps dans des `ref` en mémoire jusqu'à « Confirmer ». Avec une file VIDE — le
+  cas courant — le gel était déjà ouvert et la mise à jour rechargeait la page
+  en pleine saisie : valeurs perdues.
+- **Le gel avait un coût.** Un appareil dont la file ne se vide pas (un élément qui
+  échoue durablement, un envoi en cours) ne se met jamais à jour, sans que
+  personne ne le voie.
+
+**Décision :**
+
+1. **Brouillon de saisie.** `apps/web/src/judge/ascent-draft.ts` (logique pure,
+   validée par Zod à partir de `ascentShapeFields` du paquet de contrats) et
+   `useAscentDraft.ts` (branchement sur l'écran). Un SEUL emplacement par
+   appareil, `localStorage['climbcontest.judge.ascentDraft']`, qui contient
+   `routeId`, `competitorId`, `baseAscentId` (`null` en création, l'`id` du passage
+   corrigé en correction), les cinq valeurs et `savedAt`.
+   - Écrit **de façon synchrone à chaque changement** (`watch` en `flush: 'sync'`),
+     seulement s'il diffère de l'état de départ de l'écran ; revenir à l'état de
+     départ efface le brouillon. Pas de délai de 500 ms comme `useFormDraft` : un
+     rechargement dans cette fenêtre perdrait le dernier appui.
+   - Restauré **dans l'étape « saisie », jamais dans le récapitulatif** : le juge
+     revoit ses valeurs et confirme lui-même, rien ne part tout seul. Un message
+     l'annonce (« Saisie retrouvée : vérifiez-la avant de valider. »).
+   - **Périmé au bout de 10 minutes** (`DRAFT_MAX_AGE_MS`, décision du 2026-09-20).
+     Un `savedAt` dans le futur (horloge du téléphone reculée) est traité comme périmé.
+   - **N'est repris que s'il désigne exactement cet écran** : même voie, même
+     compétiteur, même `baseAscentId`, et numéro de prise ≤ nombre de prises de la voie.
+     Le `baseAscentId` couvre le cas « saisie écrite dans la file, page rechargée avant
+     l'effacement du brouillon » : le passage porte alors un autre `id` (ou n'est
+     plus en création) et le brouillon est écarté, sans doublon ni valeur fantôme.
+   - **Effacé après l'écriture durable dans la file** (jamais avant : si la page
+     se recharge entre « Confirmer » et la fin de l'écriture IndexedDB, le brouillon
+     est encore là et le juge revalide) ; **purgé quand l'appareil change de juge**
+     (`resetJudgeDatabase`, ADR-036).
+   - Un brouillon illisible, invalide ou incohérent (TOP avec une prise, DNS avec une
+     prise…) est ignoré et supprimé, jamais « réparé ».
+2. **Plus de gel.** `pwa-update.ts` appelle `updateSW(true)` dès que
+   `onNeedRefresh` se déclenche, sans regarder la file. `registerType: 'prompt'`
+   est conservé (c'est lui qui permet de piloter l'appel) ainsi que `workbox-window`.
+3. **Organisateur et public inchangés** : ils n'ont pas de file, leur gel était déjà
+   ouvert en permanence.
+
+**Ce que ça change dans l'invariant de la ROADMAP :** ce n'est plus « une nouvelle
+version ne s'active jamais pendant une saisie en attente », mais « aucune saisie
+n'est perdue par une mise à jour » — celle déjà confirmée (IndexedDB) comme celle en
+cours (brouillon).
+
+**Conséquences et limites assumées :**
+
+- Un rechargement en pleine saisie fait clignoter l'écran ; il ne coûte plus de données.
+- Le brouillon est du **mieux-effort** : si `localStorage` est inaccessible
+  (navigation privée, quota), la saisie non confirmée est perdue au rechargement,
+  comme avant. La file, elle, reste en IndexedDB. Une valeur non confirmée n'est pas
+  encore une « action de juge » au sens de `CLAUDE.md`.
+- Quitter l'écran volontairement (« ← Retour à la voie ») **n'efface pas** le brouillon :
+  il expire au bout de 10 minutes. Le message de restauration est là pour qu'un
+  juge qui revient sur le même grimpeur ne valide pas une vieille valeur sans la voir.
+- Deux onglets sur le même appareil partagent l'emplacement : le dernier qui écrit gagne.
+- **Non traité** : compatibilité entre une nouvelle version du code et des éléments
+  déjà en file écrits par l'ancienne (le schéma Dexie n'a qu'une version). À traiter
+  le jour où le format d'un élément de file change (voir `TODO.md`).
+
+**Alternatives écartées :**
+
+- *Brouillon dans IndexedDB* : écriture asynchrone, la dernière valeur peut ne pas
+  être écrite au moment du rechargement ; pour six valeurs, `localStorage` est synchrone.
+- *Un brouillon par compétiteur* : s'accumule sans jamais se nettoyer ; un seul juge
+  saisit un seul passage à la fois.
+- *Geler seulement quand l'écran de saisie est ouvert* : demande un signal « écran
+  occupé » global, et l'appareil reste périmé tant que le juge y reste.
+- *Repasser en `registerType: 'autoUpdate'`* : supprime la maîtrise de l'appel
+  pour un gain nul ; `pwa-update.ts` devient déjà trivial.
 
 ---
 

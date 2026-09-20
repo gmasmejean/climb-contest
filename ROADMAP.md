@@ -286,7 +286,8 @@ Implémente la stratégie décrite dans SPEC.md § 6.3, dans son intégralité.
 2. Service worker : precache de la coquille applicative, stratégie
    network-first avec repli cache pour les données, cache-first pour les
    ressources statiques. Une nouvelle version ne s'installe JAMAIS pendant
-   qu'une saisie est en attente.
+   qu'une saisie est en attente. *(Remplacé au Lot 10, ADR-061 : la mise à
+   jour s'active tout de suite, et aucune saisie n'est perdue.)*
 
 3. File de synchronisation :
    - chaque saisie génère un UUID v7 côté client et est écrite en IndexedDB
@@ -429,6 +430,31 @@ Lot 9 : compléter le format phases, les exports, et durcir l'ensemble.
 6. Répétition générale : joue une compétition complète de 60 compétiteurs,
    4 catégories, 8 voies, 4 juges, avec des coupures réseau provoquées.
    Raconte-moi ce qui casse.
+```
+
+---
+
+## Lot 10 — Mise à jour de l'appli sans perte de saisie
+
+> Lot ajouté après le Lot 9, à partir d'un constat : après un redéploiement,
+> l'appli restait périmée dans le navigateur. Décision : ADR-061.
+
+```
+Lot 10 : une nouvelle version de l'appli s'active dès qu'elle est prête, sans
+qu'aucune saisie de juge ne soit perdue.
+
+1. Brouillon de saisie : l'écran de saisie d'un passage mémorise ce que le juge
+   a saisi (localStorage, écriture immédiate) et le restitue après un
+   rechargement, dans l'étape de saisie et avec un message. Périmé au bout de
+   10 minutes ; ignoré s'il ne désigne pas exactement le même passage ; effacé
+   après l'écriture durable dans la file.
+
+2. Service worker : on retire le gel de l'activation (ADR-035). La nouvelle
+   version s'active dès que le navigateur l'a installée.
+
+3. Tests : logique du brouillon (péremption, identité, valeurs incohérentes),
+   écran de saisie (écriture, restauration, effacement), activation de la mise
+   à jour, et un test Playwright qui recharge la page en pleine saisie.
 ```
 
 ---
