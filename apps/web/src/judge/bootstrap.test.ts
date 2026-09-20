@@ -5,8 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QueuePayload } from './queue-payload'
 
 const judgeFetch = vi.fn<() => Promise<JudgeBootstrapResponse>>()
+const judgeFetchBytes = vi.fn<() => Promise<{ bytes: ArrayBuffer; mimeType: string }>>()
 vi.mock('../api/judge-client', () => ({
   judgeFetch: (...args: unknown[]) => judgeFetch(...(args as [])),
+  judgeFetchBytes: (...args: unknown[]) => judgeFetchBytes(...(args as [])),
 }))
 
 const { bootstrapJudge, preserveHeldAscents } = await import('./bootstrap')
@@ -22,7 +24,7 @@ function bootstrapResponse(judgeId: string, roundOpen: boolean): JudgeBootstrapR
     judge: { id: judgeId, displayName: 'Juge Test' },
     routes: [
       {
-        route: { id: ROUTE_ID, number: 3, name: null, holdCount: 40, categories: [] },
+        route: { id: ROUTE_ID, number: 3, name: null, holdCount: 40, categories: [], photo: null },
         round: roundOpen ? { id: '00000000-0000-4000-8000-0000000000c1', type: 'semifinal' } : null,
         timingEnabled: false,
         competitors: [],
@@ -63,6 +65,8 @@ async function storedRound() {
 
 beforeEach(async () => {
   judgeFetch.mockReset()
+  judgeFetchBytes.mockReset()
+  await judgeDb.routePhotos.clear()
   await judgeDb.routeDetails.clear()
   await judgeDb.queue.clear()
   await judgeDb.meta.clear()
@@ -174,7 +178,7 @@ function detailWith(
   ascent: typeof localAscent | null,
 ): JudgeBootstrapResponse['routes'][number] {
   return {
-    route: { id: ROUTE_ID, number: 3, name: null, holdCount: 40, categories: [] },
+    route: { id: ROUTE_ID, number: 3, name: null, holdCount: 40, categories: [], photo: null },
     round: roundId ? { id: roundId, type: 'semifinal' } : null,
     timingEnabled: false,
     competitors: [
@@ -286,5 +290,63 @@ describe('bootstrapJudge({ onlyIfQueueIdle }) — conflit conservé de bout en b
     await bootstrapJudge()
 
     expect((await judgeDb.routeDetails.get(ROUTE_ID))?.detail.competitors[0]?.ascent).toBeNull()
+  })
+})
+
+describe('bootstrapJudge — photos de voie (ADR-066)', () => {
+  const ASSET_ID = '00000000-0000-4000-8000-0000000000d1'
+
+  function withPhoto(): JudgeBootstrapResponse {
+    const response = bootstrapResponse(JUDGE_ID, true)
+    const first = response.routes[0]
+    if (!first) throw new Error('fixture sans voie')
+    first.route.photo = { assetId: ASSET_ID, holds: [{ number: 1, x: 0.5, y: 0.5 }] }
+    return response
+  }
+
+  it('range la photo annoncée dans IndexedDB, sans faire attendre l’amorçage', async () => {
+    judgeFetch.mockResolvedValue(withPhoto())
+    judgeFetchBytes.mockResolvedValue({
+      bytes: new Uint8Array([0xff, 0xd8, 0xff, 7]).buffer,
+      mimeType: 'image/jpeg',
+    })
+
+    expect(await bootstrapJudge()).toBe('written')
+
+    await vi.waitFor(async () => {
+      expect((await judgeDb.routePhotos.get(ROUTE_ID))?.assetId).toBe(ASSET_ID)
+    })
+    expect(judgeFetchBytes).toHaveBeenCalledTimes(1)
+  })
+
+  it('un téléchargement de photo qui échoue ne fait pas échouer l’amorçage', async () => {
+    judgeFetch.mockResolvedValue(withPhoto())
+    judgeFetchBytes.mockRejectedValue(new Error('réseau coupé'))
+
+    expect(await bootstrapJudge()).toBe('written')
+    // Les voies sont utilisables même sans photo.
+    expect(await storedRound()).not.toBeNull()
+    await vi.waitFor(() => expect(judgeFetchBytes).toHaveBeenCalled())
+    expect(await judgeDb.routePhotos.count()).toBe(0)
+  })
+
+  it('ne télécharge rien quand aucune voie n’a de photo', async () => {
+    judgeFetch.mockResolvedValue(bootstrapResponse(JUDGE_ID, true))
+    expect(await bootstrapJudge()).toBe('written')
+    expect(judgeFetchBytes).not.toHaveBeenCalled()
+  })
+
+  it('n’écrit pas de photo quand l’actualisation est ignorée (file non vide)', async () => {
+    await judgeDb.queue.put(queueItem('a', 'pending'))
+    await judgeDb.meta.put({
+      key: 'judge',
+      judgeId: JUDGE_ID,
+      displayName: 'Juge Test',
+      fetchedAt: '2026-09-19T09:00:00.000Z',
+    })
+    judgeFetch.mockResolvedValue(withPhoto())
+
+    expect(await bootstrapJudge({ onlyIfQueueIdle: true })).toBe('skipped')
+    expect(judgeFetchBytes).not.toHaveBeenCalled()
   })
 })

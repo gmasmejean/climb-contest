@@ -31,7 +31,9 @@ describe('refreshRoutesIfQueueIdle', () => {
 
   it('avale une erreur réseau : un échec en salle n’est pas une erreur à montrer', async () => {
     const bootstrap = vi.fn().mockRejectedValue(new Error('Réseau coupé'))
-    expect(await refreshRoutesIfQueueIdle({ hasJudgeSession: () => true, bootstrap })).toBe('failed')
+    expect(await refreshRoutesIfQueueIdle({ hasJudgeSession: () => true, bootstrap })).toBe(
+      'failed',
+    )
   })
 })
 

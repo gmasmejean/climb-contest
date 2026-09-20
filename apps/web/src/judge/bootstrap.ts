@@ -4,6 +4,7 @@ import type { QueueItem } from '@climbcontest/sync'
 import { judgeFetch } from '../api/judge-client'
 import { judgeDb, resetJudgeDatabase } from './local-db'
 import type { QueuePayload } from './queue-payload'
+import { syncRoutePhotos } from './route-photos'
 
 /**
  * Après une actualisation, une saisie locale en `conflict` ou `rejected` doit
@@ -73,33 +74,49 @@ export async function bootstrapJudge(
     await resetJudgeDatabase()
   }
 
-  return judgeDb.transaction('rw', judgeDb.routeDetails, judgeDb.meta, judgeDb.queue, async () => {
-    if (options.onlyIfQueueIdle) {
-      const waiting = await judgeDb.queue
-        .filter((item) => item.state === 'pending' || item.state === 'sending')
-        .count()
-      if (waiting > 0) return 'skipped'
-    }
-    let routes = response.routes
-    if (options.onlyIfQueueIdle) {
-      const previous = (await judgeDb.routeDetails.toArray()).map((row) => row.detail)
-      const held = await judgeDb.queue
-        .filter((item) => item.state === 'conflict' || item.state === 'rejected')
-        .toArray()
-      routes = preserveHeldAscents(previous, response.routes, held)
-    }
-    await judgeDb.routeDetails.clear()
-    await judgeDb.routeDetails.bulkPut(
-      routes.map((detail) => ({ routeId: detail.route.id, detail })),
-    )
-    await judgeDb.meta.put({
-      key: 'judge',
-      judgeId: response.judge.id,
-      displayName: response.judge.displayName,
-      fetchedAt: response.fetchedAt,
+  const outcome = await judgeDb.transaction(
+    'rw',
+    judgeDb.routeDetails,
+    judgeDb.meta,
+    judgeDb.queue,
+    async () => {
+      if (options.onlyIfQueueIdle) {
+        const waiting = await judgeDb.queue
+          .filter((item) => item.state === 'pending' || item.state === 'sending')
+          .count()
+        if (waiting > 0) return 'skipped'
+      }
+      let routes = response.routes
+      if (options.onlyIfQueueIdle) {
+        const previous = (await judgeDb.routeDetails.toArray()).map((row) => row.detail)
+        const held = await judgeDb.queue
+          .filter((item) => item.state === 'conflict' || item.state === 'rejected')
+          .toArray()
+        routes = preserveHeldAscents(previous, response.routes, held)
+      }
+      await judgeDb.routeDetails.clear()
+      await judgeDb.routeDetails.bulkPut(
+        routes.map((detail) => ({ routeId: detail.route.id, detail })),
+      )
+      await judgeDb.meta.put({
+        key: 'judge',
+        judgeId: response.judge.id,
+        displayName: response.judge.displayName,
+        fetchedAt: response.fetchedAt,
+      })
+      return 'written'
+    },
+  )
+
+  // Les photos de voie (ADR-066) se téléchargent en arrière-plan, HORS de la
+  // transaction (un téléchargement ne doit pas la garder ouverte) et sans faire
+  // attendre le juge : ses voies sont déjà utilisables, la photo arrive après.
+  if (outcome === 'written') {
+    syncRoutePhotos(response.routes).catch(() => {
+      // Jamais bloquant : réessayé à la prochaine actualisation.
     })
-    return 'written'
-  })
+  }
+  return outcome
 }
 
 /** Le bootstrap a-t-il déjà tourné avec succès au moins une fois sur cet appareil ? */

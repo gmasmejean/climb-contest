@@ -2,7 +2,7 @@ import type { QueueItem } from '@climbcontest/sync'
 import { describe, expect, it } from 'vitest'
 
 import { saveAscentDraft } from './ascent-draft'
-import { JudgeDatabase, resetJudgeDatabase } from './local-db'
+import { JudgeDatabase, judgeDb, resetJudgeDatabase } from './local-db'
 import type { QueuePayload } from './queue-payload'
 
 function makeItem(id: string, competitorId: string): QueueItem<QueuePayload> {
@@ -63,5 +63,20 @@ describe('resetJudgeDatabase — changement de juge (ADR-036)', () => {
     await resetJudgeDatabase()
 
     expect(localStorage.getItem('climbcontest.judge.ascentDraft')).toBeNull()
+  })
+})
+
+describe('resetJudgeDatabase — photos de voie (ADR-066)', () => {
+  it('supprime aussi les photos du juge précédent', async () => {
+    await judgeDb.routePhotos.put({
+      routeId: 'route-1',
+      assetId: 'asset-1',
+      mimeType: 'image/jpeg',
+      bytes: new Uint8Array([0xff, 0xd8, 0xff]).buffer,
+    })
+
+    await resetJudgeDatabase()
+
+    expect(await judgeDb.routePhotos.count()).toBe(0)
   })
 })

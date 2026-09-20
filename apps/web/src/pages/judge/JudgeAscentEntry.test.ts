@@ -15,7 +15,7 @@ import { flushLiveQueries } from '../../test-utils/flush'
 import JudgeAscentEntry from './JudgeAscentEntry.vue'
 
 const routeDetail = {
-  route: { id: 'route-1', number: 3, name: null, holdCount: 40, categories: [] },
+  route: { id: 'route-1', number: 3, name: null, holdCount: 40, categories: [], photo: null },
   round: { id: 'round-1', type: 'qualification' as const },
   timingEnabled: false,
   competitors: [
@@ -405,5 +405,108 @@ describe('JudgeAscentEntry', () => {
       expect(wrapper.text()).toContain(RESTORED_MESSAGE)
       expect(await recapText(wrapper)).toContain('prise 33+')
     })
+  })
+})
+
+describe('JudgeAscentEntry — voie annotée (ADR-066)', () => {
+  const ASSET_ID = '00000000-0000-4000-8000-0000000000c1'
+  const withPhoto = {
+    ...routeDetail,
+    route: {
+      ...routeDetail.route,
+      photo: { assetId: ASSET_ID, holds: [{ number: 1, x: 0.5, y: 0.5 }] },
+    },
+  }
+  let router: ReturnType<typeof createRouter>
+  let mountedWrapper: ReturnType<typeof mount> | undefined
+
+  beforeEach(() => {
+    router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        {
+          path: '/j/routes/:routeId/competitors/:competitorId',
+          name: 'judge-ascent-entry',
+          component: JudgeAscentEntry,
+        },
+        { path: '/j/routes/:routeId', name: 'judge-route', component: { template: '<div />' } },
+      ],
+    })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('réseau indisponible en test')))
+    URL.createObjectURL = vi.fn(() => 'blob:route-photo')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  afterEach(async () => {
+    mountedWrapper?.unmount()
+    mountedWrapper = undefined
+    vi.unstubAllGlobals()
+    await judgeDb.routeDetails.clear()
+    await judgeDb.routePhotos.clear()
+    await judgeDb.queue.clear()
+    localStorage.clear()
+  })
+
+  async function openEntry(detail: typeof routeDetail | typeof withPhoto) {
+    await judgeDb.routeDetails.put({ routeId: 'route-1', detail })
+    await router.push('/j/routes/route-1/competitors/comp-1')
+    await router.isReady()
+    mountedWrapper = mount(JudgeAscentEntry, { global: { plugins: [router] } })
+    await flushLiveQueries()
+    return mountedWrapper
+  }
+
+  const buttonNamed = (wrapper: ReturnType<typeof mount>, label: string) =>
+    wrapper.findAll('button').find((button) => button.text() === label)
+
+  it('n’affiche pas « Voir la voie » quand la voie n’a pas de photo', async () => {
+    const wrapper = await openEntry(routeDetail)
+
+    expect(buttonNamed(wrapper, 'Voir la voie')).toBeUndefined()
+    expect(wrapper.find('[data-testid="route-photo-panel"]').exists()).toBe(false)
+  })
+
+  it('« Voir la voie » ouvre le panneau, « Masquer la voie » le referme, sans réseau', async () => {
+    await judgeDb.routePhotos.put({
+      routeId: 'route-1',
+      assetId: ASSET_ID,
+      mimeType: 'image/jpeg',
+      bytes: new Uint8Array([0xff, 0xd8, 0xff, 1]).buffer,
+    })
+    const wrapper = await openEntry(withPhoto)
+
+    expect(wrapper.find('[data-testid="route-photo-panel"]').exists()).toBe(false)
+    await buttonNamed(wrapper, 'Voir la voie')?.trigger('click')
+    await flushLiveQueries()
+    expect(wrapper.find('[data-testid="route-photo-panel"]').exists()).toBe(true)
+    expect(wrapper.find('img').attributes('src')).toBe('blob:route-photo')
+
+    await buttonNamed(wrapper, 'Masquer la voie')?.trigger('click')
+    expect(wrapper.find('[data-testid="route-photo-panel"]').exists()).toBe(false)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('ouvrir la voie ne perd ni la prise tapée ni le mode de saisie', async () => {
+    const wrapper = await openEntry(withPhoto)
+    await buttonNamed(wrapper, '2')?.trigger('click')
+    await buttonNamed(wrapper, '5')?.trigger('click')
+    await buttonNamed(wrapper, '+')?.trigger('click')
+
+    await buttonNamed(wrapper, 'Voir la voie')?.trigger('click')
+    await buttonNamed(wrapper, 'Masquer la voie')?.trigger('click')
+    await buttonNamed(wrapper, 'Voir le récapitulatif')?.trigger('click')
+
+    expect(wrapper.text()).toContain('prise 25+')
+  })
+
+  it('dit que la photo n’est pas encore là quand elle n’a pas été téléchargée, et la saisie reste possible', async () => {
+    const wrapper = await openEntry(withPhoto)
+
+    await buttonNamed(wrapper, 'Voir la voie')?.trigger('click')
+    await flushLiveQueries()
+
+    expect(wrapper.find('[data-testid="route-photo-panel"]').text()).toContain(
+      'pas encore sur cet appareil',
+    )
   })
 })

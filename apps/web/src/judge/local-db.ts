@@ -11,6 +11,20 @@ export interface StoredRouteDetail {
   detail: JudgeRouteDetail
 }
 
+/**
+ * La photo annotée d'une voie (Lot 15, ADR-066), gardée ICI et non dans le
+ * cache HTTP du service worker : celui-ci expire, or aucun écran de juge ne
+ * doit dépendre du réseau. Octets bruts (`ArrayBuffer`) plutôt que `Blob` :
+ * c'est ce qu'IndexedDB conserve de façon fiable sur les vieux téléphones.
+ */
+export interface StoredRoutePhoto {
+  routeId: string
+  /** Identifiant de l'image (`route.photo.assetId`) : change quand la photo est remplacée. */
+  assetId: string
+  mimeType: string
+  bytes: ArrayBuffer
+}
+
 export interface JudgeMetaRow {
   key: 'judge'
   judgeId: string
@@ -44,6 +58,7 @@ export class JudgeDatabase extends Dexie {
   queue!: Table<QueueItem<QueuePayload>, string>
   meta!: Table<JudgeMetaRow, string>
   lastSubmission!: Table<LastSubmissionRow, string>
+  routePhotos!: Table<StoredRoutePhoto, string>
 
   constructor() {
     super('climbcontest-judge')
@@ -53,6 +68,9 @@ export class JudgeDatabase extends Dexie {
       meta: 'key',
       lastSubmission: 'key',
     })
+    // Lot 15 : une table de plus, les quatre autres — dont la file d'envoi,
+    // qu'une migration ne doit JAMAIS toucher — restent inchangées.
+    this.version(2).stores({ routePhotos: 'routeId' })
   }
 }
 
@@ -63,6 +81,7 @@ export async function resetJudgeDatabase(): Promise<void> {
   await judgeDb.queue.clear()
   await judgeDb.meta.clear()
   await judgeDb.lastSubmission.clear()
+  await judgeDb.routePhotos.clear()
   // Le brouillon de saisie (ADR-061) appartient au juge précédent.
   purgeAscentDraft()
 }
