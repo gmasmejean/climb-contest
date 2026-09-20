@@ -2296,12 +2296,37 @@ entier). Par ailleurs, le statut de *compétition* n'avait presque aucun effet
    juge ne peut y saisir). Sauvegarde JSON : version de schéma 2, la version 1 reste
    importable (le statut du tour est répliqué sur ses catégories).
 
+7. **Une voie ne sert que dans un seul tour ouvert.** Avec un statut par catégorie, la
+   qualification des U18 et la demi-finale des U16 peuvent se chevaucher, et l'écran juge
+   ne sait montrer qu'un tour par voie (`resolveOpenRoundForRoute`) — le juge ne saurait
+   plus qui grimpe. Ouvrir (ou rouvrir) une catégorie est donc refusé (409 « Voie déjà
+   utilisée ») tant qu'une de ses voies sert déjà dans un autre tour ouvert. Cela règle
+   aussi ce que `TODO.md` notait depuis le Lot 5 (deux tours ouverts sur la même voie,
+   non détectés).
+8. **Le couple n'existe que tant qu'une voie relie la catégorie au tour.** Le garde-fou du
+   point 5 ne compte que les couples ouverts qui ont encore une ligne `round_route` : si
+   l'organisateur retire toutes les voies d'une catégorie d'un tour ouvert, la ligne
+   `round_category` reste mais n'est plus visible du pilotage, elle ne bloque donc pas la
+   clôture.
+
+**Limite connue :** le garde-fou du point 5 est une requête conditionnelle unique, mais
+deux transactions simultanées (ouvrir une catégorie pendant qu'un autre organisateur
+clôture la compétition) peuvent encore se croiser dans une fenêtre de quelques
+millisecondes (niveau d'isolation `READ COMMITTED`). Rare à l'échelle d'un club ; noté
+dans `TODO.md`.
+
 **Alternatives écartées :** garder `round.status` et lui ajouter un statut par catégorie
 (deux sources de vérité qui divergent — exactement le défaut qu'on corrige) ; ouverture
 automatique du tour suivant quand le précédent se ferme (le figeage des qualifiés est
 quasi irréversible, ADR-054 : on laisse le temps de trancher un conflit ou une égalité —
 c'est le Lot 14, en un clic avec aperçu) ; supprimer le statut de compétition (le cap
 produit — recherche publique de compétitions à venir / en cours / finies — en a besoin).
+
+**Effets sur les ADR antérieurs :** remplace **ADR-030** (le statut « En cours » n'ouvre
+plus le tour implicite du contest) ; précise **ADR-054** (ses garde-fous sont par
+catégorie) et **ADR-063** point 4 (le refus de mise à la corbeille reste « En cours »,
+qui ne peut plus coexister avec une catégorie ouverte que dans le sens inverse : ouvrir
+une catégorie fait passer la compétition à « En cours »).
 
 **Suite prévue, non engagée ici :** Lot 13 (visibilité public/privé, recherche publique ;
 « privé » = non listé, lien direct valable) et Lot 14 (enchaînement guidé des tours).

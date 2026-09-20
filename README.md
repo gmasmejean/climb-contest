@@ -188,6 +188,17 @@ distinct de la préparation (onglets Catégories/Compétiteurs/Voies/Tours) :
   corrections, conflits tranchés, changements de statut), filtrable et
   exportable en CSV.
 
+**Le statut d'un tour se porte par catégorie** (Lot 12, ADR-065) : les U16 peuvent finir
+leur qualification le matin quand les U18 n'ont pas commencé. Dans **Pilotage → Tours**,
+chaque tour montre une ligne par catégorie, avec son état (brouillon, ouvert, fermé,
+publié) et ses actions ; une action groupée ouvre ou ferme plusieurs catégories d'un coup
+(un refus sur l'une refuse l'ensemble et la nomme). Ouvrir la demi-finale d'une catégorie
+exige que sa qualification soit terminée, sans regarder les autres catégories ; une voie
+ne peut servir que dans un seul tour ouvert. Le statut de la **compétition** (« En cours »,
+« Clôturée »…) n'ouvre plus rien : ouvrir une catégorie la passe à « En cours », et on ne
+peut pas la clôturer tant qu'une catégorie est ouverte. La page publique montre l'état des
+tours pour la catégorie affichée.
+
 Le statut d'un compétiteur (présent/absent/abandon/disqualifié, motif
 toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
 `DECISIONS.md` (ADR-045 à ADR-049) pour les décisions prises pendant ce lot.

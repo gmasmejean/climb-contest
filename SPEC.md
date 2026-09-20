@@ -265,7 +265,8 @@ Une compétition en phases est une suite ordonnée de tours. Chaque tour a :
   `onsight` (à vue, isolement) — information d'affichage en v1 ;
 - une ou plusieurs voies par catégorie ;
 - un nombre de qualifiés vers le tour suivant (ex. les 10 meilleurs) ;
-- un état : `draft` | `open` | `closed` | `published`.
+- un état **par catégorie** (ADR-065) : `draft` | `open` | `closed` | `published` — les
+  U16 peuvent avoir fini leur qualification le matin quand les U18 n'ont pas commencé.
 
 **Qualification vers le tour suivant** : les N premiers du classement du tour.
 En cas d'égalité à la limite, tous les ex aequo sont qualifiés (le tour suivant
@@ -415,8 +416,12 @@ round
   style ('flash' | 'onsight')
   display_order (int)
   qualifying_count (nullable int)       -- nb de qualifiés vers le tour suivant
-  status ('draft' | 'open' | 'closed' | 'published')
   UNIQUE (competition_id, display_order)
+
+round_category                          -- ADR-065 : l'état d'un tour, par catégorie
+  round_id → round, category_id → category
+  status ('draft' | 'open' | 'closed' | 'published')
+  PRIMARY KEY (round_id, category_id)   -- ligne absente = 'draft'
 
 round_route                             -- quelles voies dans quel tour, pour qui
   round_id → round, route_id → route, category_id → category
@@ -752,7 +757,8 @@ POST   /competitions/:id/qrcodes.pdf           un POST, pas un GET : inclut
                                                 client fournit pour les autres
                                                 (ADR-026)
 
-POST   /competitions/:id/round-status/:rid     { status } — transitions de tour ;
+POST   /competitions/:id/round-status/:rid     { status, categoryIds } — transitions
+                                                d'un tour, par catégorie (tout ou rien) ;
                                                 ouvrir fige les qualifiés
                                                 (ADR-054)
 GET    /competitions/:id/round-status/:rid/qualifiers
