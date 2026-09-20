@@ -2333,6 +2333,55 @@ une catégorie fait passer la compétition à « En cours »).
 
 ---
 
+## ADR-066 — Lot 15 : photo annotée de la voie
+
+**Date :** 2026-09-20
+**Contexte :** les juges reçoivent hors de l'application une photo de leur voie,
+annotée à la main avec les numéros de prises. On la met dans l'application : l'organisateur
+téléverse la photo et place les prises, le juge la consulte hors ligne depuis son écran de
+saisie, l'organisateur imprime des fiches « voie ». La détection automatique des prises par
+couleur est le Lot 16 (à régler sur de vraies photos) ; ce lot ne la prépare pas.
+
+**Décision (actée avec l'utilisateur) :**
+
+1. **Une photo par voie.** Une photo de mur commune à plusieurs voies se téléverse sur
+   chaque voie, avec une annotation par voie. Plusieurs photos par voie : `TODO.md`.
+2. **Numérotation par hauteur puis correction.** « Renuméroter de bas en haut » donne le
+   numéro 1 à la prise la plus basse sur la photo ; l'organisateur corrige à la main
+   (traversées, dévers, où la hauteur ne suit pas le parcours).
+3. **La photo est ré-encodée en JPEG dans le navigateur** (côté long 1600 px, qualité 0,85) :
+   orientation EXIF appliquée, GPS retiré, poids d'environ 300 Ko. Le serveur n'accepte que
+   du JPEG et le vérifie sur les octets de signature (`FF D8 FF`), jamais sur le type
+   déclaré (même principe que les vidéos, ADR-058). JPEG seul car `pdf-lib` n'embarque que
+   PNG et JPEG pour les fiches.
+4. **L'annotation est une liste de coordonnées, pas une image.** `route.photo_holds` (jsonb)
+   contient `{ number, x, y }` avec `x` et `y` normalisés dans [0, 1] : indépendants de la
+   résolution, corrigeables sans renvoyer la photo, dessinés en surimpression (écran juge)
+   ou par `pdf-lib` (fiches). La photo est un `asset` de type `route_photo`
+   (`route.photo_asset_id`), stockée par le `StorageAdapter` d'ADR-058.
+5. **Verrou : photo et annotation sont figées dès qu'un passage existe sur la voie**
+   (409, comme `hold_count`, ADR-004). Renuméroter en cours de compétition changerait le
+   sens de « prise 12 » pour les juges qui ont déjà saisi. Corollaire assumé : un flou
+   découvert après le premier passage ne peut plus être remplacé.
+6. **Hors ligne : la photo vit dans IndexedDB** (Dexie version 2, table `routePhotos`), pas
+   dans le cache HTTP du service worker. Le `NetworkFirst` de l'API expire au bout de 24 h,
+   ce qui contredirait « aucun écran de juge ne dépend du réseau ». L'amorçage juge ne
+   renvoie que l'identifiant et les prises ; le client télécharge l'image (en-tête Bearer)
+   quand l'identifiant a changé. Un échec de téléchargement n'échoue pas l'amorçage.
+   La migration Dexie v1→v2 ne touche jamais à la file d'envoi.
+7. **Juge : bouton visible « Voir la voie », panneau qui glisse depuis la droite,** zoom par
+   boutons ×1/×2/×3 et défilement. Le balayage horizontal ferme le panneau en plus du bouton,
+   jamais à la place (`CLAUDE.md` : pas de geste caché).
+8. **Fiches voie : PDF côté serveur** (`pdf-lib`, comme `qrcode-pdf.ts`), une page A4 par voie
+   ayant une photo. L'export JSON exclut photo et annotation, comme `video_asset_id`.
+
+**Alternatives écartées :** annotation « cuite » dans l'image (corriger un numéro obligerait
+à renvoyer la photo) ; cache HTTP du service worker (expiration) ; protocole d'envoi par
+morceaux (excessif pour environ 300 Ko, une requête `PUT` suffit) ; PNG et WebP côté
+serveur (le client ré-encode toujours).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
