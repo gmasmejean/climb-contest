@@ -69,6 +69,7 @@ const stillCorrectable = computed(
 // écraserait sinon une saisie du juge déjà en cours à l'écran).
 let prefilled = false
 let draftStarted = false
+const draftRestored = ref(false)
 
 // Le brouillon démarre APRÈS le préremplissage : ses valeurs sont l'état de
 // départ de l'écran, et un brouillon restauré écrase le préremplissage. Pas
@@ -81,7 +82,9 @@ function tryStartDraft(): void {
     baseAscentId: competitor.value.ascent?.id ?? null,
     holdCount: detail.value.route.holdCount,
   })
-  if (restored) toast.show('Saisie retrouvée : vérifiez-la avant de valider.', 'info')
+  // Un encart dans la page, pas un toast : à 360 px le toast recouvrait la
+  // rangée Neutre / + — celle que le juge doit justement revérifier.
+  draftRestored.value = restored
 }
 
 watch(
@@ -262,6 +265,14 @@ async function confirm(): Promise<void> {
       </header>
 
       <template v-if="step === 'entry'">
+        <p
+          v-if="draftRestored"
+          role="status"
+          class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          Saisie retrouvée : vérifiez-la avant de valider.
+        </p>
+
         <div class="flex flex-col gap-2">
           <span class="text-sm font-medium text-gray-900">Numéro de prise</span>
           <NumericKeypad

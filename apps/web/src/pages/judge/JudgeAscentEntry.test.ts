@@ -155,7 +155,7 @@ describe('JudgeAscentEntry', () => {
   // ADR-061 : la saisie non confirmée survit à un rechargement de page.
   describe('brouillon de saisie', () => {
     const DRAFT_KEY = 'climbcontest.judge.ascentDraft'
-    const RESTORED_TOAST = 'Saisie retrouvée : vérifiez-la avant de valider.'
+    const RESTORED_MESSAGE = 'Saisie retrouvée : vérifiez-la avant de valider.'
 
     const screen: DraftTarget = {
       routeId: 'route-1',
@@ -199,12 +199,6 @@ describe('JudgeAscentEntry', () => {
       return wrapper.text()
     }
 
-    // La pile de toasts est partagée et plafonnée (3) : on la vide avant chaque
-    // test et on cherche des TEXTES, jamais un effectif.
-    function toastTexts(): string[] {
-      return useToast().toasts.map((toast) => toast.text)
-    }
-
     // Le moteur de synchronisation est un singleton : il peut réécrire dans Dexie
     // l'élément d'un test précédent. On cherche donc SA saisie, pas un effectif.
     async function queuedHoldNumbers(): Promise<Array<number | null>> {
@@ -218,15 +212,14 @@ describe('JudgeAscentEntry', () => {
     }
 
     beforeEach(async () => {
-      const { toasts, dismiss } = useToast()
-      for (const toast of [...toasts]) dismiss(toast.id)
       await judgeDb.routeDetails.put({ routeId: 'route-1', detail: routeDetail })
     })
 
-    it('n’écrit rien tant que le juge n’a rien changé', async () => {
-      await openEntry()
+    it('n’écrit rien tant que le juge n’a rien changé, et n’annonce rien', async () => {
+      const wrapper = await openEntry()
 
       expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
+      expect(wrapper.text()).not.toContain(RESTORED_MESSAGE)
     })
 
     it('écrit le brouillon dès l’appui, dans le même tour', async () => {
@@ -275,7 +268,7 @@ describe('JudgeAscentEntry', () => {
       // L'étape de saisie, pas le récapitulatif : le juge revoit avant de confirmer.
       expect(buttonLabelled(second, 'Voir le récapitulatif')).toBeDefined()
       expect(buttonLabelled(second, 'Confirmer')).toBeUndefined()
-      expect(toastTexts()).toEqual([RESTORED_TOAST])
+      expect(second.text()).toContain(RESTORED_MESSAGE)
       expect(await recapText(second)).toContain('prise 37+')
       // Rien n'est parti tout seul.
       expect(await queuedHoldNumbers()).not.toContain(37)
@@ -295,7 +288,7 @@ describe('JudgeAscentEntry', () => {
 
       const wrapper = await openEntry()
 
-      expect(toastTexts()).not.toContain(RESTORED_TOAST)
+      expect(wrapper.text()).not.toContain(RESTORED_MESSAGE)
       expect(await recapText(wrapper)).toContain('Indiquez la prise atteinte')
       expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
     })
@@ -305,7 +298,7 @@ describe('JudgeAscentEntry', () => {
 
       const wrapper = await openEntry()
 
-      expect(toastTexts()).not.toContain(RESTORED_TOAST)
+      expect(wrapper.text()).not.toContain(RESTORED_MESSAGE)
       expect(await recapText(wrapper)).toContain('Indiquez la prise atteinte')
       expect(storedDraft()?.competitorId).toBe('comp-2')
     })
@@ -371,7 +364,7 @@ describe('JudgeAscentEntry', () => {
       // C'est bien l'écran de correction, prérempli par le passage écrit (30) —
       // pas par le brouillon périmé (33).
       expect(wrapper.text()).toContain('Correction')
-      expect(toastTexts()).not.toContain(RESTORED_TOAST)
+      expect(wrapper.text()).not.toContain(RESTORED_MESSAGE)
       expect(await recapText(wrapper)).toContain('prise 30')
       expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
     })
@@ -409,7 +402,7 @@ describe('JudgeAscentEntry', () => {
 
       const wrapper = await openEntry()
 
-      expect(toastTexts()).toEqual([RESTORED_TOAST])
+      expect(wrapper.text()).toContain(RESTORED_MESSAGE)
       expect(await recapText(wrapper)).toContain('prise 33+')
     })
   })

@@ -2068,7 +2068,9 @@ relisant le code pour comprendre pourquoi une appli restait périmée après un
      rechargement dans cette fenêtre perdrait le dernier appui.
    - Restauré **dans l'étape « saisie », jamais dans le récapitulatif** : le juge
      revoit ses valeurs et confirme lui-même, rien ne part tout seul. Un message
-     l'annonce (« Saisie retrouvée : vérifiez-la avant de valider. »).
+     l'annonce par un **encart dans la page** (« Saisie retrouvée : vérifiez-la avant de
+     valider. »), pas par un toast : vérifié à 360 px, le toast recouvrait la rangée
+     Neutre / +, celle que le juge doit justement revérifier.
    - **Périmé au bout de 10 minutes** (`DRAFT_MAX_AGE_MS`, décision du 2026-09-20).
      Un `savedAt` dans le futur (horloge du téléphone reculée) est traité comme périmé.
    - **N'est repris que s'il désigne exactement cet écran** : même voie, même
