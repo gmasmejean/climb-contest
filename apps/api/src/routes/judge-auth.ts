@@ -40,7 +40,15 @@ async function findJudgeByToken(db: Database, token: string) {
     where: and(eq(judge.accessTokenPrefix, prefix), isNull(judge.deletedAt)),
   })
   const tokenHash = hashToken(token)
-  return candidates.find((row) => row.accessTokenHash === tokenHash) ?? null
+  const found = candidates.find((row) => row.accessTokenHash === tokenHash)
+  if (!found) return null
+  // Compétition à la corbeille (ADR-063) : le lien ne marche plus, exactement
+  // comme un lien inconnu — jamais de distinction entre les deux.
+  const live = await db.query.competition.findFirst({
+    columns: { id: true },
+    where: and(eq(competition.id, found.competitionId), isNull(competition.deletedAt)),
+  })
+  return live ? found : null
 }
 
 async function assignedRoutesForJudge(db: Database, judgeId: string) {

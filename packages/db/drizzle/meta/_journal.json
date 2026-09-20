@@ -57,6 +57,13 @@
       "when": 1789808713040,
       "tag": "0008_lot9_competition_purged_at",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789903160679,
+      "tag": "0009_lot11_competition_deletion_log",
+      "breakpoints": true
     }
   ]
 }

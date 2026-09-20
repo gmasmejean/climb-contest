@@ -372,6 +372,14 @@ competition
                                          -- s'applique qu'aux actions futures
                                          -- (DECISIONS.md ADR-027)
   created_by → user
+  deleted_at (nullable)                 -- corbeille (Lot 11, ADR-063) : non nul =
+                                         -- à la corbeille, invisible partout,
+                                         -- accès juge et public coupés
+
+competition_deletion_log                -- Lot 11, ADR-063 : trace qui survit
+  id, competition_id (uuid, PAS de FK), club_id → club,
+  competition_name, action ('trashed' | 'restored' | 'deleted'),
+  actor_user_id → user, created_at
 
 category
   id, competition_id → competition
@@ -686,6 +694,10 @@ POST   /competitions
 GET    /competitions/:id
 PATCH  /competitions/:id
 POST   /competitions/:id/status          { status }
+DELETE /competitions/:id                 met à la corbeille (409 si « En cours ») — Lot 11
+GET    /competitions/trash               la corbeille du club (déclarée avant /:id)
+POST   /competitions/:id/restore         sort de la corbeille (idempotent)
+DELETE /competitions/:id/permanent       supprime tout — seulement depuis la corbeille
 
 GET    /competitions/:id/readiness             contrôle « prêt à démarrer ? » (Lot 3)
 

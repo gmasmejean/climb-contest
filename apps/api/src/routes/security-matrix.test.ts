@@ -43,7 +43,12 @@ export function classify(method: string, routePath: string): Kind | 'unclassifie
   if (ANONYMOUS_AUTH.test(routePath)) return 'anonymous'
   if (method === 'POST' && routePath === '/api/v1/auth/invitations') return 'organizer'
   if (routePath.startsWith('/api/v1/competitions/:id')) return 'organizer-competition'
-  if (routePath === '/api/v1/competitions' || routePath === '/api/v1/competitions/import')
+  if (
+    routePath === '/api/v1/competitions' ||
+    routePath === '/api/v1/competitions/import' ||
+    // Corbeille (Lot 11) : la liste des compétitions supprimées DU CLUB, sans `:id`.
+    routePath === '/api/v1/competitions/trash'
+  )
     return 'organizer'
   return 'unclassified'
 }

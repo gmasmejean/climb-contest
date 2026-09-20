@@ -37,6 +37,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/competitions/trash',
+      name: 'competition-trash',
+      component: () => import('./pages/competitions/CompetitionTrash.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/competitions/:id',
       name: 'competition-detail',
       component: () => import('./pages/competitions/CompetitionDetail.vue'),

@@ -80,6 +80,18 @@ Onglet **Exports** : **Résultats en PDF** (prêt à afficher ou archiver, avec 
 ### Sauvegarde
 **Télécharger la sauvegarde** : toute la compétition, historique des saisies compris, dans un fichier à garder au chaud. **Mes compétitions → Importer une sauvegarde** la recrée comme une **nouvelle** compétition (aperçu d'abord). Les accès des juges ne sont pas restaurés : recréez-les et réimprimez les QR codes.
 
+### Retrouver une compétition
+Dans **Mes compétitions**, tapez le début d'un nom ou d'un lieu dans **Rechercher** (les accents et les majuscules ne comptent pas). **Trier par** propose la date, le nom ou le statut. **Filtres** permet de ne garder que certains statuts, ou que les compétitions **à venir ou en cours** / **passées**, ou une période. **Réinitialiser** remet tout comme au début. Si vous rechargez la page, votre recherche est conservée.
+
+### Supprimer une compétition (la corbeille)
+Dans **Mes compétitions**, **Sélectionner**, cochez une ou plusieurs compétitions, puis **Mettre à la corbeille**. Il n'y a pas de confirmation : rien n'est effacé, vous pouvez tout défaire. Une compétition **« En cours »** ne peut pas être mise à la corbeille : passez-la à **Clôturée** dans **Infos** d'abord.
+
+Une compétition à la corbeille disparaît de votre liste, et **les juges ne peuvent plus saisir ni ouvrir leur lien**, le public non plus. Les passages qu'un juge avait saisis mais pas encore envoyés restent sur son téléphone et partent quand vous restaurez.
+
+Ouvrez **Corbeille** (en haut de la liste) pour **Restaurer** : la compétition revient exactement comme elle était. **Supprimer définitivement** efface la compétition **et toutes ses données** (compétiteurs, passages, résultats, accès des juges, vidéos) : c'est irréversible et on vous demande de confirmer. Faites d'abord une **sauvegarde** si vous voulez en garder une copie. Tout organisateur du club peut supprimer ou restaurer.
+
+> **Différence avec la suppression des données personnelles (RGPD)** : celle-ci efface les noms et garde les résultats. La corbeille supprime la compétition entière.
+
 ### Données personnelles (RGPD)
 Les compétiteurs sont souvent mineurs. Seul le **propriétaire du club** peut, dans **Exports**, **exporter les données personnelles** puis les **supprimer**. La suppression est **définitive** : noms, années de naissance, clubs, licences, vidéos et motifs disparaissent, les résultats restent sans personne derrière, et le lien public cesse de marcher. Il faut retaper le nom exact de la compétition. La liste des compétitions vous **rappelle** au bout de 2 ans, puis 5 ans ; rien n'est jamais supprimé tout seul.
 
@@ -96,4 +108,5 @@ Les compétiteurs sont souvent mineurs. Seul le **propriétaire du club** peut, 
 | **Un juge a perdu son lien** | Onglet **Juges**, bouton **Voir l'accès**. Si le juge a un code, **Régénérer le PIN** ; sinon, **Révoquer** son accès et recréez-le pour obtenir un nouveau lien. |
 | **Un classement public semble bloqué** | Le public voit « Reconnexion… » : la page se remet à jour toute seule. Un classement « provisoire » n'est pas une panne. |
 | **Erreur de saisie découverte tard** | **Corriger** avec un motif (Pilotage → Voies). En phases, si un tour suivant est ouvert, la liste des qualifiés ne change plus. |
+| **J'ai supprimé une compétition par erreur** | **Mes compétitions → Corbeille → Restaurer**. Tant que vous n'avez pas choisi « Supprimer définitivement », rien n'est perdu. |
 | **Vidéo qui ne s'envoie pas** | Le fichier doit être MP4, MOV ou WebM et respecter la taille maximale (200 Mo par défaut). Un lien YouTube ou Vimeo marche toujours. |

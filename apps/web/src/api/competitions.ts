@@ -33,6 +33,11 @@ const json = (body: unknown) => JSON.stringify(body)
 
 export const competitionsApi = {
   list: () => apiFetch<Competition[]>('/competitions'),
+  listTrash: () => apiFetch<Competition[]>('/competitions/trash'),
+  trash: (id: string) => apiFetch<Competition>(`/competitions/${id}`, { method: 'DELETE' }),
+  restore: (id: string) => apiFetch<Competition>(`/competitions/${id}/restore`, { method: 'POST' }),
+  deletePermanently: (id: string) =>
+    apiFetch<undefined>(`/competitions/${id}/permanent`, { method: 'DELETE' }),
   get: (id: string) => apiFetch<Competition>(`/competitions/${id}`),
   create: (input: CreateCompetitionInput) =>
     apiFetch<Competition>('/competitions', { method: 'POST', body: json(input) }),

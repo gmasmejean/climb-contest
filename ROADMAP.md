@@ -459,6 +459,34 @@ qu'aucune saisie de juge ne soit perdue.
 
 ---
 
+## Lot 11 — Liste des compétitions : recherche et corbeille
+
+> Lot ajouté après le Lot 10, à partir de demandes d'organisateur. Décisions :
+> ADR-062 (liste) et ADR-063 (corbeille).
+
+```
+Lot 11 : retrouver une compétition dans la liste, et pouvoir en supprimer.
+
+1. Liste des compétitions : rechercher (nom, lieu), filtrer (statut, date de
+   début, à venir / passées), trier (nom, statut, date), le tout dans
+   l'adresse de la page.
+
+2. Corbeille en deux temps : mettre à la corbeille (sans confirmation,
+   réversible, refusé si la compétition est « En cours »), restaurer, puis
+   supprimer définitivement depuis la corbeille (une confirmation). Une ou
+   plusieurs à la fois, tout organisateur du club. La purge RGPD ne change pas.
+
+3. Une compétition à la corbeille coupe aussi l'accès des juges (aucune
+   saisie perdue : elles restent en file locale) et le lien public.
+
+4. Migration réversible : table de trace qui survit à la suppression.
+
+5. Tests : logique de la liste, API (dont un contrôle du catalogue Postgres
+   pour qu'aucune table ne soit oubliée), écrans, et un test Playwright à 360 px.
+```
+
+---
+
 ## Conseils d'utilisation
 
 **Une session par lot.** Ouvre une session fraîche pour chaque lot. Les

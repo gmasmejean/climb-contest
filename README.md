@@ -216,6 +216,24 @@ les octets déjà envoyés : rechoisir le même fichier reprend. Taille maximale
 ADR-058 (le stockage S3 n'est pas livré : `STORAGE_DRIVER=s3` échoue
 explicitement).
 
+## Liste des compétitions et corbeille
+
+**Mes compétitions** se recherche (nom ou lieu, sans tenir compte des accents ni
+de la casse), se filtre (statut, date de début, « À venir ou en cours » /
+« Passées ») et se trie (date, nom, statut). La vue est dans l'adresse de la page
+(`?q=&status=&from=&to=&when=&sort=&dir=`) : elle survit à un rechargement et se
+partage. Le filtrage se fait dans le navigateur (DECISIONS.md ADR-062).
+
+Supprimer se fait **en deux temps** (ADR-063). **Sélectionner**, cocher, puis
+**Mettre à la corbeille** : sans confirmation, réversible, et refusé pour une
+compétition « En cours ». La page **Corbeille** permet de **restaurer**, ou de
+**supprimer définitivement** (une confirmation) : fichiers et lignes de toute la
+compétition disparaissent, seule une trace sans donnée personnelle reste
+(`competition_deletion_log`). Tout organisateur du club peut le faire. Une
+compétition à la corbeille n'est plus accessible aux juges ni au public ; les
+saisies d'un juge restent dans son téléphone et remontent après restauration. Rien
+n'est supprimé automatiquement. La purge RGPD (ci-dessus) est une autre action.
+
 ## Exports et sauvegarde
 
 L'onglet **Exports** d'une compétition télécharge les résultats en PDF (A4,
@@ -237,7 +255,7 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Seize tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Dix-neuf tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
@@ -250,4 +268,4 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   (qualification à deux voies, demi-finale, finale, classement final avec
   contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
   sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise —
-  la purge des données personnelles ; le mode dégradé quand le serveur est injoignable ; voir `e2e/README.md` pour les lancer.
+  la purge des données personnelles ; le mode dégradé quand le serveur est injoignable ; la recherche dans la liste, la corbeille, la restauration et la suppression définitive d'une compétition (aussi à 360 px) ; voir `e2e/README.md` pour les lancer.

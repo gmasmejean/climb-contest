@@ -16,6 +16,7 @@ import { errorHandler, problem } from './middleware/problem'
 import { createAuthRoutes } from './routes/auth'
 import { createCategoryRoutes } from './routes/categories'
 import { createCompetitionImportRoutes } from './routes/competition-import'
+import { createCompetitionTrashRoutes } from './routes/competition-trash'
 import { createCompetitionRoutes } from './routes/competitions'
 import { createCompetitorRoutes } from './routes/competitors'
 import { createConflictsRoutes } from './routes/conflicts'
@@ -145,6 +146,11 @@ export function createApp(deps: AppDeps): Hono {
   app.route(
     '/api/v1/competitions/import',
     createCompetitionImportRoutes({ ...scopedDeps, now: deps.now }),
+  )
+  // Avant `createCompetitionRoutes` : `GET /trash` ne doit pas être pris pour `GET /:id`.
+  app.route(
+    '/api/v1/competitions',
+    createCompetitionTrashRoutes({ ...scopedDeps, storage: deps.storage, now: deps.now }),
   )
   app.route('/api/v1/competitions', createCompetitionRoutes(scopedDeps))
   app.route('/api/v1/competitions/:id/categories', createCategoryRoutes(scopedDeps))

@@ -411,3 +411,29 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   main avant la première émission de Dexie (déjà signalé comme fragile sous
   charge). Le test attend maintenant explicitement que l'écran soit chargé, et 30+
   exécutions, dont sous saturation CPU, sont passées depuis. À surveiller.
+
+## Depuis le Lot 11
+
+- **Le statut de compétition n'a presque aucun effet.** Seul `running` fait quelque
+  chose (il ouvre le tour implicite du format contest, ADR-030) ; `open`, `closed` et
+  `archived` ne sont lus par personne, et les transitions sont libres (n'importe quel
+  statut vers n'importe quel autre, sans contrôle). Le juge dépend du statut du **tour**,
+  le public aussi. À décider : donner un sens à `open` (inscriptions ? lien public
+  visible ?), verrouiller `closed`/`archived` en écriture, ou retirer les statuts
+  inutiles. Constaté en préparant la corbeille (ADR-063), pas traité.
+- **La corbeille ne refuse que `running`.** Un tour resté « ouvert » sur une
+  compétition marquée « Clôturée » peut être mis à la corbeille avec des juges en train
+  de saisir. Sans perte (les saisies restent en file locale et remontent après
+  restauration), mais l'organisateur peut ne pas comprendre. Refuser aussi si un tour
+  est ouvert était l'autre option (ADR-063).
+- **Pas de purge automatique de la corbeille**, volontairement (ADR-063, comme
+  ADR-051). Elle affiche « à la corbeille depuis N jours » mais ne rappelle rien : à
+  ajouter comme le rappel de conservation si des corbeilles oubliées s'accumulent.
+- **Filtrage de la liste côté navigateur** (ADR-062) : à passer côté serveur au-delà de
+  quelques centaines de compétitions par club.
+- **Le journal `competition_deletion_log` n'a pas d'écran.** Il est écrit et testé, mais
+  seul un accès à la base permet de le lire.
+- **La suppression définitive n'est pas atomique avec les fichiers** : les fichiers
+  partent avant la transaction SQL. Si elle échoue, la compétition reste à la corbeille
+  avec des vidéos « introuvables » (bénin, voulu — même ordre que la purge RGPD).
+

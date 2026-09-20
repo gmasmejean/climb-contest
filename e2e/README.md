@@ -1,6 +1,6 @@
 # Tests end-to-end (Playwright)
 
-Dix-huit tests à ce jour :
+Dix-neuf tests à ce jour :
 
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
@@ -119,3 +119,10 @@ pnpm exec playwright test --project=mobile
 `E2E_BASE_URL` permet de cibler une autre URL que `http://localhost:8080`
 (celle de Caddy par défaut), `E2E_MAILPIT_URL` une autre URL que
 `http://localhost:8025`.
+
+- `competition-trash.spec.ts` — cherche dans la liste des compétitions (sans
+  accent ni casse, état dans l'adresse), sélectionne (une compétition « En cours »
+  n'est pas cochable), met à la corbeille sans confirmation, restaure, puis
+  supprime définitivement derrière une confirmation. Tourne aussi dans le projet
+  `mobile` (360 px) : cibles tactiles ≥ 48 px et aucun débordement horizontal
+  (`ROADMAP.md` Lot 11, ADR-062 et ADR-063).

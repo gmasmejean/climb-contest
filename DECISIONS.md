@@ -2123,6 +2123,111 @@ cours (brouillon).
 
 ---
 
+## ADR-062 — Lot 11 : recherche, filtres et tri de la liste des compétitions, côté navigateur
+
+**Date :** 2026-09-20
+**Contexte :** l'organisateur voulait retrouver une compétition par nom, statut ou
+date. `GET /competitions` renvoie déjà toutes celles du club, triées par date de
+début décroissante ; un club en a quelques dizaines.
+
+**Décision :**
+
+- **Tout se fait dans le navigateur**, sur la liste déjà chargée : pas de nouveau
+  paramètre d'API, pas de requête à chaque frappe. La logique est pure
+  (`apps/web/src/lib/competition-list-view.ts`), la date du jour est un paramètre.
+- **Recherche** : nom et lieu, insensible à la casse et aux accents, tous les mots
+  doivent être présents. **Statuts** : plusieurs à la fois ; *aucun statut choisi
+  = aucun filtre* (pas de « tout décoché = liste vide »). **Date** : période sur la
+  date de **début**, bornes incluses, et deux raccourcis qui se partagent la liste
+  sans trou ni doublon : « À venir ou en cours » (`endsOn >= aujourd'hui`) et
+  « Passées » (`endsOn < aujourd'hui`). « Aujourd'hui » est la date **locale**
+  (`toLocalDay`), pas `toISOString()` : à 0 h 30 heure de Paris, la date UTC est
+  encore celle d'hier.
+- **Tri** : date, nom, statut, dans les deux sens (un seul sélecteur de six
+  options, sans geste caché). Le statut suit le **cycle de vie** (brouillon,
+  ouverte, en cours, clôturée, archivée), pas l'ordre alphabétique. Départage
+  stable : date de début décroissante, puis nom, puis identifiant. Défaut : date
+  décroissante, comme avant.
+- **La vue vit dans l'adresse** (`?q=&status=&from=&to=&when=&sort=&dir=`) : le
+  retour depuis une compétition retrouve la liste filtrée, un lien se partage.
+  Une adresse modifiée à la main n'est jamais une erreur : le invalide est ignoré.
+  Seul ce qui s'écarte du défaut est écrit.
+- Les compétitions **archivées restent visibles par défaut** (décision du 2026-09-20).
+
+**Limite assumée :** filtrer côté client suppose une liste de taille raisonnable. Au-delà
+de quelques centaines de compétitions par club, il faudra filtrer côté serveur
+(`TODO.md`).
+
+**Alternatives écartées :** filtrage côté serveur (un contrat d'API et un aller-retour
+réseau par frappe, sur un réseau de salle) ; « tout décoché » comme filtre vide.
+
+---
+
+## ADR-063 — Lot 11 : supprimer une compétition, en deux temps
+
+**Date :** 2026-09-20
+**Contexte :** l'organisateur voulait supprimer une ou plusieurs compétitions « et
+leurs données ». Aucune route n'existait ; `competition.deleted_at` était filtré
+partout mais jamais écrit. `CLAUDE.md` (règle n°3) : « toute saisie destructive est
+réversible et laisse une trace » — une suppression définitive directe la violerait.
+La purge RGPD (ADR-051) est une autre action : elle anonymise et **garde** la
+compétition et ses résultats ; elle n'est pas modifiée.
+
+**Décision (actée avec l'utilisateur) :**
+
+1. **Corbeille** — `DELETE /competitions/:id` pose `deleted_at`. Réversible :
+   `POST .../restore` remet la compétition exactement comme elle était. **Aucune
+   confirmation** (ni à la mise à la corbeille ni à la restauration) : c'est la
+   corbeille qui protège. La restauration est idempotente.
+2. **Suppression définitive** — `DELETE .../permanent`, **uniquement depuis la
+   corbeille** (409 « Pas dans la corbeille » sinon). Efface tous les fichiers puis
+   toutes les lignes. **Une seule confirmation** dans l'interface (modale qui liste
+   ce qui va disparaître, sans retaper le nom) : c'est la seule étape sans filet.
+3. **Tout organisateur du club** peut faire les trois (pas `requireOwner`),
+   contrairement à la purge RGPD. Hors club : 404, jamais 403.
+4. **Garde-fou : refus seulement si `status = 'running'`** (409, avec le chemin à
+   suivre : « Clôturez-la d'abord »). Le statut de compétition n'est qu'un libellé
+   libre — seul `running` a un effet (il ouvre le tour implicite du format contest,
+   ADR-030) ; `open`, `closed` et `archived` n'ont aucun effet fonctionnel et les
+   transitions sont libres (`TODO.md`). Le refus se fait par une seule requête
+   conditionnelle : un changement de statut concurrent ne la contourne pas.
+   *Écarté :* refuser aussi si un tour est ouvert (plus fidèle à « un juge peut
+   saisir »), sur décision de l'utilisateur.
+5. **La trace survit** : la table `competition_deletion_log` (migration 0009,
+   réversible) reçoit une ligne par étape (`trashed`, `restored`, `deleted`) avec le
+   nom de la compétition et l'auteur. `competition_id` **n'est pas une clé
+   étrangère**, pour survivre à la suppression définitive. Aucune donnée personnelle
+   de compétiteur ou de juge.
+6. **Accès juge coupé.** Les routes juge ne testaient que `judge.deleted_at` : un juge
+   aurait pu continuer à saisir dans une compétition à la corbeille. Le lien QR, la
+   connexion et toute session ouverte répondent maintenant 404 (« Cette compétition
+   n'est plus disponible… Vos saisies restent enregistrées sur ce téléphone »). **Aucune
+   saisie n'est perdue** : une erreur HTTP fait revenir toutes les saisies en file
+   locale (`SyncEngine`), et elles remontent après restauration. La page publique
+   respectait déjà `deleted_at`.
+7. **Ordre de suppression.** Aucune clé étrangère n'a de `ON DELETE CASCADE` : la
+   suppression vide 14 tables dans l'ordre des clés (`COMPETITION_OWNED_TABLES`). Un
+   test compare cette liste au catalogue Postgres (récursivement) : **une table
+   ajoutée plus tard sans être listée fait échouer la suite**. Les fichiers sont
+   supprimés **avant** les lignes (comme la purge : une vidéo « introuvable » est
+   bénine, un fichier oublié qui montre des mineurs ne l'est pas), tous les médias,
+   y compris ceux déjà retirés d'une voie. Sans stockage configuré alors que des
+   vidéos existent, la suppression est refusée : jamais « à moitié ».
+8. **Plusieurs à la fois : pas de route « en lot ».** L'interface traite les
+   compétitions une par une et rend un bilan en français de ce qui a été fait et de ce
+   qui ne l'a pas été (`apps/web/src/lib/bulk-action.ts`). Le refus d'une compétition
+   « En cours » ne bloque ni ne cache le succès des autres.
+9. **Pas de purge automatique de la corbeille** (cohérent avec ADR-051, données de
+   mineurs) : la page affiche seulement « à la corbeille depuis N jours ».
+
+**Alternatives écartées :** suppression définitive directe avec retape du nom
+(viole la règle n°3, et ne passe pas à l'échelle pour plusieurs compétitions) ; corbeille
+vidée automatiquement au bout de 30 jours (irréversible sans action humaine) ;
+`ON DELETE CASCADE` (réécrit 14 clés étrangères et rend un oubli silencieux) ; route
+« en lot » (surface d'API et atomicité partielle à définir pour un gain nul).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
