@@ -1,35 +1,19 @@
 import { registerSW } from 'virtual:pwa-register'
 
-import { syncEngine } from './judge/sync-runtime'
-
 /**
- * Gel de l'ACTIVATION d'une nouvelle version tant qu'une saisie juge est en
- * attente (ROADMAP.md Lot 6, point 2). Le navigateur installe toujours un
- * nouveau service worker en arrière-plan dès qu'il le détecte — ça, rien ne
- * l'empêche, et ce n'est pas dangereux tant qu'il ne prend pas la main. Ce
- * qui est gelé ici, c'est le seul moment qui pourrait interrompre une
- * saisie : `skipWaiting` + rechargement de page.
+ * Active une nouvelle version de l'appli dès que le navigateur l'a installée
+ * (ADR-061, qui remplace le gel d'ADR-035).
+ *
+ * Recharger ne perd rien : la file de saisies est dans IndexedDB avant tout
+ * réseau et le serveur est idempotent, et la saisie en cours à l'écran est
+ * gardée par un brouillon (`judge/ascent-draft.ts`). `registerType: 'prompt'`
+ * reste : c'est lui qui laisse ce module piloter l'appel.
  */
-export function setUpPwaUpdateGate(): void {
-  let needsRefresh = false
-
+export function setUpPwaUpdate(): void {
   const updateSW = registerSW({
     immediate: true,
     onNeedRefresh: () => {
-      needsRefresh = true
-      tryActivate()
+      void updateSW(true)
     },
   })
-
-  function tryActivate(): void {
-    if (!needsRefresh) return
-    const queueEmpty = syncEngine
-      .snapshot()
-      .every((item) => item.state !== 'pending' && item.state !== 'sending')
-    if (!queueEmpty) return
-    needsRefresh = false
-    void updateSW(true)
-  }
-
-  syncEngine.subscribe(tryActivate)
 }
