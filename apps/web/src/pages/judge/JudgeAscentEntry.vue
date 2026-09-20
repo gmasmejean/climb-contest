@@ -8,6 +8,7 @@ import { useWakeLock } from '../../composables/useWakeLock'
 import { getDeviceId } from '../../judge/device-id'
 import { vibrateOnConfirm } from '../../judge/haptics'
 import { useJudgeRouteDetail } from '../../judge/local-store'
+import { useAscentDraft } from '../../judge/useAscentDraft'
 import { useAscentRowState } from '../../judge/useAscentRowState'
 
 useWakeLock()
@@ -36,6 +37,14 @@ const entryError = ref('')
 const originalRecordedAt = ref('')
 const supersedesId = ref('')
 
+// Brouillon de la saisie en cours (ADR-061) : survit à un rechargement de page,
+// dont celui d'une mise à jour de l'appli.
+const draft = useAscentDraft({
+  routeId,
+  competitorId,
+  values: { holdNumber, modifier, isTop, status, climbTimeMs },
+})
+
 const competitor = computed(
   () => detail.value?.competitors.find((c) => c.id === competitorId) ?? null,
 )
@@ -59,6 +68,22 @@ const stillCorrectable = computed(
 // disponible, jamais à chaque mise à jour réactive du cache local (qui
 // écraserait sinon une saisie du juge déjà en cours à l'écran).
 let prefilled = false
+let draftStarted = false
+
+// Le brouillon démarre APRÈS le préremplissage : ses valeurs sont l'état de
+// départ de l'écran, et un brouillon restauré écrase le préremplissage. Pas
+// démarré en lecture seule : rien n'y est saisissable.
+function tryStartDraft(): void {
+  if (draftStarted || !prefilled || !competitor.value || !detail.value) return
+  if (mode.value === 'readonly') return
+  draftStarted = true
+  const restored = draft.start({
+    baseAscentId: competitor.value.ascent?.id ?? null,
+    holdCount: detail.value.route.holdCount,
+  })
+  if (restored) toast.show('Saisie retrouvée : vérifiez-la avant de valider.', 'info')
+}
+
 watch(
   competitor,
   (found) => {
@@ -73,9 +98,13 @@ watch(
       originalRecordedAt.value = found.ascent.recordedAt
       supersedesId.value = found.ascent.id
     }
+    tryStartDraft()
   },
   { immediate: true },
 )
+// La lecture seule peut n'être que transitoire (le mode dépend d'une requête
+// locale qui peut répondre après le compétiteur).
+watch(mode, tryStartDraft)
 
 let ticker: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
@@ -168,6 +197,10 @@ async function confirm(): Promise<void> {
       originalRecordedAt.value,
     )
   }
+
+  // Après l'écriture durable dans la file, jamais avant : si la page se recharge
+  // entre « Confirmer » et la fin de l'écriture, le brouillon est encore là.
+  draft.clear()
 
   // Durée réduite (2 s, au lieu des 5 s par défaut) : le toast est rendu au
   // niveau de l'app (App.vue) donc reste affiché par-dessus l'écran SUIVANT

@@ -1,7 +1,8 @@
 import type { QueueItem } from '@climbcontest/sync'
 import { describe, expect, it } from 'vitest'
 
-import { JudgeDatabase } from './local-db'
+import { saveAscentDraft } from './ascent-draft'
+import { JudgeDatabase, resetJudgeDatabase } from './local-db'
 import type { QueuePayload } from './queue-payload'
 
 function makeItem(id: string, competitorId: string): QueueItem<QueuePayload> {
@@ -47,5 +48,20 @@ describe('JudgeDatabase — durabilité (cas SPEC.md § 9 #23)', () => {
     expect(new Set(reloaded.map((item) => item.id))).toEqual(new Set(items.map((item) => item.id)))
 
     db2.close()
+  })
+})
+
+describe('resetJudgeDatabase — changement de juge (ADR-036)', () => {
+  it('supprime aussi le brouillon de saisie du juge précédent (ADR-061)', async () => {
+    saveAscentDraft(
+      { routeId: 'route-1', competitorId: 'comp-1', baseAscentId: null, holdCount: 40 },
+      { holdNumber: 12, modifier: 'none', isTop: false, status: 'valid', climbTimeMs: null },
+      Date.now(),
+    )
+    expect(localStorage.getItem('climbcontest.judge.ascentDraft')).not.toBeNull()
+
+    await resetJudgeDatabase()
+
+    expect(localStorage.getItem('climbcontest.judge.ascentDraft')).toBeNull()
   })
 })
