@@ -93,6 +93,14 @@ const statusMutation = useMutation({
     await queryClient.invalidateQueries({ queryKey: ['competitions'] })
     toast.show('Statut mis à jour.', 'success')
   },
+  // Le serveur refuse de quitter « En cours » tant qu'une catégorie est ouverte
+  // (ADR-065) : son message dit quoi faire, on le montre tel quel.
+  onError: (error) => {
+    toast.show(
+      error instanceof ApiError ? (error.detail ?? error.title) : 'Changement de statut impossible.',
+      'error',
+    )
+  },
 })
 function applyStatus(): void {
   statusMutation.mutate(pendingStatus.value as Competition['status'])

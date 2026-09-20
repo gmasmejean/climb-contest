@@ -53,6 +53,15 @@ const roundStatusLabels: Record<string, string> = {
   published: 'publié',
 }
 
+// ADR-065 : l'état d'un tour se lit pour la catégorie affichée — les U16 peuvent
+// avoir fini leur qualification quand les U18 n'ont pas commencé.
+const roundBadges = computed(() =>
+  (meta.value?.rounds ?? []).flatMap((round) => {
+    const pair = round.categories.find((c) => c.categoryId === selectedCategoryId.value)
+    return pair ? [{ id: round.id, type: round.type, status: pair.status }] : []
+  }),
+)
+
 const connectionState = ref<PublicStreamConnectionState>('connecting')
 const lastUpdatedAt = ref<Date | null>(null)
 
@@ -122,8 +131,8 @@ const lastUpdatedLabel = computed(() => {
         </div>
       </header>
 
-      <div v-if="meta.rounds.length > 0" class="flex flex-wrap gap-2">
-        <Badge v-for="round in meta.rounds" :key="round.id" tone="neutral">
+      <div v-if="roundBadges.length > 0" class="flex flex-wrap gap-2">
+        <Badge v-for="round in roundBadges" :key="round.id" tone="neutral">
           {{ round.type === 'qualification' ? 'Qualification' : round.type === 'semifinal' ? 'Demi-finale' : 'Finale' }}
           : {{ roundStatusLabels[round.status] ?? round.status }}
         </Badge>

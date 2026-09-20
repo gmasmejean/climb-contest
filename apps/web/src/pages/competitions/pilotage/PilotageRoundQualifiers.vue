@@ -5,17 +5,18 @@ import { computed } from 'vue'
 
 import { roundsApi } from '../../../api/competitions'
 
-const props = defineProps<{ competitionId: string; roundId: string; status: string }>()
+// `statusKey` résume l'état de chaque catégorie du tour (ADR-065) : ouvrir ou
+// remettre en brouillon une catégorie change sa liste (figée à l'ouverture,
+// effacée au retour en brouillon — ADR-054), donc la clé de requête en dépend.
+const props = defineProps<{ competitionId: string; roundId: string; statusKey: string }>()
 
-// La clé porte le statut : ouvrir ou remettre en brouillon un tour change la
-// liste (figée à l'ouverture, effacée au retour en brouillon — ADR-054).
 const { data } = useQuery({
   queryKey: computed(() => [
     'competitions',
     props.competitionId,
     'round-qualifiers',
     props.roundId,
-    props.status,
+    props.statusKey,
   ]),
   queryFn: () => roundsApi.qualifiers(props.competitionId, props.roundId),
 })
