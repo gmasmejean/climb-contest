@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { createRouteInputSchema } from '@climbcontest/contracts'
+import { createRouteInputSchema, type RouteHold } from '@climbcontest/contracts'
 import { Button, NumberField, TextField, useToast } from '@climbcontest/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, reactive, ref } from 'vue'
 
 import { ApiError } from '../../../api/client'
 import { categoriesApi, routePhotoApi, routesApi } from '../../../api/competitions'
+import { highestHoldNumber } from '../../../lib/hold-numbering'
 import type { PickedPhoto } from '../../../lib/photo-crop'
 import { PhotoUnreadableError, resizeToJpeg } from '../../../lib/photo-resize'
+import NewRoutePhoto from '../NewRoutePhoto.vue'
 import RoutePhotoEditor from '../RoutePhotoEditor.vue'
-import RoutePhotoPicker from '../RoutePhotoPicker.vue'
 import RouteVideoUploader from '../RouteVideoUploader.vue'
 
 const props = defineProps<{ competitionId: string }>()
@@ -69,8 +70,19 @@ function emptyForm() {
   }
 }
 const form = reactive(emptyForm())
-// Photo choisie à la création (ADR-067) ; en modification, l'éditeur a la sienne.
+// Photo et prises de la voie en cours de création (ADR-067, ADR-068) ; en
+// modification, l'éditeur a les siennes.
 const picked = ref<PickedPhoto | null>(null)
+const holds = ref<RouteHold[]>([])
+// Voie déjà créée dont la photo ou les prises n'ont pas pu partir : « Ajouter »
+// reprend où on s'est arrêté au lieu de créer un doublon.
+const created = ref<{ routeId: string; photoSent: boolean } | null>(null)
+// L'annotation PREND LE PAS sur le champ « Nombre de prises » (ADR-068) : la voie
+// compte autant de prises que le plus haut numéro placé (une numérotation à trou
+// reste valide, l'écran la signale).
+const annotatedCount = computed(() =>
+  editingRouteId.value === null && holds.value.length > 0 ? highestHoldNumber(holds.value) : null,
+)
 const editingRouteId = ref<string | null>(null)
 const editingHasVideo = computed(
   () => routes.value?.find((r) => r.id === editingRouteId.value)?.videoAssetId != null,
@@ -81,7 +93,7 @@ function buildPayload() {
   return {
     number: form.number ?? 0,
     name: form.name || null,
-    holdCount: form.holdCount ?? 0,
+    holdCount: annotatedCount.value ?? form.holdCount ?? 0,
     sector: form.sector || null,
     color: form.color || null,
     videoUrl: form.videoUrl || null,
@@ -95,44 +107,61 @@ function messageOf(error: unknown, fallback: string): string {
   return fallback
 }
 
-// La photo passe par la voie : on la réduit AVANT de créer (un fichier illisible
-// ne laisse pas de voie sans photo), puis on l'envoie une fois la voie créée. Si
-// l'envoi échoue, la voie existe : on le dit et on ouvre la voie pour renvoyer.
+// La photo et les prises passent par la voie : on réduit la photo AVANT de créer
+// (un fichier illisible ne laisse pas de voie orpheline), puis voie, photo, prises.
+// Chaque étape est reprenable : si le réseau lâche en route, `created` retient la
+// voie déjà créée et « Ajouter » la met à jour et termine, sans doublon ni perte.
 const { mutate: createRoute, isPending: isCreating } = useMutation({
   mutationFn: async () => {
     const chosen = picked.value
-    const jpeg = chosen ? await resizeToJpeg(chosen.file, { crop: chosen.crop }) : null
-    const route = await routesApi.create(props.competitionId, buildPayload())
-    if (!jpeg) return { route, photo: 'none' as const }
-    try {
-      await routePhotoApi.upload(props.competitionId, route.id, jpeg)
-      return { route, photo: 'sent' as const }
-    } catch (error) {
-      return {
-        route,
-        photo: 'failed' as const,
-        reason: messageOf(error, 'Vérifiez le réseau et réessayez.'),
-      }
+    const needsPhoto = chosen !== null && created.value?.photoSent !== true
+    const jpeg =
+      chosen && needsPhoto ? await resizeToJpeg(chosen.file, { crop: chosen.crop }) : null
+    const existing = created.value
+    if (existing) {
+      await routesApi.update(props.competitionId, existing.routeId, buildPayload())
+    } else {
+      const route = await routesApi.create(props.competitionId, buildPayload())
+      created.value = { routeId: route.id, photoSent: false }
     }
+    const routeId = created.value?.routeId ?? ''
+    if (jpeg) {
+      await routePhotoApi.upload(props.competitionId, routeId, jpeg)
+      created.value = { routeId, photoSent: true }
+    }
+    if (chosen && holds.value.length > 0) {
+      const ordered = [...holds.value].sort((a, b) => a.number - b.number)
+      await routePhotoApi.saveHolds(props.competitionId, routeId, ordered)
+    }
+    return { withPhoto: chosen !== null, placed: chosen ? holds.value.length : 0 }
   },
-  onSuccess: async (result) => {
+  onSuccess: async ({ withPhoto, placed }) => {
     await refresh()
-    if (result.photo === 'failed') {
-      startEdit(result.route)
-      formError.value = `La voie a été créée, mais sa photo n'a pas pu être envoyée. ${result.reason} Choisissez-la de nouveau ci-dessous.`
-      return
-    }
     Object.assign(form, emptyForm())
     picked.value = null
-    if (result.photo === 'sent') {
+    holds.value = []
+    created.value = null
+    if (withPhoto) {
       toast.show(
-        'Voie créée avec sa photo. Ouvrez « Modifier » pour y placer les prises.',
+        placed > 0
+          ? `Voie créée avec sa photo et ses ${placed} prises.`
+          : 'Voie créée avec sa photo.',
         'success',
       )
     }
   },
-  onError: (error) => {
-    formError.value = messageOf(error, 'Une erreur inattendue est survenue.')
+  onError: async (error) => {
+    const reason = messageOf(error, 'Vérifiez le réseau et réessayez.')
+    if (created.value === null) {
+      formError.value = messageOf(error, 'Une erreur inattendue est survenue.')
+      return
+    }
+    // La voie existe déjà : on l'affiche dans la liste et on dit quoi faire.
+    await refresh()
+    const missing = created.value.photoSent
+      ? 'ses prises n’ont pas pu être enregistrées'
+      : 'sa photo n’a pas pu être envoyée'
+    formError.value = `La voie a été créée, mais ${missing}. ${reason} Cliquez de nouveau sur « Ajouter » pour terminer : la voie ne sera pas créée en double.`
   },
 })
 
@@ -175,6 +204,8 @@ function startEdit(route: {
 }): void {
   editingRouteId.value = route.id
   picked.value = null
+  holds.value = []
+  created.value = null
   form.number = route.number
   form.name = route.name ?? ''
   form.holdCount = route.holdCount
@@ -187,6 +218,8 @@ function startEdit(route: {
 function cancelEdit(): void {
   editingRouteId.value = null
   picked.value = null
+  holds.value = []
+  created.value = null
   Object.assign(form, emptyForm())
   formError.value = ''
 }
@@ -280,7 +313,25 @@ const categoryList = computed(() => categories.value ?? [])
       </h2>
       <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <NumberField v-model="form.number" label="Numéro" :min="1" required />
-        <NumberField v-model="form.holdCount" label="Nombre de prises" :min="1" required />
+        <div
+          v-if="annotatedCount !== null"
+          class="flex flex-col gap-1"
+          data-testid="hold-count-from-photo"
+        >
+          <span class="text-sm font-medium text-gray-900">Nombre de prises</span>
+          <p
+            class="flex min-h-12 items-center rounded-lg border border-gray-300 bg-gray-50 px-4 text-base font-semibold text-gray-900"
+          >
+            {{ annotatedCount }}
+          </p>
+          <p class="text-sm text-gray-600">
+            D'après les prises placées sur la photo.
+            <template v-if="form.holdCount !== null && form.holdCount !== annotatedCount">
+              Remplace les {{ form.holdCount }} saisies.
+            </template>
+          </p>
+        </div>
+        <NumberField v-else v-model="form.holdCount" label="Nombre de prises" :min="1" required />
         <TextField v-model="form.name" label="Nom (optionnel)" />
         <TextField v-model="form.sector" label="Secteur (optionnel)" />
         <TextField v-model="form.color" label="Couleur (optionnelle)" />
@@ -304,12 +355,10 @@ const categoryList = computed(() => categories.value ?? [])
         :has-video="editingHasVideo"
         @changed="onVideoChanged"
       />
-      <RoutePhotoPicker
-        v-else
-        v-model="picked"
-        label="Photo de la voie (optionnelle)"
-        hint="Vous pourrez la recadrer. Une fois la voie ajoutée, « Modifier » permet d'y placer les prises et d'ajouter une vidéo."
-      />
+      <template v-else>
+        <NewRoutePhoto v-model:picked="picked" v-model:holds="holds" :route-number="form.number" />
+        <p class="text-sm text-gray-600">Une vidéo peut s'ajouter une fois la voie enregistrée.</p>
+      </template>
       <fieldset class="flex flex-col gap-2">
         <legend class="text-sm font-medium text-gray-900">Catégories concernées</legend>
         <label
@@ -331,7 +380,9 @@ const categoryList = computed(() => categories.value ?? [])
         <Button type="submit" :disabled="isCreating || isUpdating">
           {{ editingRouteId ? 'Enregistrer' : isCreating ? 'Ajout en cours…' : 'Ajouter' }}
         </Button>
-        <Button v-if="editingRouteId" variant="secondary" @click="cancelEdit">Annuler</Button>
+        <Button v-if="editingRouteId || created" variant="secondary" @click="cancelEdit">
+          Annuler
+        </Button>
       </div>
     </form>
   </div>

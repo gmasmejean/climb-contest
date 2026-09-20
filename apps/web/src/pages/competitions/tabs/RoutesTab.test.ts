@@ -9,7 +9,12 @@ import type { RouteWithCategories } from '../../../api/competitions'
 const api = vi.hoisted(() => ({
   routes: { list: vi.fn(), create: vi.fn(), update: vi.fn(), reorder: vi.fn() },
   categories: { list: vi.fn() },
-  photo: { upload: vi.fn(), downloadSheets: vi.fn(), fetchImage: vi.fn() },
+  photo: {
+    upload: vi.fn(),
+    saveHolds: vi.fn(),
+    downloadSheets: vi.fn(),
+    fetchImage: vi.fn(),
+  },
 }))
 vi.mock('../../../api/competitions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../api/competitions')>()),
@@ -160,24 +165,34 @@ describe('RoutesTab — photo à la création de la voie', () => {
     expect(resize.resizeToJpeg).not.toHaveBeenCalled()
   })
 
-  it('si l’envoi de la photo échoue, dit que la voie est créée et ouvre la voie pour renvoyer', async () => {
-    const created = aRoute({ id: 'route-9', number: 4, holdCount: 12 })
+  it('si l’envoi de la photo échoue, garde tout et reprend sans créer de doublon', async () => {
+    const created = aRoute({ id: 'route-9' })
     api.routes.create.mockResolvedValue(created)
-    api.routes.list.mockResolvedValueOnce([]).mockResolvedValue([created])
-    api.photo.upload.mockRejectedValue(new ApiError(503, 'Service indisponible', 'Réseau saturé.'))
+    api.routes.update.mockResolvedValue(created)
+    api.photo.upload
+      .mockRejectedValueOnce(new ApiError(503, 'Service indisponible', 'Réseau saturé.'))
+      .mockResolvedValue({ assetId: 'asset-1', holds: [] })
     const wrapper = await mountTab()
     await fillAndChoosePhoto(wrapper)
 
     await submit(wrapper)
 
     const alert = wrapper.get('[role="alert"]').text()
-    expect(alert).toContain('La voie a été créée, mais sa photo n')
+    expect(alert).toContain('La voie a été créée, mais sa photo n’a pas pu être envoyée')
     expect(alert).toContain('Réseau saturé.')
-    expect(alert).toContain('Choisissez-la de nouveau')
-    // La voie est en modification : « Enregistrer » et non « Ajouter », pas de doublon possible.
-    expect(wrapper.text()).toContain('Modifier la voie')
-    expect(buttonNamed(wrapper, 'Ajouter')).toBeUndefined()
+    expect(alert).toContain('ne sera pas créée en double')
+    // Rien n'est perdu : la photo reste choisie, on est toujours en création.
+    expect(wrapper.find('[data-testid="photo-preview"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Ajouter une voie')
+
+    await submit(wrapper)
+
+    // Deuxième essai : la voie est mise à jour (pas recréée) et la photo part.
     expect(api.routes.create).toHaveBeenCalledTimes(1)
+    expect(api.routes.update).toHaveBeenCalledWith('comp-1', 'route-9', expect.anything())
+    expect(api.photo.upload).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="photo-preview"]').exists()).toBe(false)
   })
 
   it('si le fichier est illisible, ne crée aucune voie', async () => {
@@ -205,5 +220,149 @@ describe('RoutesTab — photo à la création de la voie', () => {
 
     expect(wrapper.text()).not.toContain('Photo de la voie (optionnelle)')
     expect(wrapper.find('[data-testid="route-photo-editor"]').exists()).toBe(true)
+  })
+})
+
+describe('RoutesTab — annotation à la création : le nombre de prises suit la photo', () => {
+  async function annotate(wrapper: VueWrapper, taps: Array<[number, number]>) {
+    await buttonNamed(wrapper, 'Continuer sans recadrer')?.trigger('click')
+    await flushPromises()
+    const frame = wrapper.get('[data-testid="photo-frame"]')
+    vi.spyOn(frame.element, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 400,
+      width: 200,
+      height: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
+    for (const [x, y] of taps) await frame.trigger('click', { clientX: x, clientY: y })
+  }
+  const holdCountField = (wrapper: VueWrapper) =>
+    wrapper.find('[data-testid="hold-count-from-photo"]')
+
+  it('remplace le nombre saisi par le nombre de prises placées, et le dit', async () => {
+    api.routes.create.mockResolvedValue(aRoute({ id: 'route-9' }))
+    api.photo.upload.mockResolvedValue({ assetId: 'asset-1', holds: [] })
+    api.photo.saveHolds.mockResolvedValue({ assetId: 'asset-1', holds: [] })
+    const wrapper = await mountTab()
+    await fillAndChoosePhoto(wrapper) // saisit 12 prises
+
+    await annotate(wrapper, [
+      [100, 350],
+      [80, 200],
+      [120, 60],
+    ])
+
+    expect(holdCountField(wrapper).text()).toContain('3')
+    expect(holdCountField(wrapper).text()).toContain('Remplace les 12 saisies')
+    // Le champ de saisie est remplacé : une seule source de vérité.
+    expect(wrapper.findAll('label').some((l) => l.text().startsWith('Nombre de prises'))).toBe(
+      false,
+    )
+
+    await submit(wrapper)
+
+    const payload = api.routes.create.mock.calls[0]?.[1] as CreateRouteInput
+    expect(payload.holdCount).toBe(3)
+    expect(api.photo.saveHolds).toHaveBeenCalledTimes(1)
+    const [, routeId, saved] = api.photo.saveHolds.mock.calls[0] ?? []
+    expect(routeId).toBe('route-9')
+    expect((saved as Array<{ number: number }>).map((hold) => hold.number)).toEqual([1, 2, 3])
+    // Les prises partent APRÈS la photo, sur laquelle elles sont placées.
+    expect(api.photo.upload.mock.invocationCallOrder[0]).toBeLessThan(
+      api.photo.saveHolds.mock.invocationCallOrder[0] ?? 0,
+    )
+  })
+
+  it('rend le champ quand toutes les prises sont retirées, avec la valeur saisie', async () => {
+    const wrapper = await mountTab()
+    await fillAndChoosePhoto(wrapper)
+    await annotate(wrapper, [[100, 350]])
+    expect(holdCountField(wrapper).exists()).toBe(true)
+
+    await wrapper.get('[data-testid="hold-handle"]').trigger('keydown', { key: 'Delete' })
+
+    expect(holdCountField(wrapper).exists()).toBe(false)
+    const [, holdCount] = wrapper.findAll<HTMLInputElement>('input[type="number"]')
+    expect(holdCount?.element.value).toBe('12')
+  })
+
+  it('compte jusqu’au plus haut numéro quand la numérotation a un trou', async () => {
+    const wrapper = await mountTab()
+    await fillAndChoosePhoto(wrapper)
+    await annotate(wrapper, [[100, 350]])
+
+    wrapper.findComponent({ name: 'NewRoutePhoto' }).vm.$emit('update:holds', [
+      { number: 1, x: 0.5, y: 0.9 },
+      { number: 4, x: 0.5, y: 0.2 },
+    ])
+    await flushPromises()
+
+    expect(holdCountField(wrapper).text()).toContain('4')
+  })
+
+  it('sans prise placée, garde le nombre saisi et n’enregistre aucune prise', async () => {
+    api.routes.create.mockResolvedValue(aRoute({ id: 'route-9' }))
+    api.photo.upload.mockResolvedValue({ assetId: 'asset-1', holds: [] })
+    const wrapper = await mountTab()
+    await fillAndChoosePhoto(wrapper)
+
+    await submit(wrapper)
+
+    const payload = api.routes.create.mock.calls[0]?.[1] as CreateRouteInput
+    expect(payload.holdCount).toBe(12)
+    expect(api.photo.saveHolds).not.toHaveBeenCalled()
+  })
+
+  it('si l’enregistrement des prises échoue, ne renvoie pas la photo au second essai', async () => {
+    const created = aRoute({ id: 'route-9' })
+    api.routes.create.mockResolvedValue(created)
+    api.routes.update.mockResolvedValue(created)
+    api.photo.upload.mockResolvedValue({ assetId: 'asset-1', holds: [] })
+    api.photo.saveHolds
+      .mockRejectedValueOnce(new ApiError(503, 'Service indisponible', 'Réseau saturé.'))
+      .mockResolvedValue({ assetId: 'asset-1', holds: [] })
+    const wrapper = await mountTab()
+    await fillAndChoosePhoto(wrapper)
+    await annotate(wrapper, [
+      [100, 350],
+      [80, 200],
+    ])
+
+    await submit(wrapper)
+
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'ses prises n’ont pas pu être enregistrées',
+    )
+    // Les prises placées sont toujours là : rien à replacer.
+    expect(holdCountField(wrapper).text()).toContain('2')
+
+    await submit(wrapper)
+
+    expect(api.routes.create).toHaveBeenCalledTimes(1)
+    expect(api.photo.upload).toHaveBeenCalledTimes(1)
+    expect(api.photo.saveHolds).toHaveBeenCalledTimes(2)
+    // La mise à jour reprend le nombre de prises annoncé par l'annotation.
+    const update = api.routes.update.mock.calls[0]?.[2] as CreateRouteInput
+    expect(update.holdCount).toBe(2)
+  })
+
+  it('« Annuler » abandonne la reprise : le formulaire redevient vierge', async () => {
+    api.routes.create.mockResolvedValue(aRoute({ id: 'route-9' }))
+    api.photo.upload.mockRejectedValue(new ApiError(503, 'Service indisponible', 'Réseau saturé.'))
+    const wrapper = await mountTab()
+    await fillAndChoosePhoto(wrapper)
+    await submit(wrapper)
+
+    await buttonNamed(wrapper, 'Annuler')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="photo-preview"]').exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(buttonNamed(wrapper, 'Annuler')).toBeUndefined()
   })
 })
