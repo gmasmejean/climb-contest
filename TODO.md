@@ -372,3 +372,42 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   une vague de reconnexions après une coupure la dépasserait, et les spectateurs
   basculeraient alors sur le sondage à 30 s. Aucun perte de donnée (les
   clients réessaient), mais un classement moins « direct ».
+
+## Depuis le Lot 10
+
+- **Une page laissée ouverte ne cherche jamais de nouvelle version** (mesuré :
+  aucun changement en 90 s de page ouverte après un redéploiement ; un simple
+  rechargement, lui, bascule seul en ~3 s). Le navigateur ne vérifie le service
+  worker qu'au chargement de la page : un téléphone de juge laissé ouvert toute
+  la matinée ne se met pas à jour. À envisager : appeler `registration.update()`
+  au retour au premier plan (`visibilitychange`) et à intervalle régulier
+  (`registerSW({ onRegisteredSW })`). Non fait : hors du périmètre demandé.
+- **Compatibilité entre une nouvelle version du code et des éléments déjà en file**
+  (ADR-061) : le schéma Dexie n'a qu'une version (`local-db.ts`). Le jour où le
+  format d'un élément de file (`queue-payload.ts`) change, il faudra une
+  `version(2)` avec migration, testée avec des éléments écrits par la version
+  précédente — désormais que la mise à jour s'active sans attendre une file vide.
+- **Le volume `web-dist` accumule les anciens fichiers hachés** : `web-build` fait
+  `cp -r` sans rien supprimer (153 fichiers dans `assets/` après quelques
+  déploiements). Inoffensif, mais ça grossit ; à nettoyer (`rm -rf` avant la copie,
+  en gardant à l'esprit qu'un navigateur encore sur l'ancienne version peut
+  réclamer un ancien fichier haché pendant la bascule).
+- **`e2e/` et `playwright.config.ts` ne sont couverts ni par `pnpm lint` ni par
+  `pnpm typecheck`** (ESLint : « not found by the project service »). Antérieur au
+  Lot 10 ; les fautes de type d'un test e2e ne sont vues qu'à son exécution.
+- **`prettier --check` signale `judge/refresh-routes.test.ts` et
+  `pages/judge/JudgeHome.vue`** (déjà le cas sur `main`, non touchés au Lot 10).
+  `pnpm lint` n'exécute qu'ESLint, donc rien ne le signale en CI.
+- **À vérifier, non reproduit** : dans `JudgeAscentEntry.vue`, le préremplissage
+  d'une correction se décide une seule fois, à l'arrivée du compétiteur, sur
+  `mode === 'correct'` ; or `mode` dépend de `lastSubmission`, une autre requête
+  locale (Dexie). Si elle répond après le compétiteur, le mode est un instant
+  `readonly` et le préremplissage serait sauté pour de bon. Le brouillon du Lot 10
+  se déclenche bien quand `mode` change, mais le préremplissage d'origine n'a pas
+  été touché.
+- **Un test du Lot 10 a échoué 2 fois sur ~30 exécutions** avant d'être durci
+  (`JudgeAscentEntry.test.ts`, « restaure la saisie après un rechargement »,
+  échec immédiat). Cause supposée mais non prouvée : `flushLiveQueries` rend la
+  main avant la première émission de Dexie (déjà signalé comme fragile sous
+  charge). Le test attend maintenant explicitement que l'écran soit chargé, et 30+
+  exécutions, dont sous saturation CPU, sont passées depuis. À surveiller.

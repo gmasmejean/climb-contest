@@ -123,6 +123,23 @@ Network → Offline (ou débrancher le wifi), noter des passages, recharger la
 page, revenir en ligne — le bandeau en haut de l'écran juge doit toujours
 refléter honnêtement l'état de la file.
 
+### Mise à jour de l'application
+
+Après un redéploiement (`docker compose up --build -d`), un navigateur qui
+**recharge la page** télécharge la nouvelle version en arrière-plan, l'active et
+recharge la page une fois, tout seul, quelques secondes plus tard (mesuré : ~3 s
+en local). Recharger ne perd aucune saisie (ADR-061) : celles déjà confirmées
+sont dans IndexedDB ; celle qu'un juge est en train de composer est gardée dans
+un brouillon de 10 minutes et restaurée, dans l'étape de saisie, avec le message
+« Saisie retrouvée : vérifiez-la avant de valider. ».
+
+**Limite connue** : le navigateur ne cherche une nouvelle version qu'au chargement
+de la page. Une application restée ouverte sans être rechargée (un téléphone de
+juge laissé en veille toute la matinée) ne se met à jour qu'à son prochain
+rechargement — mesuré : aucune mise à jour en 90 s de page ouverte (`TODO.md`,
+Lot 10). Après un déploiement le jour d'une compétition, faites recharger les
+appareils.
+
 ## Page publique et temps réel
 
 `/c/<slug>` (sans authentification) affiche le classement d'une catégorie,
