@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { expect, test, type APIRequestContext } from '@playwright/test'
 
-import { apiJson, loginApi, registerAndVerifyOrganizer } from './support/api'
+import { apiJson, loginApi, openContestRound, registerAndVerifyOrganizer } from './support/api'
 
 // Lot 9, point 2 : résultats en PDF et CSV, sauvegarde JSON complète, puis
 // réimport de cette sauvegarde comme nouvelle compétition — depuis
@@ -48,7 +48,7 @@ async function setUpPlayedContest(request: APIRequestContext, headers: Record<st
     headers,
     data: { displayName: 'Juge exports e2e', routeIds: [route.id] },
   })
-  await apiJson(request, `${base}/status`, { method: 'POST', headers, data: { status: 'running' } })
+  await openContestRound(request, headers, base)
 
   const judgeJwt = (
     await apiJson<{ token: string }>(request, '/api/v1/judge/auth', {

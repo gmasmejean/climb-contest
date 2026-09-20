@@ -111,7 +111,7 @@ async function setUpFixture(request: APIRequestContext, accessToken: string) {
   await apiJson(request, `/api/v1/competitions/${competition.id}/round-status/${round.id}`, {
     method: 'POST',
     headers: authHeaders,
-    data: { status: 'open' },
+    data: { status: 'open', categoryIds: [category.id] },
   })
 
   const judgeAuth = await apiJson<{ token: string }>(request, '/api/v1/judge/auth', {
@@ -229,9 +229,9 @@ test('un organisateur résout un conflit, corrige un passage, puis publie le tou
 
   // --- Tours : fermer puis publier ---
   await pilotageSections.getByRole('tab', { name: 'Tours' }).click()
-  await page.getByRole('button', { name: 'Fermer', exact: true }).click()
+  await page.getByRole('button', { name: 'Fermer — Cat pilotage e2e', exact: true }).click()
   await expect(page.getByText('Fermé')).toBeVisible()
-  await page.getByRole('button', { name: 'Publier les résultats' }).click()
+  await page.getByRole('button', { name: 'Publier les résultats — Cat pilotage e2e' }).click()
   await expect(page.getByText('Publié')).toBeVisible()
 
   // --- Le public voit la valeur corrigée, non provisoire ---

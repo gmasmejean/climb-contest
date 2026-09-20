@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { openContestRound } from './support/api'
 
 // Lot 6, plan de test : deux « appareils » (deux contextes de navigateur,
 // même juge — un secours à deux tablettes, cas réaliste) saisissent des
@@ -75,11 +76,7 @@ async function setUpFixture(request: APIRequestContext) {
     },
   )
 
-  await apiJson(request, `/api/v1/competitions/${competition.id}/status`, {
-    method: 'POST',
-    headers: authHeaders,
-    data: { status: 'running' },
-  })
+  await openContestRound(request, authHeaders, `/api/v1/competitions/${competition.id}`)
 
   return { judgeToken: judge.accessToken, routeNumber: route.number }
 }

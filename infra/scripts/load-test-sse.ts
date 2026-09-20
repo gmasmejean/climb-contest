@@ -58,7 +58,7 @@ interface Fixture {
 }
 
 /**
- * Format phases : un `POST .../round-status/:id { status: 'open' }` suffit à
+ * Format phases : un `POST .../round-status/:id { status: 'open', categoryIds }` suffit à
  * déclencher un `ranking_updated` réel (routes/rounds.ts), sans avoir à
  * fabriquer un juge ni un passage — le strict minimum pour ce test.
  */
@@ -188,7 +188,7 @@ async function main(): Promise<void> {
   await apiJson(`/api/v1/competitions/${fixture.competitionId}/round-status/${fixture.roundId}`, {
     method: 'POST',
     headers: fixture.authHeaders,
-    body: JSON.stringify({ status: 'open' }),
+    body: JSON.stringify({ status: 'open', categoryIds: [fixture.categoryId] }),
   })
 
   const results = await Promise.all(connections)

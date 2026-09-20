@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test'
+import { openContestRound } from './support/api'
 
 // Lot 6, plan de test : coupe le réseau, note 10 passages hors ligne, recharge
 // la page (cas SPEC.md § 9 #23 : les 10 doivent survivre), rétablit le réseau,
@@ -81,11 +82,7 @@ async function setUpFixture(request: APIRequestContext) {
     },
   )
 
-  await apiJson(request, `/api/v1/competitions/${competition.id}/status`, {
-    method: 'POST',
-    headers: authHeaders,
-    data: { status: 'running' },
-  })
+  await openContestRound(request, authHeaders, `/api/v1/competitions/${competition.id}`)
 
   return {
     judgeToken: judge.accessToken,

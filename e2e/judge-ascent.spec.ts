@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from '@playwright/test'
+import { openContestRound } from './support/api'
 
 // Parcours complet exigé par ROADMAP.md Lot 5, point 7, en émulation mobile
 // (voir playwright.config.ts, projet `mobile`) : un juge accède à sa voie,
@@ -77,13 +78,9 @@ async function setUpJudgeFixture(request: APIRequestContext) {
     },
   )
 
-  // Ouvre le round implicite (ADR-030) : aucun écran organisateur ne le fait
-  // pour le format contest, la compétition passe simplement à « running ».
-  await apiJson(request, `/api/v1/competitions/${competition.id}/status`, {
-    method: 'POST',
-    headers: authHeaders,
-    data: { status: 'running' },
-  })
+  // Ouvre le round implicite du contest pour sa catégorie (ADR-065) : aucun écran
+  // organisateur ne l'expose en contest, on passe par `round-status`.
+  await openContestRound(request, authHeaders, `/api/v1/competitions/${competition.id}`)
 
   return { judgeToken: judge.accessToken, routeNumber: route.number }
 }
