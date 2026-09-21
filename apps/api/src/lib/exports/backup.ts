@@ -226,6 +226,7 @@ export async function buildCompetitionBackup(
       deviceId: row.deviceId,
       supersededBy: row.supersededBy,
       conflictGroup: row.conflictGroup,
+      voidedAt: row.voidedAt ? iso(row.voidedAt) : null,
     })),
     ascentEvents: events.map(({ event }) => ({
       id: event.id,

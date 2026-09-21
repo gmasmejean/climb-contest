@@ -1,7 +1,7 @@
 import type { ConflictSummary } from '@climbcontest/contracts'
 import { ascentSchema } from '@climbcontest/contracts'
 import { ascent, judge, type Database } from '@climbcontest/db'
-import { and, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 type AscentRow = typeof ascent.$inferSelect
 
@@ -17,7 +17,14 @@ export async function listUnresolvedConflicts(
   const rows = await db
     .select()
     .from(ascent)
-    .where(and(eq(ascent.competitionId, competitionId), isNotNull(ascent.conflictGroup)))
+    .where(
+      and(
+        eq(ascent.competitionId, competitionId),
+        isNotNull(ascent.conflictGroup),
+        // ADR-078 : une saisie refusée garde son groupe mais n'est plus à trancher.
+        isNull(ascent.voidedAt),
+      ),
+    )
     .orderBy(ascent.conflictGroup, ascent.recordedAt)
 
   const judgeIds = [...new Set(rows.map((row) => row.recordedByJudgeId).filter((id) => id !== null))]
@@ -46,6 +53,8 @@ export async function listUnresolvedConflicts(
     if (!first) throw new Error('Groupe de conflit vide — ne devrait jamais arriver.')
     return {
       conflictGroup,
+      // ADR-078 : un groupe à une seule ligne est une saisie d'accès révoqué.
+      kind: groupRows.length === 1 ? ('revoked_access' as const) : ('conflict' as const),
       competitionId,
       roundId: first.roundId,
       routeId: first.routeId,
@@ -66,5 +75,11 @@ export async function findConflictGroupRows(
   return db
     .select()
     .from(ascent)
-    .where(and(eq(ascent.competitionId, competitionId), eq(ascent.conflictGroup, conflictGroupId)))
+    .where(
+      and(
+        eq(ascent.competitionId, competitionId),
+        eq(ascent.conflictGroup, conflictGroupId),
+        isNull(ascent.voidedAt),
+      ),
+    )
 }

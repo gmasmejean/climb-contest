@@ -50,6 +50,8 @@ export async function roundHasUnresolvedConflicts(
         eq(ascent.roundId, roundId),
         eq(competitor.categoryId, categoryId),
         isNotNull(ascent.conflictGroup),
+        // ADR-078 : une saisie refusée garde son groupe, sans plus rien bloquer.
+        isNull(ascent.voidedAt),
       ),
     )
     .limit(1)

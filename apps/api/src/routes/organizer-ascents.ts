@@ -35,6 +35,10 @@ function toResponse(result: AscentWriteResult): OrganizerAscentWriteResult {
       incoming: ascentSchema.parse(result.incoming),
     })
   }
+  if (result.status === 'quarantined') {
+    // ADR-078 : la quarantaine est réservée au lot d'un juge révoqué.
+    throw new Error('Une saisie organisateur ne peut pas être mise en quarantaine.')
+  }
   return organizerAscentWriteResultSchema.parse({
     status: result.status,
     ascent: ascentSchema.parse(result.ascent),

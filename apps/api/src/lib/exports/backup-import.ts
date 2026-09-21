@@ -423,6 +423,7 @@ export async function importBackup(
           deviceId: row.deviceId,
           supersededBy: row.supersededBy ? mapped(row.supersededBy) : null,
           conflictGroup: row.conflictGroup ? fresh(row.conflictGroup) : null,
+          voidedAt: row.voidedAt ? new Date(row.voidedAt) : null,
         })),
       )
     }

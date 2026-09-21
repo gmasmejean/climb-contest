@@ -1,5 +1,6 @@
 import { ascent, ascentEvent, type Database } from '@climbcontest/db'
 import { eq } from 'drizzle-orm'
+import { uuidv7 } from 'uuidv7'
 
 import type { AscentActor } from './ascent-write'
 import { notifyPublic } from './notify-public'
@@ -183,5 +184,111 @@ export async function resolveConflictByChoosing(
     })
 
     return updatedWinner
+  })
+}
+
+/**
+ * ADR-078 — correction reçue d'un accès RÉVOQUÉ : elle ne remplace pas la
+ * saisie visée, elle se pose en conflit avec elle. Les deux lignes partagent un
+ * `conflict_group` neuf et sortent du classement jusqu'à la décision de
+ * l'organisateur (écran Conflits habituel, deux valeurs côte à côte).
+ */
+export async function quarantineCorrection(
+  db: Database,
+  params: {
+    target: AscentRow
+    newId: string
+    content: AscentContent
+    judgeId: string
+    categoryId: string
+  },
+): Promise<{ conflictGroup: string; existing: AscentRow; incoming: AscentRow }> {
+  const { target, newId, content, judgeId, categoryId } = params
+  const conflictGroup = uuidv7()
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .update(ascent)
+      .set({ conflictGroup, updatedAt: new Date() })
+      .where(eq(ascent.id, target.id))
+      .returning()
+    if (!existing) throw new ApiError(500, 'Erreur interne', 'Impossible de relire le passage.')
+
+    const [incoming] = await tx
+      .insert(ascent)
+      .values({
+        id: newId,
+        competitionId: target.competitionId,
+        roundId: target.roundId,
+        routeId: target.routeId,
+        competitorId: target.competitorId,
+        holdNumber: content.holdNumber,
+        holdCount: target.holdCount,
+        modifier: content.modifier,
+        isTop: content.isTop,
+        status: content.status,
+        climbTimeMs: content.climbTimeMs ?? null,
+        recordedByJudgeId: judgeId,
+        recordedByUserId: null,
+        recordedAt: target.recordedAt,
+        deviceId: target.deviceId,
+        conflictGroup,
+      })
+      .returning()
+    if (!incoming) {
+      throw new ApiError(500, 'Erreur interne', 'Impossible d’enregistrer la correction.')
+    }
+
+    await tx.insert(ascentEvent).values({
+      ascentId: incoming.id,
+      eventType: 'created',
+      actorType: 'judge',
+      actorId: judgeId,
+      payload: {
+        ...contentSnapshot(incoming),
+        conflictGroup,
+        correctionOf: target.id,
+        quarantine: 'revoked_judge',
+      },
+      reason: null,
+    })
+
+    await notifyPublic(tx, {
+      type: 'ranking_updated',
+      competitionId: target.competitionId,
+      categoryId,
+    })
+
+    return { conflictGroup, existing, incoming }
+  })
+}
+
+/**
+ * ADR-078 — l'organisateur REFUSE une saisie en quarantaine (groupe à une seule
+ * ligne). La ligne garde son `conflict_group` : elle reste hors de tous les
+ * filtres « actif » et de `ascent_active_key`. `voided_at` la retire seulement
+ * des lectures de conflits non résolus. Rien n'est supprimé, tout est tracé.
+ */
+export async function voidQuarantinedAscent(
+  db: Database,
+  params: { row: AscentRow; actor: AscentActor; reason: string },
+): Promise<AscentRow> {
+  const { row, actor, reason } = params
+  return db.transaction(async (tx) => {
+    const [voided] = await tx
+      .update(ascent)
+      .set({ voidedAt: new Date(), updatedAt: new Date() })
+      .where(eq(ascent.id, row.id))
+      .returning()
+    if (!voided) throw new ApiError(500, 'Erreur interne', 'Impossible de refuser cette saisie.')
+
+    await tx.insert(ascentEvent).values({
+      ascentId: row.id,
+      eventType: 'voided',
+      ...actorEventFields(actor),
+      payload: { previous: contentSnapshot(row) },
+      reason,
+    })
+    return voided
   })
 }

@@ -6,7 +6,7 @@ import {
   route,
   type Database,
 } from '@climbcontest/db'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { uuidv7 } from 'uuidv7'
 
 import { notifyPublic } from './notify-public'
@@ -52,6 +52,14 @@ export type AscentWriteResult =
   | { status: 'duplicate'; ascent: AscentRow }
   | { status: 'accepted'; ascent: AscentRow }
   | { status: 'conflict'; conflictGroup: string; existing: AscentRow; incoming: AscentRow }
+  // ADR-078 : reçue d'un accès révoqué, seule sur son triplet — durablement en
+  // base, hors classement, en attente de la décision de l'organisateur.
+  | { status: 'quarantined'; conflictGroup: string; ascent: AscentRow }
+
+export interface AscentWriteOptions {
+  /** ADR-078 : l'auteur est un accès révoqué — rien n'entre au classement. */
+  quarantine?: boolean
+}
 
 function actorColumns(actor: AscentActor) {
   return {
@@ -89,6 +97,7 @@ export async function createAscentOrConflict(
   item: AscentWriteItem,
   routeRow: RouteRow,
   competitionId: string,
+  options: AscentWriteOptions = {},
   retriesLeft = 1,
 ): Promise<AscentWriteResult> {
   if (item.status === 'valid' && !item.isTop) {
@@ -143,13 +152,80 @@ export async function createAscentOrConflict(
   await assertCompetitorQualifiedForRound(db, item.roundId, competitorRow)
 
   try {
-    return await insertAscentTx(db, actor, item, routeRow, competitionId, competitorRow.categoryId)
+    return await insertAscentTx(
+      db,
+      actor,
+      item,
+      routeRow,
+      competitionId,
+      competitorRow.categoryId,
+      options.quarantine === true,
+    )
   } catch (error) {
     if (isUniqueViolation(error) && retriesLeft > 0) {
-      return createAscentOrConflict(db, actor, item, routeRow, competitionId, retriesLeft - 1)
+      return createAscentOrConflict(
+        db,
+        actor,
+        item,
+        routeRow,
+        competitionId,
+        options,
+        retriesLeft - 1,
+      )
     }
     throw error
   }
+}
+
+type Tx = Parameters<Parameters<Database['transaction']>[0]>[0]
+
+/** Insère la ligne et son événement `created` — commun à toutes les issues. */
+async function insertRowWithEvent(
+  tx: Tx,
+  actor: AscentActor,
+  item: AscentWriteItem,
+  routeRow: RouteRow,
+  competitionId: string,
+  conflictGroup: string | null,
+  quarantine: boolean,
+): Promise<AscentRow> {
+  const [row] = await tx
+    .insert(ascent)
+    .values({
+      id: item.id,
+      competitionId,
+      roundId: item.roundId,
+      routeId: item.routeId,
+      competitorId: item.competitorId,
+      holdNumber: item.holdNumber,
+      holdCount: routeRow.holdCount,
+      modifier: item.modifier,
+      isTop: item.isTop,
+      status: item.status,
+      climbTimeMs: item.climbTimeMs ?? null,
+      ...actorColumns(actor),
+      recordedAt: new Date(item.recordedAt),
+      deviceId: item.deviceId,
+      conflictGroup,
+    })
+    .returning()
+  if (!row) throw new ApiError(500, 'Erreur interne', 'Impossible d’enregistrer le passage.')
+
+  await tx.insert(ascentEvent).values({
+    ascentId: row.id,
+    eventType: 'created',
+    ...actorEventFields(actor),
+    payload: {
+      holdNumber: row.holdNumber,
+      modifier: row.modifier,
+      isTop: row.isTop,
+      status: row.status,
+      climbTimeMs: row.climbTimeMs,
+      ...(conflictGroup ? { conflictGroup } : {}),
+      ...(quarantine ? { quarantine: 'revoked_judge' } : {}),
+    },
+  })
+  return row
 }
 
 async function insertAscentTx(
@@ -159,6 +235,7 @@ async function insertAscentTx(
   routeRow: RouteRow,
   competitionId: string,
   categoryId: string,
+  quarantine: boolean,
 ): Promise<AscentWriteResult> {
   return db.transaction(async (tx) => {
     // Verrouille la ligne active du triplet, s'il y en a une, pour se
@@ -194,42 +271,15 @@ async function insertAscentTx(
         .set({ conflictGroup: conflictGroupId, updatedAt: new Date() })
         .where(eq(ascent.id, activeRow.id))
 
-      const [inserted] = await tx
-        .insert(ascent)
-        .values({
-          id: item.id,
-          competitionId,
-          roundId: item.roundId,
-          routeId: item.routeId,
-          competitorId: item.competitorId,
-          holdNumber: item.holdNumber,
-          holdCount: routeRow.holdCount,
-          modifier: item.modifier,
-          isTop: item.isTop,
-          status: item.status,
-          climbTimeMs: item.climbTimeMs ?? null,
-          ...actorColumns(actor),
-          recordedAt: new Date(item.recordedAt),
-          deviceId: item.deviceId,
-          conflictGroup: conflictGroupId,
-        })
-        .returning()
-      if (!inserted)
-        throw new ApiError(500, 'Erreur interne', 'Impossible d’enregistrer le passage.')
-
-      await tx.insert(ascentEvent).values({
-        ascentId: inserted.id,
-        eventType: 'created',
-        ...actorEventFields(actor),
-        payload: {
-          holdNumber: inserted.holdNumber,
-          modifier: inserted.modifier,
-          isTop: inserted.isTop,
-          status: inserted.status,
-          climbTimeMs: inserted.climbTimeMs,
-          conflictGroup: conflictGroupId,
-        },
-      })
+      const inserted = await insertRowWithEvent(
+        tx,
+        actor,
+        item,
+        routeRow,
+        competitionId,
+        conflictGroupId,
+        quarantine,
+      )
 
       const refreshedExisting = await tx.query.ascent.findFirst({
         where: eq(ascent.id, activeRow.id),
@@ -248,42 +298,99 @@ async function insertAscentTx(
       }
     }
 
-    const [row] = await tx
-      .insert(ascent)
-      .values({
-        id: item.id,
+    // ADR-078, invariant : pas de ligne active, mais peut-être un groupe NON
+    // RÉSOLU sur ce triplet (conflit ouvert, ou saisie d'un accès révoqué en
+    // attente). Une nouvelle saisie ne doit jamais entrer au classement à côté
+    // de lui — sinon trancher le groupe heurterait `ascent_active_key`.
+    const openGroupRows = await tx
+      .select()
+      .from(ascent)
+      .where(
+        and(
+          eq(ascent.roundId, item.roundId),
+          eq(ascent.routeId, item.routeId),
+          eq(ascent.competitorId, item.competitorId),
+          isNull(ascent.supersededBy),
+          isNotNull(ascent.conflictGroup),
+          isNull(ascent.voidedAt),
+        ),
+      )
+      .orderBy(asc(ascent.recordedAt))
+      .for('update')
+    const pendingRow = openGroupRows[0]
+
+    if (pendingRow?.conflictGroup) {
+      const solitary = openGroupRows.length === 1
+      if (solitary && ascentContentMatches(pendingRow, item)) {
+        // Même valeur qu'une saisie en attente, seule sur son triplet.
+        if (quarantine) return { status: 'duplicate', ascent: pendingRow }
+        // Un acteur de confiance (juge actif, organisateur en secours) confirme
+        // la valeur : sa ligne entre au classement, l'autre est chaînée dessus.
+        // `superseded_by` est une FK différée (ADR-031) : l'UPDATE peut
+        // précéder l'INSERT.
+        await tx
+          .update(ascent)
+          .set({ supersededBy: item.id, conflictGroup: null, updatedAt: new Date() })
+          .where(eq(ascent.id, pendingRow.id))
+        const row = await insertRowWithEvent(
+          tx,
+          actor,
+          item,
+          routeRow,
+          competitionId,
+          null,
+          false,
+        )
+        await tx.insert(ascentEvent).values({
+          ascentId: pendingRow.id,
+          eventType: 'conflict_resolved',
+          ...actorEventFields(actor),
+          payload: { supersededBy: row.id, confirmedBySameValue: true },
+          reason: null,
+        })
+        await notifyPublic(tx, { type: 'ranking_updated', competitionId, categoryId })
+        return { status: 'accepted', ascent: row }
+      }
+
+      // Valeur différente (ou conflit déjà à plusieurs) : la saisie REJOINT le
+      // groupe, l'organisateur tranchera l'ensemble.
+      const inserted = await insertRowWithEvent(
+        tx,
+        actor,
+        item,
+        routeRow,
         competitionId,
-        roundId: item.roundId,
-        routeId: item.routeId,
-        competitorId: item.competitorId,
-        holdNumber: item.holdNumber,
-        holdCount: routeRow.holdCount,
-        modifier: item.modifier,
-        isTop: item.isTop,
-        status: item.status,
-        climbTimeMs: item.climbTimeMs ?? null,
-        ...actorColumns(actor),
-        recordedAt: new Date(item.recordedAt),
-        deviceId: item.deviceId,
-      })
-      .returning()
-    if (!row) throw new ApiError(500, 'Erreur interne', 'Impossible d’enregistrer le passage.')
+        pendingRow.conflictGroup,
+        quarantine,
+      )
+      await notifyPublic(tx, { type: 'ranking_updated', competitionId, categoryId })
+      return {
+        status: 'conflict',
+        conflictGroup: pendingRow.conflictGroup,
+        existing: pendingRow,
+        incoming: inserted,
+      }
+    }
 
-    await tx.insert(ascentEvent).values({
-      ascentId: row.id,
-      eventType: 'created',
-      ...actorEventFields(actor),
-      payload: {
-        holdNumber: row.holdNumber,
-        modifier: row.modifier,
-        isTop: row.isTop,
-        status: row.status,
-        climbTimeMs: row.climbTimeMs,
-      },
-    })
+    if (quarantine) {
+      // Seule sur son triplet : un groupe de conflit À UNE LIGNE, que
+      // l'organisateur accepte, refuse ou remplace (onglet Conflits).
+      const conflictGroupId = uuidv7()
+      const row = await insertRowWithEvent(
+        tx,
+        actor,
+        item,
+        routeRow,
+        competitionId,
+        conflictGroupId,
+        true,
+      )
+      // Pas de `ranking_updated` : rien ne change au classement.
+      return { status: 'quarantined', conflictGroup: conflictGroupId, ascent: row }
+    }
 
+    const row = await insertRowWithEvent(tx, actor, item, routeRow, competitionId, null, false)
     await notifyPublic(tx, { type: 'ranking_updated', competitionId, categoryId })
-
     return { status: 'accepted', ascent: row }
   })
 }

@@ -10,7 +10,18 @@ type JudgeRow = typeof judge.$inferSelect
 declare module 'hono' {
   interface ContextVariableMap {
     judge: JudgeRow
+    /** ADR-078 : vrai seulement sur une route qui tolère un accès révoqué. */
+    judgeRevoked: boolean
   }
+}
+
+export interface RequireJudgeOptions {
+  /**
+   * ADR-078 : routes qui REÇOIVENT quand même l'appel d'un juge révoqué (le lot
+   * de saisies, et lui seul) — à charge pour elles de lire `judgeRevoked` et de
+   * mettre ce qu'elles reçoivent en quarantaine. Partout ailleurs : 401.
+   */
+  allowRevoked?: (c: Context) => boolean
 }
 
 /**
@@ -24,6 +35,7 @@ export function requireJudge(
   signer: JudgeTokenSigner,
   db: Database,
   now: () => Date = () => new Date(),
+  options: RequireJudgeOptions = {},
 ) {
   return async (c: Context, next: Next) => {
     const header = c.req.header('authorization')
@@ -49,11 +61,13 @@ export function requireJudge(
     if (!row) {
       throw new ApiError(401, 'Accès introuvable', "Cet accès n'existe plus.")
     }
-    if (row.revokedAt) {
+    const revoked = row.revokedAt !== null
+    if (revoked && !options.allowRevoked?.(c)) {
       throw new ApiError(
         401,
         'Accès révoqué',
         'Cet accès a été révoqué par l’organisateur — contactez-le pour en obtenir un nouveau.',
+        'judge_revoked',
       )
     }
     // Compétition à la corbeille (Lot 11, ADR-063) : plus aucune saisie tant
@@ -72,6 +86,13 @@ export function requireJudge(
       )
     }
     c.set('judge', row)
+    c.set('judgeRevoked', revoked)
+    // Un accès révoqué qui vide sa file n'est pas un « signe de vie » : le
+    // tableau de bord ne doit pas le montrer comme un juge actif.
+    if (revoked) {
+      await next()
+      return
+    }
     // Lot 8 : « dernier signe de vie » du juge pour le tableau de bord —
     // avant, seule la connexion (routes/judge-auth.ts) le mettait à jour, ce
     // qui aurait affiché un juge actif toute la journée comme « muet depuis
