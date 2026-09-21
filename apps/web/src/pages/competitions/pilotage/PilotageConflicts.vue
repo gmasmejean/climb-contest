@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Button, NumberField, Select, TextField, useToast } from '@climbcontest/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 
 import { ApiError } from '../../../api/client'
+import { competitorsApi, routesApi } from '../../../api/competitions'
 import { conflictsApi } from '../../../api/conflicts'
 
 const props = defineProps<{ competitionId: string }>()
@@ -16,6 +17,32 @@ const { data: conflicts, isPending } = useQuery({
   queryKey: conflictsKey,
   queryFn: () => conflictsApi.list(props.competitionId),
 })
+
+// Lot 21 : de QUI et de QUELLE voie parle-t-on ? Indispensable dès qu'il y a
+// plusieurs saisies à valider. Mêmes clés de cache que les onglets de préparation.
+const { data: competitors } = useQuery({
+  queryKey: ['competitions', props.competitionId, 'competitors'],
+  queryFn: () => competitorsApi.list(props.competitionId),
+})
+const { data: routes } = useQuery({
+  queryKey: ['competitions', props.competitionId, 'routes'],
+  queryFn: () => routesApi.list(props.competitionId),
+})
+const competitorLabels = computed(
+  () =>
+    new Map(
+      (competitors.value ?? []).map((c) => [
+        c.id,
+        `${c.bib !== null ? `Dossard ${c.bib} — ` : ''}${c.firstName} ${c.lastName}`,
+      ]),
+    ),
+)
+const routeLabels = computed(
+  () =>
+    new Map(
+      (routes.value ?? []).map((r) => [r.id, `Voie ${r.number}${r.name ? ` — ${r.name}` : ''}`]),
+    ),
+)
 
 async function refresh(): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: conflictsKey })
@@ -35,14 +62,17 @@ function summarize(a: {
 }
 
 const chooseMutation = useMutation({
-  mutationFn: (input: { conflictGroup: string; ascentId: string }) =>
+  mutationFn: (input: { conflictGroup: string; ascentId: string; accepting: boolean }) =>
     conflictsApi.resolve(props.competitionId, input.conflictGroup, {
       resolution: 'choose',
       ascentId: input.ascentId,
     }),
-  onSuccess: async () => {
+  onSuccess: async (_ascent, input) => {
     await refresh()
-    toast.show('Conflit résolu.', 'success')
+    toast.show(
+      input.accepting ? 'Saisie acceptée : elle compte au classement.' : 'Conflit résolu.',
+      'success',
+    )
   },
   onError: (error) => {
     toast.show(
@@ -158,6 +188,10 @@ const newValueMutation = useMutation({
         "
         :data-testid="`conflict-${conflict.kind}`"
       >
+        <p class="font-medium text-gray-900" data-testid="conflict-subject">
+          {{ competitorLabels.get(conflict.competitorId) ?? 'Compétiteur' }} —
+          {{ routeLabels.get(conflict.routeId) ?? 'voie' }}
+        </p>
         <div v-if="conflict.kind === 'revoked_access'" class="flex flex-col gap-1">
           <h3 class="font-bold text-amber-950">Saisie d'un accès révoqué — à valider</h3>
           <p class="text-sm text-amber-950">
@@ -184,6 +218,7 @@ const newValueMutation = useMutation({
                 chooseMutation.mutate({
                   conflictGroup: conflict.conflictGroup,
                   ascentId: entry.ascent.id,
+                  accepting: conflict.kind === 'revoked_access',
                 })
               "
             >
