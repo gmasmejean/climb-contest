@@ -630,6 +630,19 @@ En cas de conflit (un autre appareil a déjà saisi ce passage), le client ne
 supprime rien : il marque l'élément `conflict`, l'affiche au juge avec les deux
 valeurs, et alerte l'organisateur qui tranche.
 
+**Accès révoqué (ADR-078).** Le lot d'un juge révoqué est reçu. Ses saisies
+portent un `conflict_group` — seules sur leur (tour, voie, compétiteur), c'est un
+groupe À UNE LIGNE : hors classement, publication de la catégorie bloquée, à
+accepter, refuser (motif obligatoire, `voided_at`) ou ressaisir dans l'onglet
+Conflits. Toute nouvelle saisie sur un triplet qui a un groupe non résolu le
+REJOINT (valeur différente) ou le résout (valeur identique). La réponse porte
+`accessRevoked` : le client finit d'envoyer sa file, puis déconnecte le juge.
+
+**Changement de juge sur un appareil (ADR-079).** Ouvrir le lien d'un autre juge
+ne vide jamais une file qui détient des saisies présentes seulement sur
+l'appareil : elles partent d'abord, avec l'ancien jeton. Les effacer est une
+action explicite, confirmée, après les avoir listées en clair.
+
 **Règle d'or :** une donnée saisie par un juge n'est jamais supprimée du client
 avant d'avoir été acquittée par le serveur. Jamais.
 
@@ -649,7 +662,10 @@ avant d'avoir été acquittée par le serveur. Jamais.
   effet immédiatement plutôt qu'à l'expiration. Il ne permet que de lire et
   écrire des passages sur les voies assignées, pour cette compétition,
   jusqu'à la fin de l'événement. L'organisateur peut révoquer un juge à tout
-  moment.
+  moment. Un juge révoqué ne peut plus rien LIRE ; les saisies qu'il avait
+  encore en file sont REÇUES, mais mises en quarantaine jusqu'à la décision de
+  l'organisateur (§ 6.3, DECISIONS.md ADR-078) — jamais perdues, jamais comptées
+  d'office.
 - **Conservation en clair du PIN/token juge (`judge_credentials_stored`,
   DECISIONS.md ADR-027)** : par défaut, activée — pensé pour un club qui
   organise des contests sans enjeu important, où retrouver l'accès d'un juge
@@ -901,6 +917,13 @@ la suite de tests de `packages/scoring`.
 | 22  | Deux appareils, même (tour, voie, compétiteur), valeurs différentes | les deux conservés, `conflict_group` créé, organisateur alerté |
 | 23  | Onglet fermé avec 12 passages en attente, rouvert plus tard         | les 12 remontent                                               |
 | 24  | Passage saisi hors ligne à 14h03, remonté à 15h20                   | `recorded_at` = 14h03, `synced_at` = 15h20                     |
+
+Cas ajoutés au Lot 21 — **proposés, à valider** (ils ne touchent pas à la cotation) :
+
+| #   | Situation                                                                   | Attendu                                                                                   |
+| --- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 25  | Juge révoqué avec 3 passages en file, retour du réseau                      | les 3 en base, hors classement, « à valider » ; le juge est prévenu puis déconnecté        |
+| 26  | Lien d'un autre juge ouvert sur un téléphone dont la file n'est pas vide    | rien n'est effacé ; la file part avec l'ancien jeton, puis confirmation nominative        |
 
 ### Absence sur une voie (tour à plusieurs voies)
 

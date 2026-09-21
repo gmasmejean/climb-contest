@@ -15,7 +15,8 @@
  *   - un second appareil du juge 1 qui saisit des valeurs DIFFÉRENTES pour les
  *     mêmes passages (conflits, tranchés ensuite par l'organisateur) ;
  *   - deux corrections de juge ;
- *   - le juge 4 révoqué en cours de route (saisie de secours de l'organisateur).
+ *   - le juge 4 révoqué en cours de route : sa file part QUAND MÊME, en quarantaine
+ *     (Lot 21, ADR-078), et l'organisateur accepte chaque saisie.
  *
  * Ce qui est vérifié à la fin :
  *   - aucun passage perdu, aucun doublon actif (export JSON de sauvegarde) ;
@@ -80,6 +81,7 @@ const stats = {
   conflict: 0,
   rejected: 0,
   unauthorized: 0,
+  quarantined: 0,
   latencies: [] as number[],
 }
 const anomalies: string[] = []
@@ -324,7 +326,8 @@ async function runDevice(setup: Setup, device: Device) {
       continue
     }
     if (response.status === 401) {
-      // Juge révoqué : sa file ne partira jamais. Rien ne le lui dit clairement (TODO.md).
+      // Depuis le Lot 21 (ADR-078), le lot d'un juge révoqué est reçu : un 401 ici
+      // serait une régression (ou un jeton expiré).
       stats.unauthorized += 1
       device.revoked = true
       return
@@ -337,7 +340,10 @@ async function runDevice(setup: Setup, device: Device) {
 
     const body = (await response.json()) as {
       results: { id: string; status: string; reason?: string }[]
+      accessRevoked?: boolean
     }
+    // ADR-078 : le serveur dit au juge qu'il est révoqué, et reçoit quand même sa file.
+    if (body.accessRevoked === true) device.revoked = true
     if (random() < LOST_RESPONSE_RATE) {
       // Le serveur a TRAITÉ, mais le client n'a jamais reçu l'accusé : il rejouera.
       stats.lostResponses += 1
@@ -347,7 +353,8 @@ async function runDevice(setup: Setup, device: Device) {
 
     attemptsForBatch = 0
     for (const result of body.results) {
-      if (result.status === 'accepted') stats.accepted += 1
+      if (result.status === 'accepted' && device.revoked) stats.quarantined += 1
+      else if (result.status === 'accepted') stats.accepted += 1
       else if (result.status === 'duplicate') stats.duplicate += 1
       else if (result.status === 'conflict') stats.conflict += 1
       else {
@@ -428,38 +435,30 @@ async function main() {
       )
   }
 
-  // --- Le juge 4 est révoqué ; le reste de sa file ne partira jamais ---
+  // --- Le juge 4 est révoqué ; le reste de sa file part QUAND MÊME, en quarantaine ---
   await json(`${base}/judges/${setup.judges[3]!.id}/revoke`, {
     method: 'POST',
     headers: setup.headers,
     body: '{}',
   })
-  revokedDevice.queue = secondHalf
-  const before401 = stats.unauthorized
+  revokedDevice.queue = secondHalf.slice()
   await runDevice(setup, revokedDevice)
-  if (stats.unauthorized === before401)
-    anomalies.push('Le juge révoqué a pu envoyer un lot APRÈS sa révocation.')
-
-  // --- Saisie de secours : l'organisateur saisit à la place du juge révoqué ---
-  for (const entry of secondHalf) {
-    const response = await http(`${base}/ascents`, {
-      method: 'POST',
-      headers: setup.headers,
-      body: JSON.stringify({
-        roundId: setup.roundId,
-        routeId: setup.routeIds[entry.routeNumber - 1],
-        competitorId: entry.competitorId,
-        holdNumber: entry.holdNumber,
-        modifier: 'none',
-        isTop: entry.isTop,
-        status: entry.status,
-        climbTimeMs: null,
-        recordedAt: new Date().toISOString(),
-      }),
-    })
-    if (!response.ok)
-      anomalies.push(`Saisie de secours refusée pour le dossard ${entry.bib} : ${response.status}`)
-  }
+  if (!revokedDevice.revoked)
+    anomalies.push("Le juge révoqué n'a jamais été prévenu de sa révocation (accessRevoked).")
+  if (stats.unauthorized > 0)
+    anomalies.push('Le lot du juge révoqué a été refusé en 401 : ses saisies sont restées sur son appareil.')
+  if (stats.quarantined !== secondHalf.length)
+    anomalies.push(
+      `Quarantaine : ${stats.quarantined} saisies reçues du juge révoqué, ${secondHalf.length} attendues.`,
+    )
+  // Tant que l'organisateur n'a rien validé, AUCUNE de ces saisies n'est au classement.
+  const pendingValidation = await json<{ kind: string }[]>(`${base}/conflicts`, {
+    headers: setup.headers,
+  })
+  const awaiting = pendingValidation.filter((c) => c.kind === 'revoked_access').length
+  if (awaiting !== secondHalf.length)
+    anomalies.push(`Saisies à valider : ${awaiting}, ${secondHalf.length} attendues.`)
+  // L'organisateur les acceptera plus bas, avec les conflits (« choisir » la seule valeur).
 
   // --- Second appareil du juge 1 : trois valeurs DIFFÉRENTES pour des passages déjà envoyés ---
   const judge1Entries = truth
@@ -602,7 +601,7 @@ async function main() {
   )
   console.log(`Conflits restants après tranchage  ${remaining.length}`)
   console.log(
-    `Juge 4 révoqué : ${revokedTruth.size} saisies prévues, ${secondHalf.length} restées dans sa file, reprises par l'organisateur ; 401 reçus ${stats.unauthorized}`,
+    `Juge 4 révoqué : ${revokedTruth.size} saisies prévues, ${stats.quarantined} reçues en quarantaine puis acceptées par l'organisateur ; 401 reçus ${stats.unauthorized}`,
   )
   if (anomalies.length > 0) {
     console.log('\nAnomalies :')

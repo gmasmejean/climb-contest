@@ -47,6 +47,8 @@ Votre voie peut afficher « Aucun tour ouvert ». Quand l'organisateur ouvre le 
 - **L'écran doit rester allumé** : ne verrouillez pas votre téléphone entre deux grimpeurs.
 - **Batterie faible** : prévenez l'organisateur avant qu'elle soit vide.
 - **« Lien invalide »** : demandez un nouveau lien à l'organisateur.
+- **« Votre accès a été révoqué »** : gardez la page ouverte jusqu'au message vert — vos dernières saisies partent quand même. Puis allez voir l'organisateur.
+- **« Ce téléphone a encore des saisies de … »** : quelqu'un d'autre a noté avec ce téléphone. Laissez la page ouverte, avec du réseau : ses saisies partent, puis vous pourrez entrer.
 - **Vos saisies restent « en attente » très longtemps alors que vous avez du réseau** : prévenez l'organisateur tout de suite. Votre accès a peut-être été arrêté, et dans ce cas vos saisies en attente **ne partiront pas** : dites-lui lesquelles, il les ressaisira.
 - **Autre problème** : appelez l'organisateur, il a un moyen de saisir à votre place.
 

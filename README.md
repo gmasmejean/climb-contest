@@ -124,6 +124,24 @@ Network → Offline (ou débrancher le wifi), noter des passages, recharger la
 page, revenir en ligne — le bandeau en haut de l'écran juge doit toujours
 refléter honnêtement l'état de la file.
 
+### Juge révoqué, changement de juge (Lot 21)
+
+Révoquer un juge ne perd plus ses saisies en attente (ADR-078). Son téléphone
+les envoie quand même : le serveur les reçoit **en quarantaine** — hors
+classement — et l'organisateur les retrouve dans **Pilotage → Conflits**, sous
+« Saisie d'un accès révoqué — à valider » : accepter, refuser (motif
+obligatoire) ou saisir une autre valeur. Tant qu'il en reste, la catégorie ne se
+publie pas. Côté juge, l'écran « Votre accès a été révoqué » laisse la file finir
+de partir, puis déconnecte ; toutes les autres routes juge répondent 401 avec
+`code: "judge_revoked"`.
+
+Ouvrir le lien d'un **autre** juge sur un téléphone ne vide plus jamais une file
+en attente (ADR-079) : elle part d'abord, avec l'ancien jeton, puis une
+confirmation nominative est demandée. Rescanner son propre lien ne demande rien.
+
+Parcours e2e : `e2e/judge-revoked.spec.ts` (projet `mobile`, 360 px). La
+répétition générale (`pnpm rehearsal`) joue aussi le cas du juge révoqué.
+
 ### Mise à jour de l'application
 
 Après un redéploiement (`docker compose up --build -d`), un navigateur qui

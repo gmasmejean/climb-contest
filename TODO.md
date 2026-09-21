@@ -195,14 +195,9 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   serveur non détecté), rien n'alerte l'organisateur au-delà du bandeau
   juge local (« Hors ligne, N saisies en attente » resterait affiché tant
   que le juge n'est pas revenu en ligne, sans limite de temps).
-- **Un juge révoqué pendant qu'il est hors ligne ne l'apprend qu'à la
-  prochaine tentative de synchronisation** (401 renvoyé par
-  `POST /ascents/batch`, traité comme un échec transport ordinaire — la
-  file retente indéfiniment avec repli exponentiel, sans jamais distinguer
-  ce cas d'une simple coupure réseau). Les écrans juge ne faisant plus aucune
-  lecture réseau (ADR-012), il n'y a plus d'autre point de contact pour
-  détecter une révocation avant ce moment. Pas construit ce lot — noté pour
-  ne pas être surpris si un club signale ce scénario en usage réel.
+- ~~**Un juge révoqué pendant qu'il est hors ligne ne l'apprend qu'à la prochaine tentative de
+  synchronisation**, et sa file réessaie sans fin.~~ Résolu au Lot 21 (ADR-078) : sa file est
+  reçue en quarantaine, il est prévenu puis déconnecté.
 - **Un `rejected` (création) n'annule pas l'écriture optimiste déjà faite
   dans le cache local** (`routeDetails`) — le compétiteur reste affiché
   « fait » avec un avertissement permanent, plutôt que de réapparaître en
@@ -360,11 +355,8 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   renvoyé à l'écran de connexion** (ADR-060) : sa session ne se restaure qu'avec
   le serveur. Il doit attendre le retour du réseau. Un mode « lecture seule »
   qui garderait le dernier état affiché n'existe pas.
-- **Rien ne dit à un juge que sa file est bloquée parce que son accès a été
-  révoqué** : la répétition générale l'a confirmé — l'appareil du juge révoqué
-  reçoit un 401, traité comme une coupure réseau, et réessaie indéfiniment. Ses
-  saisies en attente n'atteindront jamais le serveur ; l'organisateur doit les
-  ressaisir (saisie de secours). Déjà noté au Lot 6, maintenant mesuré.
+- ~~**Rien ne dit à un juge que sa file est bloquée parce que son accès a été révoqué.**~~
+  Résolu au Lot 21 (ADR-078).
 - **Limitation de débit partagée par toute la salle** (mesuré par la répétition
   et le test SSE) : 120 lots de saisie par minute et par adresse, 300
   connexions SSE par minute et par adresse, 600 lectures publiques par minute.
@@ -583,3 +575,32 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **Le panneau de détail n'est pas atteignable au clavier depuis la liste** autrement qu'en
   tabulant : pas de raccourci, pas de déplacement du focus vers le panneau à l'ouverture. À voir
   avec la « navigation clavier dans les tableaux » déjà écartée des Lots 17–20.
+
+## Depuis le juge révoqué (Lot 21, ADR-078 et ADR-079)
+
+- **« Rétablir l'accès » n'existe pas** : la révocation reste irréversible, alors que `CLAUDE.md`
+  veut des saisies destructives réversibles. Écarté comme chemin de récupération (ADR-078), mais
+  un clic sur le mauvais juge ne se rattrape toujours qu'en recréant un accès.
+- **Un juge SUPPRIMÉ (`deleted_at`) n'a pas la quarantaine** : son lot reçoit toujours un 401
+  « Accès introuvable », et sa file reste sur son téléphone. Même traitement à prévoir si la
+  suppression d'un juge devient possible depuis l'interface.
+- **Un accès révoqué peut envoyer sans limite de durée** (bornes retenues : voies assignées et
+  limitation de débit). Un téléphone volé peut donc remplir l'onglet Conflits et retenir une
+  publication. Une fenêtre de temps ou une borne par appareil connu ont été écartées ; à
+  reconsidérer si le cas se présente.
+- **Une saisie refusée ne se « dé-refuse » pas** : elle reste en base et dans le journal, mais
+  l'organisateur doit la ressaisir (saisie de secours) s'il s'est trompé.
+- **Deux saisies en quarantaine sur le même passage, envoyées au même instant par deux
+  appareils**, peuvent créer deux groupes solitaires (elles ne sont pas dans l'index d'unicité).
+  Accepter la seconde renvoie alors un 409 lisible. Négligeable en pratique.
+- **Un client resté sur l'ancienne version ignore `accessRevoked`** et continue de saisir : tout
+  part en quarantaine, rien n'est perdu, mais le juge n'est pas prévenu avant la mise à jour.
+- **« Envoi en cours… » sur l'écran de changement de juge** reste affiché même si chaque essai
+  échoue (borne wifi saturée) : le bouton « Réessayer l'envoi » et la sortie de secours sont là,
+  mais rien ne dit « ça ne passe pas ».
+- **Le limiteur de `GET /judge/access` (30 / 15 min par adresse) s'épuise vite en e2e**, et la page
+  dit alors « Lien invalide » — message trompeur pour un vrai 429, en salle aussi (une seule
+  adresse publique pour tous les juges le matin).
+- **L'état « file pas encore relue » de l'écran « accès révoqué »** n'a pas de test de composant
+  (le moteur est un singleton déjà hydraté en test) ; seul `SyncEngine.isHydrated` est testé.
+

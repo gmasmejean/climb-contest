@@ -680,7 +680,7 @@ Attention, dans Infos : le bloc « statut » a sa propre mutation et ne doit pas
 tomber sous la barre d'enregistrement du formulaire principal.
 ```
 
-### Lot 21 — Juge révoqué : aucune saisie perdue (en cours)
+### Lot 21 — Juge révoqué : aucune saisie perdue (livré)
 
 > Hors série grand écran, passé devant les Lots 19b et 20 parce qu'il touche la règle n° 1
 > (« une action de juge ne doit jamais être perdue »). Décisions : ADR-078, ADR-079.
@@ -692,6 +692,21 @@ ressaisit depuis l'onglet Conflits ; le juge apprend sa révocation, sa file
 finit de partir, puis il est déconnecté ; ouvrir le lien d'un autre juge ne vide
 plus jamais une file en attente. Migration réversible (`ascent.voided_at`).
 ```
+
+Écarts au cadrage, vus en navigateur ou en écrivant le code :
+
+- **Les cartes de l'onglet Conflits nomment maintenant le compétiteur et la voie.** Elles ne le
+  faisaient pas, y compris pour les conflits ordinaires : avec trois saisies à valider, on ne
+  savait pas laquelle était laquelle.
+- **Défaut préexistant corrigé en passant** : une troisième saisie arrivant pendant un conflit
+  ouvert entrait au classement, et trancher le conflit heurtait alors l'index d'unicité. Elle
+  rejoint désormais le groupe (ADR-078 point 3), testé.
+- **Une saisie refusée par le serveur (`rejected`) bloque aussi le changement de juge** : comme
+  une saisie en attente, elle n'existe que sur le téléphone.
+- **La sauvegarde JSON porte `voidedAt`** (facultatif, version inchangée) : sans lui, une saisie
+  refusée redevenait « à valider » après un réimport.
+- **La répétition générale** attendait un 401 pour le juge révoqué ; elle vérifie maintenant la
+  quarantaine, et n'a plus besoin de saisie de secours.
 
 ### Lot 20 — Pilotage jour J sur portable (D4, à cadrer)
 

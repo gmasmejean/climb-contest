@@ -106,7 +106,9 @@ Les compétiteurs sont souvent mineurs. Seul le **propriétaire du club** peut, 
 | Problème | Que faire |
 |---|---|
 | **Le serveur ne répond plus** | Les juges continuent ; ne changez rien. Attendez le retour du réseau. Ne rechargez pas la page : vous seriez renvoyé à la connexion. |
-| **Un juge dit « en attente » longtemps** | Vérifiez sa dernière activité dans la Vue d'ensemble. Si son accès a été révoqué, ses saisies en attente ne partiront pas : faites-les ressaisir avec **Saisir (secours)**. |
+| **Un juge dit « en attente » longtemps** | Vérifiez sa dernière activité dans la Vue d'ensemble : c'est presque toujours le réseau. Ses saisies restent sur son téléphone et partiront seules. |
+| **Vous avez révoqué un juge qui avait encore des saisies sur son téléphone** | Rien n'est perdu. Dès que son téléphone retrouve du réseau, elles arrivent dans **Pilotage → Conflits**, sous « Saisie d'un accès révoqué — à valider ». Pour chacune : **Accepter** (elle compte au classement), **Refuser** (avec un motif) ou **Saisir une autre valeur**. Tant qu'il en reste, la catégorie ne peut pas être publiée. Son téléphone lui affiche « Votre accès a été révoqué ». |
+| **Un juge reprend le téléphone d'un autre** | En ouvrant son lien, le téléphone prévient s'il reste des saisies du juge précédent et les envoie d'abord. Ne touchez à « Effacer ces saisies » que si vous les avez déjà ressaisies vous-même. |
 | **Un juge a perdu son lien** | Onglet **Juges**, bouton **Voir l'accès**. Si le juge a un code, **Régénérer le PIN** ; sinon, **Révoquer** son accès et recréez-le pour obtenir un nouveau lien. |
 | **Un classement public semble bloqué** | Le public voit « Reconnexion… » : la page se remet à jour toute seule. Un classement « provisoire » n'est pas une panne. |
 | **Erreur de saisie découverte tard** | **Corriger** avec un motif (Pilotage → Voies). En phases, si un tour suivant est ouvert, la liste des qualifiés ne change plus. |
