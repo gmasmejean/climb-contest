@@ -680,6 +680,19 @@ Attention, dans Infos : le bloc « statut » a sa propre mutation et ne doit pas
 tomber sous la barre d'enregistrement du formulaire principal.
 ```
 
+### Lot 21 — Juge révoqué : aucune saisie perdue (en cours)
+
+> Hors série grand écran, passé devant les Lots 19b et 20 parce qu'il touche la règle n° 1
+> (« une action de juge ne doit jamais être perdue »). Décisions : ADR-078, ADR-079.
+
+```
+Lot 21 : le lot d'un juge révoqué est reçu et mis en quarantaine (groupe de
+conflit, éventuellement à une seule ligne) ; l'organisateur accepte, refuse ou
+ressaisit depuis l'onglet Conflits ; le juge apprend sa révocation, sa file
+finit de partir, puis il est déconnecté ; ouvrir le lien d'un autre juge ne vide
+plus jamais une file en attente. Migration réversible (`ascent.voided_at`).
+```
+
 ### Lot 20 — Pilotage jour J sur portable (D4, à cadrer)
 
 ```

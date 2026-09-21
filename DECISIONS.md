@@ -2999,6 +2999,83 @@ mais deux aperçus à garder cohérents et un garde anti-course de plus).
 
 ---
 
+## ADR-078 — Les saisies d'un accès révoqué sont reçues, mais mises en quarantaine
+
+**Date :** 2026-09-21
+**Contexte :** Lot 21. Un juge révoqué recevait un 401 que `SyncEngine` traitait comme une panne
+réseau : réessais sans fin, bandeau « Synchronisation… » pour toujours, et des saisies faites
+hors ligne AVANT la révocation qui n'atteignaient jamais le serveur (mesuré à la répétition
+générale du Lot 9). Contraire à la règle n° 1 de `CLAUDE.md`.
+
+**Décision (actée avec l'utilisateur) :**
+
+1. `POST /judge/ascents/batch` — et lui seul — **accepte** le lot d'un juge révoqué. Toutes les
+   autres routes juge répondent toujours 401, désormais avec un membre d'extension RFC 9457
+   `code: 'judge_revoked'`.
+2. Une saisie reçue d'un accès révoqué n'entre **jamais** directement au classement : elle porte
+   un `conflict_group`, comme un conflit. Elle est donc hors classement, bloque la publication de
+   sa catégorie, remonte en alerte, et se tranche par une décision tracée — sans table ni écran
+   nouveaux. S'il n'y a pas de saisie active en face, le groupe n'a **qu'une ligne** : c'est une
+   « saisie à valider », affichée dans l'onglet Conflits sous un libellé distinct (« Saisie d'un
+   accès révoqué — à valider ») avec Accepter / Refuser / Saisir une autre valeur.
+3. **Invariant :** un groupe solitaire n'existe que s'il n'y a pas de ligne active sur le même
+   (tour, voie, compétiteur). Toute nouvelle saisie sur un triplet qui a déjà un groupe non résolu
+   **rejoint ce groupe** (valeur différente) ou le **résout** (valeur identique : la ligne en
+   attente est chaînée sur la nouvelle). C'est ce qui garde le modèle cohérent quand
+   l'organisateur ressaisit en secours.
+4. **Bornes :** uniquement les voies assignées au juge (l'affectation survit à la révocation) et
+   la limitation de débit existante. La fenêtre de correction de 5 minutes (ADR-007) est
+   **conservée** pour un accès révoqué : sans elle, il pourrait sortir du classement toutes ses
+   saisies passées en les « corrigeant ».
+5. **Refuser** une saisie solitaire demande un état terminal : colonne `ascent.voided_at`. La
+   ligne refusée **garde** son `conflict_group` — elle reste ainsi hors de tous les filtres
+   « actif » existants et de l'index `ascent_active_key` sans qu'on y touche — et les lectures de
+   conflits non résolus ajoutent `voided_at IS NULL`. Motif obligatoire, événement `voided`.
+6. Les éléments mis en quarantaine reviennent `accepted` au client (le serveur les détient
+   durablement) ; la réponse du lot porte `accessRevoked: true`. Le client finit alors d'envoyer
+   sa file, **puis déconnecte le juge** sur un écran qui dit ce qui s'est passé et liste les
+   éléments refusés restants.
+
+**Conséquences :** SPEC.md § 3.2 (« un juge révoqué est déconnecté au prochain appel ») devient
+« …ne peut plus rien lire ; ses saisies en file sont reçues pour validation ». Un téléphone volé
+peut encore créer du bruit à valider (et bloquer une publication) ; il ne peut pas toucher au
+classement. Un client resté sur une ancienne version ignore `accessRevoked` et continue de
+saisir : tout part en quarantaine, rien n'est perdu.
+
+**Alternatives écartées :** « Rétablir l'accès » comme chemin de récupération (demande à un
+bénévole sous pression de rétablir, attendre, re-révoquer ; reste souhaitable pour la
+réversibilité, noté dans `TODO.md`) ; une table de quarantaine dédiée (le mécanisme de conflit
+fait déjà tout) ; n'accepter que depuis un appareil déjà connu, ou pendant N heures (écartés par
+l'utilisateur : refusent des cas légitimes).
+
+---
+
+## ADR-079 — Changer de juge sur un appareil ne vide plus jamais une file en attente
+
+**Date :** 2026-09-21
+**Contexte :** ADR-036 vide la base locale quand `bootstrapJudge()` voit un autre `judgeId`. Or
+la procédure d'ADR-026 (« PIN perdu → révoquer puis recréer ») amène précisément un juge à
+scanner un nouveau QR sur un téléphone dont la file n'est pas vide : ses saisies étaient
+effacées sans un mot. **Amende ADR-036.**
+
+**Décision :**
+
+1. `GET /judge/access/:token` renvoie aussi `judgeId`. L'écran d'accès le compare au juge connu
+   localement. **Même juge : aucun message** (rescanner son propre QR est courant).
+2. Autre juge et file en attente : l'écran le dit (« Ce téléphone a encore N saisies de Paul à
+   envoyer »), force l'envoi **avec l'ancien jeton**, et n'avance que file vidée. Avec ADR-078,
+   une file peut toujours partir dès qu'il y a du réseau, même pour un accès révoqué.
+3. Puis une confirmation nominative (« Continuer en tant que Léa ? »). Le nouveau jeton n'est
+   posé qu'après.
+4. **Sortie de secours assumée :** si la file ne peut plus partir (jeton expiré, compétition à la
+   corbeille), l'écran liste les saisies en clair et propose « Effacer ces saisies » derrière une
+   confirmation explicite. Sans elle, l'appareil resterait dans une impasse et le bénévole
+   viderait les données du site à la main, sans rien voir.
+5. `resetJudgeDatabase()` refuse désormais de vider une file contenant du `pending`/`sending`
+   sans demande explicite — ceinture et bretelles.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
