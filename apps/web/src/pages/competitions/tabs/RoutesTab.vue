@@ -2,6 +2,7 @@
 import { Button, DataList, useToast, type DataListColumn } from '@climbcontest/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { ApiError } from '../../../api/client'
 import {
@@ -30,7 +31,30 @@ const { data: categories } = useQuery({
 
 // Photo annotée (Lot 15, ADR-066).
 const toast = useToast()
-const editingRouteId = ref<string | null>(null)
+
+// La voie ouverte vit dans l'adresse (ADR-075 point 4), comme la sous-section du
+// pilotage : recharger la page en pleine annotation ne la referme pas. On écrit
+// avec `replace` et non `push` — une entrée d'historique par ligne cliquée ferait
+// du bouton « précédent » un désélecteur au lieu d'un retour.
+// `urlRoute` et non `route` : dans ce fichier, une « route » est une voie.
+const urlRoute = useRoute()
+const router = useRouter()
+const editingRouteId = computed<string | null>({
+  get: () => {
+    const requested = urlRoute.query.route
+    if (typeof requested !== 'string' || requested === '') return null
+    // Repli silencieux sur « aucune sélection » quand l'identifiant ne désigne
+    // aucune voie. Tant que la liste est en vol, on garde la demande : sinon un
+    // lien profond se refermerait avant même d'avoir été résolu.
+    if (routes.value && !routes.value.some((r) => r.id === requested)) return null
+    return requested
+  },
+  set: (id) => {
+    const query = { ...urlRoute.query }
+    delete query.route
+    void router.replace({ query: id === null ? query : { ...query, route: id } })
+  },
+})
 const editingRoute = computed(() => routes.value?.find((r) => r.id === editingRouteId.value))
 const hasAnyPhoto = computed(() => routes.value?.some((r) => r.photoAssetId !== null) ?? false)
 const printingSheets = ref(false)
@@ -55,8 +79,21 @@ async function refresh(): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: routesKey })
 }
 
-function startEdit(route: RouteWithCategories): void {
-  editingRouteId.value = route.id
+// Type minimal plutôt que `InstanceType<typeof RouteEditorPanel>` : le service
+// de types d'ESLint ne résout pas l'instance d'un composant `.vue`.
+const editorPanel = ref<{ hasPendingCreation: boolean } | null>(null)
+
+function startEdit(target: RouteWithCategories): void {
+  // Une création en reprise (ADR-067 point 5) tient la photo et les prises qui
+  // ne sont pas parties : changer de voie les perdrait sans rien dire.
+  if (editorPanel.value?.hasPendingCreation) {
+    toast.show(
+      'Terminez ou annulez la voie en cours d’ajout avant d’en ouvrir une autre : sa photo ou ses prises ne sont pas encore enregistrées.',
+      'error',
+    )
+    return
+  }
+  editingRouteId.value = target.id
 }
 
 async function onSaved(): Promise<void> {
@@ -65,19 +102,15 @@ async function onSaved(): Promise<void> {
 }
 
 /**
- * La voie en cours de modification peut quitter la liste (rechargement, retrait
- * depuis un autre appareil). `editingRoute` devient alors `undefined` et
- * l'éditeur disparaît, mais `editingRouteId` resterait posé : « Enregistrer »
- * enverrait un PATCH sur un identifiant mort. On rend la main au mode création.
- * Jamais pendant que la liste est encore en vol (`routes` vaut `undefined`),
- * sinon une voie ouverte par son adresse se refermerait toute seule.
+ * L'adresse peut désigner une voie qui n'existe pas (lien périmé, voie retirée
+ * ailleurs). Le getter l'ignore déjà ; ce watch retire aussi le paramètre mort
+ * de l'adresse, pour qu'un rechargement ne le ramène pas. Jamais pendant que la
+ * liste est encore en vol.
  */
-watch(routes, (list) => {
-  const current = editingRouteId.value
-  if (!list || current === null) return
-  if (list.some((route) => route.id === current)) return
+watch([routes, () => urlRoute.query.route], ([list, requested]) => {
+  if (!list || typeof requested !== 'string' || requested === '') return
+  if (list.some((candidate) => candidate.id === requested)) return
   editingRouteId.value = null
-  toast.show("La voie que vous modifiiez n'est plus dans la liste.", 'error')
 })
 
 const { mutate: reorder } = useMutation({
@@ -237,6 +270,7 @@ const columns = computed<DataListColumn<RouteWithCategories>[]>(() => [
     </DataList>
 
     <RouteEditorPanel
+      ref="editorPanel"
       :competition-id="competitionId"
       :route="editingRoute ?? null"
       :categories="categoryList"
