@@ -1,5 +1,7 @@
 export { default as Badge } from './Badge.vue'
 export { default as Button } from './Button.vue'
+export { default as DataList } from './DataList.vue'
+export type { DataListCardRole, DataListColumn, DataListSort, SortDir } from './data-list'
 export { default as FileInput } from './FileInput.vue'
 export { default as Modal } from './Modal.vue'
 export { default as NumberField } from './NumberField.vue'
