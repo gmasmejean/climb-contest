@@ -56,6 +56,9 @@ export type QrSheetInput = z.infer<typeof qrSheetInputSchema>
 
 /** `GET /judge/access/:token` — ce que voit l'écran `/j/<token>` avant authentification. */
 export const judgeAccessInfoSchema = z.object({
+  // ADR-079 : permet à l'écran d'accès de reconnaître « c'est déjà le juge de
+  // cet appareil » sans message, et de ne jamais vider la file d'un autre.
+  judgeId: z.uuid(),
   displayName: z.string(),
   pinRequired: z.boolean(),
 })

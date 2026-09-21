@@ -74,7 +74,14 @@ export const judgeAscentBatchResultSchema = z.discriminatedUnion('status', [
 ])
 export type JudgeAscentBatchResult = z.infer<typeof judgeAscentBatchResultSchema>
 
+/**
+ * `accessRevoked` (Lot 21, ADR-078) : l'accès du juge a été révoqué. Ses
+ * éléments ont quand même été reçus — mis en quarantaine, ils reviennent
+ * `accepted` — et le client doit finir d'envoyer sa file puis déconnecter le
+ * juge. Facultatif en lecture : un serveur d'avant le Lot 21 ne l'envoie pas.
+ */
 export const judgeAscentsBatchResponseSchema = z.object({
   results: z.array(judgeAscentBatchResultSchema),
+  accessRevoked: z.boolean().optional(),
 })
 export type JudgeAscentsBatchResponse = z.infer<typeof judgeAscentsBatchResponseSchema>

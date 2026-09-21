@@ -15,13 +15,23 @@ export const conflictAscentSchema = z.object({
 })
 export type ConflictAscent = z.infer<typeof conflictAscentSchema>
 
+/**
+ * `'conflict'` : au moins deux valeurs contradictoires, à départager.
+ * `'revoked_access'` (Lot 21, ADR-078) : une SEULE valeur, reçue d'un accès
+ * révoqué et mise en quarantaine — à accepter, refuser ou ressaisir. Dérivé du
+ * nombre de lignes du groupe, jamais stocké.
+ */
+export const conflictKindSchema = z.enum(['conflict', 'revoked_access'])
+export type ConflictKind = z.infer<typeof conflictKindSchema>
+
 export const conflictSummarySchema = z.object({
   conflictGroup: z.uuid(),
+  kind: conflictKindSchema,
   competitionId: z.uuid(),
   roundId: z.uuid(),
   routeId: z.uuid(),
   competitorId: z.uuid(),
-  ascents: z.array(conflictAscentSchema).min(2),
+  ascents: z.array(conflictAscentSchema).min(1),
 })
 export type ConflictSummary = z.infer<typeof conflictSummarySchema>
 
@@ -38,12 +48,19 @@ const organizerAscentShapeFields = {
  * motif facultatif, le choix est sa propre justification. `'new_value'` :
  * aucune des deux n'était correcte, l'organisateur saisit une troisième
  * valeur — motif obligatoire, comme toute correction organisateur.
+ * `'reject'` : réservé à une saisie en quarantaine, voir ci-dessous.
  */
 export const resolveConflictInputSchema = z.discriminatedUnion('resolution', [
   z.object({
     resolution: z.literal('choose'),
     ascentId: z.uuid(),
     reason: z.string().trim().max(500).nullable().optional(),
+  }),
+  // ADR-078 : refuser une saisie en quarantaine (groupe à une seule ligne).
+  // Motif obligatoire : c'est une saisie de juge qu'on écarte.
+  z.object({
+    resolution: z.literal('reject'),
+    reason: z.string().trim().min(1).max(500),
   }),
   z
     .object({

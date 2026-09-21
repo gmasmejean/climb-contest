@@ -46,6 +46,21 @@ describe('resolveConflictInputSchema', () => {
     expect(result.success).toBe(true)
   })
 
+  it('refuse de rejeter une saisie en quarantaine sans motif (ADR-078)', () => {
+    expect(resolveConflictInputSchema.safeParse({ resolution: 'reject' }).success).toBe(false)
+    expect(
+      resolveConflictInputSchema.safeParse({ resolution: 'reject', reason: '   ' }).success,
+    ).toBe(false)
+  })
+
+  it('accepte de rejeter une saisie en quarantaine avec un motif', () => {
+    const result = resolveConflictInputSchema.safeParse({
+      resolution: 'reject',
+      reason: 'Téléphone perdu, saisie non fiable.',
+    })
+    expect(result.success).toBe(true)
+  })
+
   it('refuse une résolution inconnue', () => {
     const result = resolveConflictInputSchema.safeParse({ resolution: 'ignore' })
     expect(result.success).toBe(false)
