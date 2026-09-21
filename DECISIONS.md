@@ -2708,6 +2708,62 @@ rendu identique (« tu ne réécris pas ce qui marche ») ; Source Sans 3 chez l
 
 ---
 
+## ADR-072 — Espace organisateur sur grand écran : seuil `lg`, barre latérale, onglet dans l'URL
+
+**Date :** 2026-09-21
+**Contexte :** les pages organisateur sont plafonnées à `max-w-lg` (512 px) ou `max-w-3xl`
+(768 px) et n'ont aucun breakpoint `lg:` ; sur un écran de 1440 px plus de la moitié de la
+largeur est vide. L'utilisateur précise que la préparation **et le pilotage jour J se font
+sur un portable à la table de l'organisation**, le téléphone ne servant que d'appoint.
+
+**Décisions (actées avec l'utilisateur, 2026-09-21) :**
+
+1. **Tout est additif à partir de `lg` (1024 px).** Sous ce seuil le rendu ne change pas ;
+   les 360 px restent vérifiés. Écrans juge et public non concernés.
+2. **Quatre lots** (ROADMAP Lots 17–20) : socle, tableaux denses, maître–détail, pilotage.
+   Un à la fois.
+3. **Conteneur unique** : `BrandShell` reçoit `width: 'narrow' | 'wide'`. `wide`
+   (`max-w-screen-2xl`) sert aux pages organisateur ; `narrow`, valeur par défaut, garde
+   l'en-tête `max-w-6xl` des pages d'entrée et publiques.
+4. **Barre latérale groupée** sur la page compétition à partir de `lg` : *Préparer* (Infos,
+   Catégories, Compétiteurs, Voies, Tours, Juges), *Vérifier* (Prêt à démarrer ?), *Jour J*
+   (Pilotage, Exports). C'est le même composant `Tabs`, en `orientation="vertical"` : on
+   garde `role="tab"` et les mêmes libellés, donc la sémantique, la navigation au clavier et
+   les 28 sélecteurs `getByRole('tab')` des e2e.
+5. **L'onglet vit dans l'URL** : `/competitions/:id/:tab?`, et `?section=` pour les
+   sous-sections du pilotage. Rechargement, lien profond, « précédent » du navigateur et
+   plusieurs fenêtres côte à côte fonctionnent. Un onglet inconnu, ou `rounds` sur une
+   compétition sans phases, retombe sur `infos`.
+6. **Le pilotage sur portable devient la cible d'optimisation** (Lot 20) ; son rendu mobile
+   reste fonctionnel.
+
+**Alternatives écartées :** onglets horizontaux simplement élargis (neuf libellés à plat,
+sans hiérarchie, et toujours pas de place pour des pastilles d'alerte) ; une barre latérale
+en `<nav>` de liens (sémantique défendable, mais réécriture de 28 sélecteurs e2e pour un
+gain nul à l'usage) ; routes enfants une par onglet (refonte de `CompetitionDetail` sans
+bénéfice par rapport à un paramètre).
+
+---
+
+## ADR-073 — Densité compacte à la souris seulement
+
+**Date :** 2026-09-21
+**Contexte :** `CLAUDE.md` impose des cibles tactiles ≥ 48 px. Dans un tableau de 150
+compétiteurs sur un écran 1080p, cela donne une douzaine de lignes visibles contre dix-huit
+à 40 px.
+
+**Décision (actée avec l'utilisateur) :** les lignes de tableau et actions compactes
+(~40 px) sont autorisées **uniquement sous `@media (pointer: fine)`**, dans l'espace
+organisateur. Tout appareil tactile — tablette comprise, quelle que soit sa largeur —
+garde 48 px. C'est une dérogation explicite à `CLAUDE.md` § « Conséquences non
+négociables », point 4 ; elle ne s'applique à aucun écran juge. Mise en œuvre au Lot 18 ;
+le Lot 17 ne réduit aucune cible.
+
+**Alternative écartée :** 48 px partout — règle plus simple, mais un tiers de lignes en
+moins sur l'écran où l'organisateur passe le plus de temps.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

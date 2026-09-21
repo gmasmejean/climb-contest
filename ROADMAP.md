@@ -605,3 +605,53 @@ classement faux se découvre sur le podium.
 
 **Fais relire `packages/scoring/RULES.md` par un juge fédéral** avant la
 première compétition réelle. C'est pour ça que ce document existe.
+
+---
+
+## Lots 17 à 20 — Interface organisateur sur grand écran
+
+> Décidé le 2026-09-21 (ADR-072, ADR-073). L'espace organisateur est plafonné à
+> 512–768 px alors que la préparation et le pilotage jour J se font sur un
+> portable à la table de l'organisation. Tout est **additif à partir de `lg`
+> (1024 px)** : le rendu mobile ne change pas, les écrans juge et public ne sont
+> pas concernés. Un lot à la fois ; les pistes écartées sont dans `TODO.md`.
+
+### Lot 17 — Socle desktop (D1)
+
+```
+Lot 17 : conteneur large commun aux pages organisateur (`BrandShell` `wide`) ;
+sur la page compétition, barre latérale groupée Préparer / Vérifier / Jour J à
+partir de 1024 px (onglets horizontaux conservés en dessous, `role="tab"`
+gardé) ; onglet dans l'URL (`/competitions/:id/:tab?`, `?section=` pour le
+pilotage) ; en-tête de compétition collant avec fil d'Ariane. Aucune
+fonctionnalité métier, aucune migration.
+```
+
+### Lot 18 — Listes en tableaux denses (D2, à cadrer)
+
+```
+Lot 18 : composant `DataList` dans `packages/ui` (cartes sous `lg`, tableau
+triable à en-tête collant au-dessus) appliqué aux compétiteurs, voies, juges,
+catégories, liste des compétitions et corbeille ; barre d'outils sur une ligne ;
+ligne d'ajout rapide des compétiteurs ; densité compacte sous `pointer: fine`
+(ADR-073).
+```
+
+### Lot 19 — Maître–détail (D3, à cadrer)
+
+```
+Lot 19 : voies en liste + éditeur côte à côte, annotateur de photo en grand
+(zoom, plein écran) ; juges en liste + fiche (QR, PIN, voies) ; assistant
+d'import en deux colonnes ; formulaires Infos / création en grille avec barre
+d'enregistrement collante.
+```
+
+### Lot 20 — Pilotage jour J sur portable (D4, à cadrer)
+
+```
+Lot 20 : tableau de bord multi-panneaux à partir de `lg` (alertes, conflits,
+progression en barres, juges, journal) ; matrice compétiteurs × voies cliquable
+(point d'API d'agrégat à cadrer en début de lot) ; conflits en vis-à-vis ;
+journal en tableau filtrable ; bandeau d'état serveur ; pastilles dans la barre
+latérale et compteurs dans l'en-tête.
+```
