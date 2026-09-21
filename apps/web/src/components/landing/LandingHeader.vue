@@ -34,7 +34,7 @@ async function onLogout(): Promise<void> {
       <LandingPill variant="outline" @click="onLogout">Se déconnecter</LandingPill>
     </div>
 
-    <LandingPill v-else :to="{ name: 'login' }">
+    <LandingPill v-else variant="glass" :to="{ name: 'login' }">
       <RoleIcon name="user" class="size-5" />
       <span class="flex flex-col items-start leading-tight">
         <span class="text-sm font-bold">Espace organisateur</span>
