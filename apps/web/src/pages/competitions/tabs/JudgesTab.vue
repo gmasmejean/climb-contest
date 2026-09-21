@@ -4,15 +4,27 @@ import {
   type Competition,
   type JudgeCreated,
 } from '@climbcontest/contracts'
-import { Badge, Button, Modal, useToast } from '@climbcontest/ui'
+import {
+  Badge,
+  Button,
+  DataList,
+  Modal,
+  useToast,
+  type DataListColumn,
+  type DataListSort,
+} from '@climbcontest/ui'
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 
 import { ApiError } from '../../../api/client'
 import { competitionsApi, routesApi } from '../../../api/competitions'
 import { judgesApi, revealedJudgeTokens, type JudgeWithRoutes } from '../../../api/judges'
+import { DESKTOP_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
+import { compareText, sortRows } from '../../../lib/table-sort'
 
 const props = defineProps<{ competition: Competition }>()
+
+const isDesktop = useMediaQuery(DESKTOP_QUERY)
 
 const queryClient = useQueryClient()
 const toast = useToast()
@@ -203,6 +215,62 @@ function routeLabels(routeIds: string[]): string {
     .map((r) => `Voie ${r.number}`)
     .join(', ')
 }
+
+/** Le dernier signe de vie n'existe qu'après la première connexion du juge. */
+function lastSeenLabel(j: JudgeWithRoutes): string {
+  if (!j.lastSeenAt) return 'Jamais'
+  return new Date(j.lastSeenAt).toLocaleString('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  })
+}
+
+/** Ordre d'urgence : c'est un révoqué ou un bloqué qu'on cherche dans la liste. */
+const STATUS_RANK: Record<string, number> = { Révoqué: 0, 'Bloqué (PIN)': 1, Actif: 2 }
+const statusRank = (j: JudgeWithRoutes): number => STATUS_RANK[judgeStatus(j).label] ?? 0
+
+const sort = ref<DataListSort | null>(null)
+
+const columns = computed<DataListColumn<JudgeWithRoutes>[]>(() => [
+  {
+    key: 'displayName',
+    label: 'Juge',
+    card: 'title',
+    value: (row) => row.displayName,
+    compare: (a, b) => compareText(a.displayName, b.displayName),
+  },
+  {
+    key: 'status',
+    label: 'Statut',
+    card: 'aside',
+    cellClass: 'w-32',
+    compare: (a, b) => statusRank(a) - statusRank(b),
+  },
+  { key: 'pin', label: 'PIN', card: 'aside', cellClass: 'w-40' },
+  { key: 'routes', label: 'Voies', card: 'subtitle', value: (row) => routeLabels(row.routeIds) },
+  {
+    key: 'lastSeen',
+    label: 'Dernier accès',
+    card: 'hidden',
+    cellClass: 'w-36',
+    value: lastSeenLabel,
+    compare: (a, b) =>
+      new Date(a.lastSeenAt ?? 0).getTime() - new Date(b.lastSeenAt ?? 0).getTime(),
+    missing: (row) => row.lastSeenAt === null,
+  },
+  { key: 'actions', label: 'Actions', card: 'actions', labelHidden: true, cellClass: 'w-72' },
+])
+
+const shown = computed(() => sortRows(judges.value ?? [], sort.value, columns.value))
+
+/**
+ * Action de ligne du tableau : compacte sous pointeur fin seulement (ADR-073).
+ * `Button` reste la pilule de 48 px de la charte, y compris en cartes.
+ */
+const rowActionClass =
+  'fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
+const dangerRowActionClass =
+  'fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-50'
 </script>
 
 <template>
@@ -242,44 +310,81 @@ function routeLabels(routeIds: string[]): string {
     </div>
 
     <p v-if="isPending" class="text-gray-600">Chargement…</p>
-    <ul v-else class="flex flex-col gap-2">
-      <li
-        v-for="j in judges"
-        :key="j.id"
-        class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="font-medium text-gray-900">{{ j.displayName }}</span>
-            <Badge :tone="judgeStatus(j).tone">{{ judgeStatus(j).label }}</Badge>
-            <Badge v-if="!j.hasPin" tone="neutral">Accès direct — pas de PIN</Badge>
-          </div>
-          <p class="text-sm text-gray-600">{{ routeLabels(j.routeIds) }}</p>
+    <DataList
+      v-else
+      :rows="shown"
+      :columns="columns"
+      :layout="isDesktop ? 'table' : 'cards'"
+      :sort="sort"
+      label="Juges"
+      empty-text="Aucun juge."
+      @update:sort="sort = $event"
+    >
+      <template #cell-status="{ row }">
+        <Badge :tone="judgeStatus(row).tone">{{ judgeStatus(row).label }}</Badge>
+      </template>
+
+      <!-- En tableau, une colonne se lit mieux pleine que vide : « Oui » plutôt
+           qu'une pastille qui n'apparaît qu'en creux. -->
+      <template #cell-pin="{ row }">
+        <template v-if="isDesktop">{{ row.hasPin ? 'Oui' : 'Accès direct' }}</template>
+        <Badge v-else-if="!row.hasPin" tone="neutral">Accès direct — pas de PIN</Badge>
+      </template>
+
+      <template #cell-actions="{ row }">
+        <div class="flex flex-wrap items-center gap-2">
+          <template v-if="isDesktop">
+            <button
+              v-if="row.accessUrl"
+              type="button"
+              :class="rowActionClass"
+              @click="viewAccess(row)"
+            >
+              Voir l'accès
+            </button>
+            <button
+              v-if="row.hasPin && !row.revokedAt"
+              type="button"
+              :class="rowActionClass"
+              :disabled="regenerateMutation.isPending.value"
+              @click="regenerateMutation.mutate(row.id)"
+            >
+              Régénérer le PIN
+            </button>
+            <button
+              v-if="!row.revokedAt"
+              type="button"
+              :class="dangerRowActionClass"
+              :disabled="revokeMutation.isPending.value"
+              @click="revokeMutation.mutate(row.id)"
+            >
+              Révoquer
+            </button>
+          </template>
+          <template v-else>
+            <Button v-if="row.accessUrl" variant="secondary" @click="viewAccess(row)">
+              Voir l'accès
+            </Button>
+            <Button
+              v-if="row.hasPin && !row.revokedAt"
+              variant="secondary"
+              :disabled="regenerateMutation.isPending.value"
+              @click="regenerateMutation.mutate(row.id)"
+            >
+              Régénérer le PIN
+            </Button>
+            <Button
+              v-if="!row.revokedAt"
+              variant="danger"
+              :disabled="revokeMutation.isPending.value"
+              @click="revokeMutation.mutate(row.id)"
+            >
+              Révoquer
+            </Button>
+          </template>
         </div>
-        <div class="flex items-center gap-2">
-          <Button v-if="j.accessUrl" variant="secondary" @click="viewAccess(j)">
-            Voir l'accès
-          </Button>
-          <Button
-            v-if="j.hasPin && !j.revokedAt"
-            variant="secondary"
-            :disabled="regenerateMutation.isPending.value"
-            @click="regenerateMutation.mutate(j.id)"
-          >
-            Régénérer le PIN
-          </Button>
-          <Button
-            v-if="!j.revokedAt"
-            variant="danger"
-            :disabled="revokeMutation.isPending.value"
-            @click="revokeMutation.mutate(j.id)"
-          >
-            Révoquer
-          </Button>
-        </div>
-      </li>
-      <li v-if="judges && judges.length === 0" class="text-gray-600">Aucun juge.</li>
-    </ul>
+      </template>
+    </DataList>
 
     <Button variant="secondary" :disabled="isDownloading" @click="downloadQrSheet">
       {{ isDownloading ? 'Génération…' : 'Planche de QR codes (PDF)' }}
