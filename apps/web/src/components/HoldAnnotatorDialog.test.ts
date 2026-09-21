@@ -68,10 +68,13 @@ describe('HoldAnnotatorDialog', () => {
     const wrapper = mountDialog()
     await nextTick()
 
-    const dialog = document.querySelector('[data-testid="hold-annotator-dialog"]')
-    dialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    // Depuis le corps de page : après avoir touché la photo, le focus n'est
+    // plus dans le dialogue, et un écouteur local ne verrait rien passer.
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await nextTick()
     expect(wrapper.emitted('close')).toHaveLength(1)
+
+    const dialog = document.querySelector('[data-testid="hold-annotator-dialog"]')
 
     dialog?.querySelector<HTMLElement>('[data-close]')?.click()
     await nextTick()

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { RouteHold } from '@climbcontest/contracts'
 import { Button } from '@climbcontest/ui'
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import HoldAnnotator from './HoldAnnotator.vue'
 
@@ -24,17 +24,29 @@ const holds = defineModel<RouteHold[]>({ required: true })
 const dialog = ref<HTMLElement | null>(null)
 let previouslyFocused: HTMLElement | null = null
 
+/**
+ * Échap est écouté sur le document et non sur le dialogue : après avoir touché
+ * la photo, le focus est sur le corps de page (le cadre n'est pas focusable) et
+ * un `@keydown.esc` local ne recevrait plus rien.
+ */
+function onEscape(event: KeyboardEvent): void {
+  if (props.open && event.key === 'Escape') emit('close')
+}
+onBeforeUnmount(() => document.removeEventListener('keydown', onEscape))
+
 // Le focus part sur « Fermer » à l'ouverture et revient à l'ouvrant après —
 // `Modal` de packages/ui ne le fait pas encore, le dialogue de recadrage si.
 watch(
   () => props.open,
   async (isOpen) => {
     if (isOpen) {
+      document.addEventListener('keydown', onEscape)
       previouslyFocused =
         document.activeElement instanceof HTMLElement ? document.activeElement : null
       await nextTick()
       dialog.value?.querySelector<HTMLElement>('[data-close]')?.focus()
     } else {
+      document.removeEventListener('keydown', onEscape)
       previouslyFocused?.focus()
       previouslyFocused = null
     }
@@ -53,7 +65,6 @@ watch(
       aria-label="Placer les prises"
       data-testid="hold-annotator-dialog"
       class="fixed inset-0 z-50 flex flex-col bg-white"
-      @keydown.esc="emit('close')"
     >
       <header class="flex items-center justify-between gap-2 px-4 py-2">
         <h2 class="text-lg font-bold text-gray-900">
