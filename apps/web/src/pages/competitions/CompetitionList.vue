@@ -323,18 +323,20 @@ async function trashSelected(): Promise<void> {
                   @update:model-value="setSort"
                 />
               </div>
+              <template #actions>
+                <Button
+                  variant="secondary"
+                  :aria-expanded="showFilters"
+                  aria-controls="competition-filters"
+                  @click="showFilters = !showFilters"
+                >
+                  Filtres<template v-if="activeFilterCount > 0">
+                    ({{ activeFilterCount }})</template
+                  >
+                </Button>
+                <Button v-if="hasFilter" variant="secondary" @click="reset">Réinitialiser</Button>
+              </template>
             </ListToolbar>
-            <div class="flex flex-wrap items-center gap-3">
-              <Button
-                variant="secondary"
-                :aria-expanded="showFilters"
-                aria-controls="competition-filters"
-                @click="showFilters = !showFilters"
-              >
-                Filtres<template v-if="activeFilterCount > 0"> ({{ activeFilterCount }})</template>
-              </Button>
-              <Button v-if="hasFilter" variant="secondary" @click="reset">Réinitialiser</Button>
-            </div>
 
             <div
               v-show="showFilters"

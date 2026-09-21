@@ -58,7 +58,7 @@ const isDesktop = useMediaQuery(DESKTOP_QUERY)
 
 /** Action de ligne compacte sous pointeur fin seulement (ADR-073). */
 const rowActionClass =
-  'fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+  'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
 
 /**
  * Pas de colonne triable (Lot 18) : l'ordre des catégories est celui du
@@ -163,7 +163,7 @@ const { mutate: remove, isPending: isDeleting } = useMutation({
           <button
             type="button"
             aria-label="Monter"
-            class="fine:min-h-10 fine:min-w-10 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
+            class="fine:min-h-8 fine:min-w-8 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
             :disabled="index === 0"
             @click="move(index, -1)"
           >
@@ -172,7 +172,7 @@ const { mutate: remove, isPending: isDeleting } = useMutation({
           <button
             type="button"
             aria-label="Descendre"
-            class="fine:min-h-10 fine:min-w-10 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
+            class="fine:min-h-8 fine:min-w-8 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
             :disabled="!categories || index === categories.length - 1"
             @click="move(index, 1)"
           >
@@ -183,7 +183,7 @@ const { mutate: remove, isPending: isDeleting } = useMutation({
               v-if="isDesktop"
               type="button"
               :disabled="isDeleting"
-              class="fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              class="fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
               @click="remove(row.id)"
             >
               Confirmer
@@ -205,7 +205,7 @@ const { mutate: remove, isPending: isDeleting } = useMutation({
             v-else
             type="button"
             aria-label="Supprimer"
-            class="fine:min-h-10 fine:min-w-10 min-h-12 min-w-12 rounded-lg text-lg text-red-700 hover:bg-red-50"
+            class="fine:min-h-8 fine:min-w-8 min-h-12 min-w-12 rounded-lg text-lg text-red-700 hover:bg-red-50"
             @click="confirmingDeleteId = row.id"
           >
             ✕

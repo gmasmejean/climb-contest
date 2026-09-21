@@ -1,39 +1,21 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
+import { FINE_TARGET, TOUCH_TARGET, noHorizontalScroll, tooSmall } from './support/a11y'
 import { apiJson, loginApi, registerAndVerifyOrganizer } from './support/api'
 
 // Lot 11 (ADR-062, ADR-063) : rechercher dans la liste, puis la corbeille en
 // deux temps — mise à la corbeille sans confirmation, restauration, suppression
 // définitive avec une confirmation. Tourne aussi en émulation mobile (360 px).
 
-/** Boutons, liens et champs visibles trop petits pour un doigt (CLAUDE.md : ≥ 48 px). */
-async function tooSmall(page: Page): Promise<string[]> {
-  return page.evaluate(() =>
-    [...document.querySelectorAll('button, a, input:not([type=checkbox]), select, label')]
-      .filter((el) => el instanceof HTMLElement && el.offsetParent !== null)
-      // Un lien qui n'enveloppe qu'un bouton prend la taille du bouton : on ne compte que le bouton.
-      .filter((el) => !(el.tagName === 'A' && el.querySelector('button')))
-      // Le lien de texte courant « ← Mes compétitions » et les labels de champ ne sont pas des cibles.
-      .filter((el) => !(el.tagName === 'LABEL' && !el.querySelector('input[type=checkbox]')))
-      .filter((el) => el.getBoundingClientRect().height < 47.5)
-      .map(
-        (el) =>
-          `${el.tagName} « ${(el.textContent ?? '').trim().slice(0, 30)} » ${Math.round(el.getBoundingClientRect().height)}px`,
-      ),
-  )
-}
-
-async function noHorizontalScroll(page: Page): Promise<boolean> {
-  return page.evaluate(
-    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-  )
-}
-
 test('rechercher, mettre à la corbeille, restaurer, supprimer définitivement', async ({
   page,
   request,
 }, testInfo) => {
   test.setTimeout(120_000)
+  // Au-dessus de 1024 px les listes deviennent des tableaux et les commandes de
+  // ligne se compactent (Lot 18, ADR-073) ; le doigt, lui, garde ses 48 px.
+  const desktop = testInfo.project.name !== 'mobile'
+  const minTarget = desktop ? FINE_TARGET : TOUCH_TARGET
   const stamp = Date.now()
   const { email, password } = await registerAndVerifyOrganizer(request, 'trash')
   const { headers } = await loginApi(request, email, password)
@@ -72,27 +54,41 @@ test('rechercher, mettre à la corbeille, restaurer, supprimer définitivement',
   await page.getByRole('link', { name: 'Mes compétitions' }).click()
 
   // --- Recherche : sans accent ni casse, gardée dans l'adresse ---
-  const list = page.getByRole('list')
-  await expect(list.getByRole('link')).toHaveCount(3)
+  // Une ligne de liste, carte ou rangée de tableau selon la largeur.
+  const rows = page.getByTestId('data-list-row')
+  await expect(rows).toHaveCount(3)
   await page.getByLabel('Rechercher (nom ou lieu)').fill('BETA')
-  await expect(list.getByRole('link')).toHaveCount(1)
-  await expect(list.getByText(beta)).toBeVisible()
+  await expect(rows).toHaveCount(1)
+  await expect(rows.getByText(beta)).toBeVisible()
   await expect(page).toHaveURL(/q=BETA/)
   await page.reload()
   await expect(page.getByLabel('Rechercher (nom ou lieu)')).toHaveValue('BETA')
-  await expect(list.getByRole('link')).toHaveCount(1)
+  await expect(rows).toHaveCount(1)
   await page.getByLabel('Rechercher (nom ou lieu)').fill('halle')
-  await expect(list.getByText(gamma)).toBeVisible()
+  await expect(rows.getByText(gamma)).toBeVisible()
   await page.getByRole('button', { name: 'Réinitialiser' }).first().click()
-  await expect(list.getByRole('link')).toHaveCount(3)
+  await expect(rows).toHaveCount(3)
   await expect(page).not.toHaveURL(/q=/)
 
-  // --- Tri par nom ---
-  await page.getByLabel('Trier par').selectOption('name:asc')
-  await expect(list.getByRole('link').first()).toContainText(alpha)
-  await page.getByLabel('Trier par').selectOption('date:desc')
+  // --- Tri par nom : en-tête de tableau sur grand écran, sélecteur en dessous ---
+  if (desktop) {
+    await page.getByRole('columnheader', { name: 'Nom' }).getByRole('button').click()
+    await expect(page.getByRole('columnheader', { name: 'Nom' })).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    )
+    await expect(page).toHaveURL(/sort=name/)
+  } else {
+    await page.getByLabel('Trier par').selectOption('name:asc')
+  }
+  await expect(rows.first()).toContainText(alpha)
+  if (desktop) {
+    await page.getByRole('button', { name: 'Réinitialiser' }).first().click()
+  } else {
+    await page.getByLabel('Trier par').selectOption('date:desc')
+  }
 
-  expect(await tooSmall(page)).toEqual([])
+  expect(await tooSmall(page, minTarget)).toEqual([])
   expect(await noHorizontalScroll(page)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('1-liste.png'), fullPage: true })
 
@@ -104,7 +100,7 @@ test('rechercher, mettre à la corbeille, restaurer, supprimer définitivement',
   await page.getByRole('checkbox', { name: new RegExp(alpha) }).check()
   await page.getByRole('checkbox', { name: new RegExp(beta) }).check()
   await expect(page.getByText('2 sélectionnées')).toBeVisible()
-  expect(await tooSmall(page)).toEqual([])
+  expect(await tooSmall(page, minTarget)).toEqual([])
   expect(await noHorizontalScroll(page)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('2-selection.png'), fullPage: true })
 
@@ -114,8 +110,8 @@ test('rechercher, mettre à la corbeille, restaurer, supprimer définitivement',
   await expect(page.getByRole('status')).toContainText(
     '2 compétitions ont été mises à la corbeille.',
   )
-  await expect(list.getByRole('link')).toHaveCount(1)
-  await expect(list.getByText(gamma)).toBeVisible()
+  await expect(rows).toHaveCount(1)
+  await expect(rows.getByText(gamma)).toBeVisible()
   await expect(page.getByRole('link', { name: /Corbeille \(2\)/ })).toBeVisible()
 
   // Pour l'API aussi, elles n'existent plus dans la liste ni en détail.
@@ -130,12 +126,12 @@ test('rechercher, mettre à la corbeille, restaurer, supprimer définitivement',
   await expect(page.getByText(alpha)).toBeVisible()
   await expect(page.getByText(beta)).toBeVisible()
   await expect(page.getByText('Mise à la corbeille aujourd’hui').first()).toBeVisible()
-  expect(await tooSmall(page)).toEqual([])
+  expect(await tooSmall(page, minTarget)).toEqual([])
   expect(await noHorizontalScroll(page)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('3-corbeille.png'), fullPage: true })
 
   await page
-    .getByRole('listitem')
+    .getByTestId('data-list-row')
     .filter({ hasText: alpha })
     .getByRole('button', { name: 'Restaurer' })
     .click()
@@ -150,7 +146,7 @@ test('rechercher, mettre à la corbeille, restaurer, supprimer définitivement',
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText('Cette action est irréversible')
   await expect(dialog).toContainText(beta)
-  expect(await tooSmall(page)).toEqual([])
+  expect(await tooSmall(page, minTarget)).toEqual([])
   await page.screenshot({ path: testInfo.outputPath('4-confirmation.png'), fullPage: true })
   // « Annuler » ne supprime rien.
   await dialog.getByRole('button', { name: 'Annuler' }).click()

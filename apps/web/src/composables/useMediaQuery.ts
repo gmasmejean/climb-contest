@@ -4,6 +4,13 @@ import { onScopeDispose, readonly, ref, type Ref } from 'vue'
 export const DESKTOP_QUERY = '(min-width: 1024px)'
 
 /**
+ * Seuil des colonnes facultatives (Lot 18). Entre 1024 et 1280 px, un tableau
+ * de neuf colonnes écrase les noms à une vingtaine de pixels : les colonnes de
+ * confort n'apparaissent qu'au-delà.
+ */
+export const WIDE_QUERY = '(min-width: 1280px)'
+
+/**
  * Suit une media query. Sans `matchMedia` (vieux navigateur, tests) la requête
  * est réputée fausse : on retombe sur la mise en page mobile, qui marche partout.
  */

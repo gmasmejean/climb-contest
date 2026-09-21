@@ -198,6 +198,16 @@ describe('DataList — ligne d’ajout rapide', () => {
     const target = wrapper.find('input').attributes('aria-labelledby')
     expect(wrapper.find(`#${target}`).text()).toContain('Dossard')
   })
+
+  /**
+   * Le glyphe de tri vit dans le même bouton que le libellé : viser le `<th>`
+   * donnerait « Dossard↕ » comme nom de champ. Vu en navigateur au Lot 18.
+   */
+  it('désigne le libellé seul, jamais le glyphe de tri', () => {
+    const wrapper = table()
+    const labelId = wrapper.find('thead th button span').attributes('id')
+    expect(wrapper.find(`#${labelId}`).text()).toBe('Nom')
+  })
 })
 
 describe('DataList — sélection', () => {
@@ -274,7 +284,7 @@ describe('DataList — classes de ligne', () => {
 describe('DataList — densité (ADR-073)', () => {
   it('compacte les cellules du tableau à la souris seulement', () => {
     const wrapper = table({ selectable: true })
-    expect(wrapper.find('tbody th').classes()).toContain('fine:py-1.5')
+    expect(wrapper.find('tbody th').classes()).toContain('fine:py-1')
     expect(wrapper.find('input[type="checkbox"]').classes()).toContain('fine:size-5')
   })
 

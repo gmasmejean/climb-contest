@@ -66,7 +66,11 @@ defineSlots<
 >()
 
 const uid = useId()
-/** Identifiant du `<th>` d'une colonne : `aria-labelledby` des champs d'ajout rapide. */
+/**
+ * Identifiant du LIBELLÉ d'une colonne, et non de son `<th>` : c'est lui que
+ * les champs d'ajout rapide désignent en `aria-labelledby`. Viser le `<th>`
+ * ferait entrer le glyphe de tri dans le nom accessible (« Catégorie↕ »).
+ */
 const headerId = (key: string): string => `${uid}-${key}`
 
 const tableColumns = computed(() => props.columns.filter((column) => column.tableHidden !== true))
@@ -141,7 +145,6 @@ function cellText(column: DataListColumn<Row>, row: Row): string {
         </th>
         <th
           v-for="column in tableColumns"
-          :id="headerId(column.key)"
           :key="column.key"
           scope="col"
           :aria-sort="ariaSort(column)"
@@ -154,10 +157,14 @@ function cellText(column: DataListColumn<Row>, row: Row): string {
             class="fine:min-h-10 -mx-2 inline-flex min-h-12 items-center gap-1 rounded px-2 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
             @click="toggleSort(column)"
           >
-            <span :class="column.labelHidden ? 'sr-only' : ''">{{ column.label }}</span>
+            <span :id="headerId(column.key)" :class="column.labelHidden ? 'sr-only' : ''">
+              {{ column.label }}
+            </span>
             <span aria-hidden="true" class="text-xs text-gray-600">{{ sortGlyph(column) }}</span>
           </button>
-          <span v-else :class="column.labelHidden ? 'sr-only' : ''">{{ column.label }}</span>
+          <span v-else :id="headerId(column.key)" :class="column.labelHidden ? 'sr-only' : ''">{{
+            column.label
+          }}</span>
         </th>
       </tr>
     </thead>
@@ -170,7 +177,7 @@ function cellText(column: DataListColumn<Row>, row: Row): string {
         class="border-b border-gray-200 hover:bg-gray-50"
         :class="[selectable && isSelected(row) ? 'bg-blue-50' : '', rowClass ? rowClass(row) : '']"
       >
-        <td v-if="selectable" class="fine:py-1.5 px-3 py-3">
+        <td v-if="selectable" class="fine:py-1 px-3 py-3">
           <input
             type="checkbox"
             class="fine:size-5 size-6 shrink-0 accent-blue-700"
@@ -186,14 +193,14 @@ function cellText(column: DataListColumn<Row>, row: Row): string {
           :key="column.key"
           :scope="columnIndex === 0 ? 'row' : undefined"
           :title="column.value ? cellText(column, row) : undefined"
-          class="fine:py-1.5 truncate px-3 py-3 align-middle font-normal"
+          class="fine:py-1 truncate px-3 py-3 align-middle font-normal"
           :class="column.cellClass"
         >
           <slot :name="`cell-${column.key}`" :row="row" :index="index">
             <RouterLink
               v-if="columnIndex === 0 && rowTo"
               :to="rowTo(row)"
-              class="font-medium text-gray-900 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+              class="fine:min-h-8 inline-flex min-h-12 items-center font-medium text-gray-900 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
             >
               {{ cellText(column, row) }}
             </RouterLink>

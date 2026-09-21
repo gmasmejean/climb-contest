@@ -171,7 +171,7 @@ const namesHidden = computed(() => Math.max(0, toDelete.value.length - MAX_NAMES
                 v-if="isDesktop"
                 type="button"
                 :disabled="busy"
-                class="fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                class="fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 @click="restore([row])"
               >
                 Restaurer

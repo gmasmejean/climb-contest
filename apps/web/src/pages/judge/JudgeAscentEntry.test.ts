@@ -11,6 +11,7 @@ import {
   type DraftTarget,
 } from '../../judge/ascent-draft'
 import { judgeDb } from '../../judge/local-db'
+import { syncEngine } from '../../judge/sync-runtime'
 import { flushLiveQueries } from '../../test-utils/flush'
 import JudgeAscentEntry from './JudgeAscentEntry.vue'
 
@@ -55,6 +56,11 @@ describe('JudgeAscentEntry', () => {
     vi.unstubAllGlobals()
     await judgeDb.routeDetails.clear()
     await judgeDb.queue.clear()
+    // `syncEngine` est un singleton de module : vider Dexie ne vide pas sa file
+    // EN MÉMOIRE, et son minuteur de repli finit par envoyer les saisies d'un
+    // test précédent au beau milieu du suivant. `hydrate()` recharge la file
+    // persistée — désormais vide — et referme la fuite (TODO.md, Lot 17).
+    await syncEngine.hydrate()
     await judgeDb.lastSubmission.clear()
     localStorage.clear()
   })
@@ -444,6 +450,11 @@ describe('JudgeAscentEntry — voie annotée (ADR-066)', () => {
     await judgeDb.routeDetails.clear()
     await judgeDb.routePhotos.clear()
     await judgeDb.queue.clear()
+    // `syncEngine` est un singleton de module : vider Dexie ne vide pas sa file
+    // EN MÉMOIRE, et son minuteur de repli finit par envoyer les saisies d'un
+    // test précédent au beau milieu du suivant. `hydrate()` recharge la file
+    // persistée — désormais vide — et referme la fuite (TODO.md, Lot 17).
+    await syncEngine.hydrate()
     localStorage.clear()
   })
 

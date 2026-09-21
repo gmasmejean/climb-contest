@@ -267,7 +267,7 @@ const isDesktop = useMediaQuery(DESKTOP_QUERY)
 
 /** Action de ligne compacte sous pointeur fin seulement (ADR-073). */
 const rowActionClass =
-  'fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+  'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
 
 /**
  * Aucune colonne triable (Lot 18) : l'ordre d'une compétition est celui que
@@ -368,7 +368,7 @@ const columns = computed<DataListColumn<RouteWithCategories>[]>(() => [
           <button
             type="button"
             aria-label="Monter"
-            class="fine:min-h-10 fine:min-w-10 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
+            class="fine:min-h-8 fine:min-w-8 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
             :disabled="index === 0"
             @click="move(index, -1)"
           >
@@ -377,7 +377,7 @@ const columns = computed<DataListColumn<RouteWithCategories>[]>(() => [
           <button
             type="button"
             aria-label="Descendre"
-            class="fine:min-h-10 fine:min-w-10 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
+            class="fine:min-h-8 fine:min-w-8 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
             :disabled="!routes || index === routes.length - 1"
             @click="move(index, 1)"
           >

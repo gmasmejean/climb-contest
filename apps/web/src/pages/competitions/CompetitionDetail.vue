@@ -115,7 +115,13 @@ const startsOn = computed(() =>
           />
         </aside>
 
-        <div v-if="competition" class="min-w-0">
+        <!--
+          L'en-tête des tableaux du Lot 18 se colle SOUS l'en-tête de compétition,
+          qui est lui-même collant à `lg:top-0`. Une seule variable, posée ici :
+          si cet en-tête grandit, il n'y a qu'un endroit à corriger. `6rem` =
+          `top-24`, la même valeur que la barre latérale.
+        -->
+        <div v-if="competition" class="min-w-0" style="--datalist-top: 6rem">
           <InfosTab v-if="activeTab === 'infos'" :competition="competition" />
           <CategoriesTab v-else-if="activeTab === 'categories'" :competition-id="competitionId" />
           <CompetitorsTab v-else-if="activeTab === 'competitors'" :competition-id="competitionId" />

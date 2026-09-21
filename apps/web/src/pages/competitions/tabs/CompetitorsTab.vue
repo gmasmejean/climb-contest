@@ -17,7 +17,7 @@ import { computed, reactive, ref } from 'vue'
 
 import { ApiError } from '../../../api/client'
 import { categoriesApi, competitorsApi } from '../../../api/competitions'
-import { DESKTOP_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
+import { DESKTOP_QUERY, WIDE_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
 import { compareNumber, compareText, sortRows } from '../../../lib/table-sort'
 import ListToolbar from '../../../components/ListToolbar.vue'
 import CompetitorImportWizard from '../CompetitorImportWizard.vue'
@@ -30,6 +30,7 @@ const competitorsKey = ['competitions', props.competitionId, 'competitors']
 const categoriesKey = ['competitions', props.competitionId, 'categories']
 
 const isDesktop = useMediaQuery(DESKTOP_QUERY)
+const isWide = useMediaQuery(WIDE_QUERY)
 
 const { data: competitors, isPending } = useQuery({
   queryKey: competitorsKey,
@@ -222,7 +223,7 @@ const columns = computed<DataListColumn<Competitor>[]>(() => [
     key: 'bib',
     label: 'Dossard',
     card: 'hidden',
-    cellClass: 'w-24',
+    cellClass: 'w-20',
     value: (row) => String(row.bib ?? '—'),
     compare: (a, b) => compareNumber(a.bib ?? 0, b.bib ?? 0),
     missing: (row) => row.bib === null,
@@ -250,15 +251,17 @@ const columns = computed<DataListColumn<Competitor>[]>(() => [
   },
   {
     key: 'birthYear',
+    tableHidden: !isWide.value,
     label: 'Année',
     card: 'hidden',
-    cellClass: 'w-20',
+    cellClass: 'w-16',
     value: (row) => String(row.birthYear ?? '—'),
     compare: (a, b) => compareNumber(a.birthYear ?? 0, b.birthYear ?? 0),
     missing: (row) => row.birthYear === null,
   },
   {
     key: 'clubName',
+    tableHidden: !isWide.value,
     label: 'Club',
     card: 'hidden',
     value: (row) => row.clubName ?? '—',
@@ -267,9 +270,10 @@ const columns = computed<DataListColumn<Competitor>[]>(() => [
   },
   {
     key: 'licenseNumber',
+    tableHidden: !isWide.value,
     label: 'Licence',
     card: 'hidden',
-    cellClass: 'w-28',
+    cellClass: 'w-24',
     value: (row) => row.licenseNumber ?? '—',
   },
   {
@@ -279,7 +283,9 @@ const columns = computed<DataListColumn<Competitor>[]>(() => [
     cellClass: 'w-28',
     compare: (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status),
   },
-  { key: 'actions', label: 'Actions', card: 'actions', labelHidden: true, cellClass: 'w-64' },
+  // `table-fixed` partage le reste entre les colonnes sans largeur : chaque
+  // largeur posée ici est prise aux colonnes de texte, qui en manquent déjà.
+  { key: 'actions', label: 'Actions', card: 'actions', labelHidden: true, cellClass: 'w-60' },
 ])
 
 /** Le tri ne s'applique qu'au tableau : en cartes, aucun en-tête ne le commande. */
@@ -291,9 +297,9 @@ const shown = computed(() => sortRows(filtered.value, sort.value, columns.value)
  * par action, soit trois fois la hauteur utile de la ligne.
  */
 const rowActionClass =
-  'fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
+  'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
 const dangerRowActionClass =
-  'fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-50'
+  'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-50'
 
 const statusTargetId = ref<string | null>(null)
 const statusForm = reactive<{ status: Competitor['status']; reason: string }>({
@@ -456,7 +462,7 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
               </option>
             </select>
           </td>
-          <td class="px-3 py-2">
+          <td v-if="isWide" class="px-3 py-2">
             <input
               v-model.number="form.birthYear"
               type="number"
@@ -468,7 +474,7 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
               @keydown.esc="resetQuickAdd"
             />
           </td>
-          <td class="px-3 py-2">
+          <td v-if="isWide" class="px-3 py-2">
             <input
               v-model="form.clubName"
               type="text"
@@ -479,7 +485,7 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
               @keydown.esc="resetQuickAdd"
             />
           </td>
-          <td class="px-3 py-2">
+          <td v-if="isWide" class="px-3 py-2">
             <input
               v-model="form.licenseNumber"
               type="text"
@@ -565,7 +571,7 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
         rendrait compacte jusque sur les écrans juge (ADR-073).
       -->
       <template #cell-actions="{ row }">
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 lg:flex-nowrap lg:gap-1">
           <template v-if="isDesktop">
             <template v-if="editingId === row.id">
               <button

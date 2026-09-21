@@ -55,9 +55,9 @@ test('rappel des 5 ans, export des données personnelles, purge confirmée par l
   await page.getByRole('link', { name: 'Mes compétitions' }).click()
 
   // --- Rappel dans la liste : plus de 5 ans ---
-  const row = page.getByRole('link').filter({ hasText: name })
+  const row = page.getByTestId('data-list-row').filter({ hasText: name })
   await expect(row.getByText('Plus de 5 ans : à purger')).toBeVisible()
-  await row.click()
+  await row.getByRole('link', { name }).click()
   await page.getByRole('tab', { name: 'Exports' }).click()
   await expect(page.getByRole('status')).toContainText('plus de 5 ans')
 
@@ -94,6 +94,6 @@ test('rappel des 5 ans, export des données personnelles, purge confirmée par l
   await expect(page.getByText('(données supprimées)').first()).toBeVisible()
   await page.getByRole('link', { name: '← Mes compétitions' }).click()
   await expect(
-    page.getByRole('link').filter({ hasText: name }).getByText('Données supprimées'),
+    page.getByTestId('data-list-row').filter({ hasText: name }).getByText('Données supprimées'),
   ).toBeVisible()
 })

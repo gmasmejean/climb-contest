@@ -184,8 +184,9 @@ test('l’organisateur choisit, recadre puis annote la photo en créant la voie'
   await expect(page.getByText('Voie créée avec sa photo et ses 3 prises.')).toBeVisible({
     timeout: 30_000,
   })
-  await expect(page.getByText('Voie 1')).toBeVisible()
-  await expect(page.getByText('photo annotée')).toBeVisible()
+  const listed = page.getByTestId('data-list-row')
+  await expect(listed).toHaveCount(1)
+  await expect(listed).toContainText(/photo annotée|Photo/)
 
   const routes = await apiJson<
     {
