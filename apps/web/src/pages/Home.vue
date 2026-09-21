@@ -100,7 +100,7 @@ const judgesTarget = computed(() => (judgeToken.value ? { name: 'judge-home' } :
           <template #icon><RoleIcon name="spectators" class="size-10 md:size-12" /></template>
         </RoleCard>
         <RoleCard
-          tone="purple"
+          tone="coral"
           title="Grimpeurs"
           text="Inscrivez-vous aux compétitions."
           badge="Bientôt"

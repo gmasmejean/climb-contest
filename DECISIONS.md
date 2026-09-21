@@ -2620,6 +2620,13 @@ ni icône, ni jeton de couleur (`style.css` faisait deux lignes ; la couleur de 
    Les pilules navy sont un composant local (`LandingPill`), pas une variante de
    `packages/ui`.
 8. **Menu hamburger de la maquette mobile omis** : aucune navigation à y mettre.
+9. **Fonds de cartes en textures aquarelle** (fournies par l'utilisateur : jaune, vert, bleu,
+   corail ; WebP 640 px, ~180 Ko au total, `apps/web/src/assets/landing/card-*.webp`).
+   La teinte « violet » des maquettes devient « corail » (`tone="coral"`, `--color-card-coral`).
+   Un voile blanc de 25 % s'ajoute sous le texte : mesuré sur les cartes recadrées, les coins
+   foncés du vert, du bleu et du corail tombaient à 2–3:1 avec l'encre `#0f3241` (AA = 4,5:1) ;
+   avec le voile, le bleu et le corail restent ≥ 4,4:1 ; il reste 0,1 % de pixels de coin du
+   vert entre 3,3 et 4,1:1 (pas de mesure sous les glyphes eux-mêmes). Comme les autres visuels : hors précache, couleur unie en repli pendant le chargement.
 
 **Conséquences :** `Home.vue` réécrit ; six composants dans
 `apps/web/src/components/landing/` ; `router.ts` (route `/` sans `requiresAuth`) ;
