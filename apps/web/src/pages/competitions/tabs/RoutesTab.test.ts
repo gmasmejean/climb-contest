@@ -563,3 +563,39 @@ describe('RoutesTab — la voie ouverte vit dans l’adresse (ADR-075)', () => {
     expect(wrapper.find('[data-testid="photo-preview"]').exists()).toBe(true)
   })
 })
+
+describe('RoutesTab — maître–détail (Lot 19)', () => {
+  const three = [
+    aRoute({ id: 'r1', number: 1 }),
+    aRoute({ id: 'r2', number: 2, name: 'Le dièdre' }),
+    aRoute({ id: 'r3', number: 3 }),
+  ]
+
+  it('marque la ligne ouverte, et elle seule', async () => {
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    const wrapper = await mountTab()
+
+    const editors = wrapper.findAll('button').filter((button) => button.text() === 'Modifier')
+    await editors[1]?.trigger('click')
+    await flushPromises()
+
+    expect(editors[1]?.attributes('aria-current')).toBe('true')
+    expect(editors[0]?.attributes('aria-current')).toBeUndefined()
+    const marked = wrapper.findAll('[data-testid="data-list-row"]').filter((row) => {
+      const classes = row.attributes('class') ?? ''
+      return classes.includes('bg-blue-50')
+    })
+    expect(marked).toHaveLength(1)
+  })
+
+  it('ne marque rien en cartes : le repère est une affaire de tableau', async () => {
+    api.routes.list.mockResolvedValue(three)
+    const wrapper = await mountTab()
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('button[aria-current]').exists()).toBe(false)
+  })
+})
