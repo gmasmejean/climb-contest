@@ -1,7 +1,12 @@
 # Tests end-to-end (Playwright)
 
-Dix-neuf tests à ce jour :
+Vingt tests à ce jour :
 
+- `landing.spec.ts` — la page d'accueil publique `/` (ADR-070) : en anonyme,
+  titre, quatre cartes, recherche désactivée et annoncée, « Bientôt », aucun
+  défilement horizontal, « Espace organisateur » mène à `/login` ; en connecté,
+  le nom et « Mes compétitions », qui survivent à un rechargement. Tourne aussi
+  à 360 px (projet `mobile`) ;
 - `login.spec.ts` — connexion d'un organisateur déjà activé, arrivée sur
   l'accueil (`ROADMAP.md` Lot 1, point 9) ;
 - `verify-email.spec.ts` — inscription, récupération du lien de
@@ -71,8 +76,9 @@ Dix-neuf tests à ce jour :
 
 - `chromium` — bureau, tous les tests sauf `judge-ascent.spec.ts` et
   `judge-draft.spec.ts`.
-- `mobile` — `judge-ascent.spec.ts` et `judge-draft.spec.ts` uniquement,
-  viewport 360×740 (le plus étroit visé par `CLAUDE.md`).
+- `mobile` — `judge-ascent.spec.ts`, `judge-draft.spec.ts`, `competition-trash`,
+  `round-category-status`, `route-photo`, `route-photo-create-crop` et
+  `landing`, viewport 360×740 (le plus étroit visé par `CLAUDE.md`).
 
 ## Note sur l'exécution en parallèle
 
