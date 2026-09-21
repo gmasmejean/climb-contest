@@ -424,3 +424,58 @@ describe('RoutesTab — tableau des grands écrans (Lot 18)', () => {
     expect(api.routes.reorder).toHaveBeenCalledWith('comp-1', ['r2', 'r1', 'r3'])
   })
 })
+
+describe('RoutesTab — la voie modifiée quitte la liste', () => {
+  it('revient en création plutôt que d’enregistrer sur un identifiant mort', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    api.routes.list.mockResolvedValue([aRoute({ id: 'route-1', number: 7 })])
+    const wrapper = mount(RoutesTab, {
+      attachTo: document.body,
+      props: { competitionId: 'comp-1' },
+      global: { plugins: [[VueQueryPlugin, { queryClient }]] },
+    })
+    mounted.push(wrapper)
+    await flushPromises()
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier la voie')
+
+    // La voie disparaît de la liste sous les pieds de l'éditeur.
+    api.routes.list.mockResolvedValue([])
+    await queryClient.invalidateQueries({ queryKey: ['competitions', 'comp-1', 'routes'] })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Ajouter une voie')
+    await submit(wrapper)
+    expect(api.routes.update).not.toHaveBeenCalled()
+  })
+
+  it('ne referme pas la voie ouverte pendant que la liste est encore en vol', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    api.routes.list.mockResolvedValue([aRoute({ id: 'route-1', number: 7 })])
+    const wrapper = mount(RoutesTab, {
+      attachTo: document.body,
+      props: { competitionId: 'comp-1' },
+      global: { plugins: [[VueQueryPlugin, { queryClient }]] },
+    })
+    mounted.push(wrapper)
+    await flushPromises()
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+
+    // Une requête en vol ne doit pas être lue comme « la voie a disparu ».
+    let resolveList: (routes: RouteWithCategories[]) => void = () => {}
+    api.routes.list.mockReturnValue(
+      new Promise<RouteWithCategories[]>((resolve) => (resolveList = resolve)),
+    )
+    void queryClient.invalidateQueries({ queryKey: ['competitions', 'comp-1', 'routes'] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier la voie')
+
+    resolveList([aRoute({ id: 'route-1', number: 7 })])
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier la voie')
+  })
+})

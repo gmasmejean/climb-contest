@@ -9,7 +9,7 @@ import {
   type DataListColumn,
 } from '@climbcontest/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 
 import { ApiError } from '../../../api/client'
 import {
@@ -236,6 +236,22 @@ function cancelEdit(): void {
   Object.assign(form, emptyForm())
   formError.value = ''
 }
+
+/**
+ * La voie en cours de modification peut quitter la liste (rechargement, retrait
+ * depuis un autre appareil). `editingRoute` devient alors `undefined` et
+ * l'éditeur disparaît, mais `editingRouteId` resterait posé : « Enregistrer »
+ * enverrait un PATCH sur un identifiant mort. On rend la main au mode création.
+ * Jamais pendant que la liste est encore en vol (`routes` vaut `undefined`),
+ * sinon une voie ouverte par son adresse se refermerait toute seule.
+ */
+watch(routes, (list) => {
+  const current = editingRouteId.value
+  if (!list || current === null) return
+  if (list.some((route) => route.id === current)) return
+  cancelEdit()
+  toast.show("La voie que vous modifiiez n'est plus dans la liste.", 'error')
+})
 
 const { mutate: reorder } = useMutation({
   mutationFn: (orderedIds: string[]) => routesApi.reorder(props.competitionId, orderedIds),
