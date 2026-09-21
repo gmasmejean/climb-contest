@@ -52,6 +52,32 @@ const chooseMutation = useMutation({
   },
 })
 
+// Lot 21 (ADR-078) : refuser une saisie reçue d'un accès révoqué — motif obligatoire.
+const rejectTargetGroup = ref<string | null>(null)
+const rejectReason = ref('')
+function startReject(conflictGroup: string): void {
+  rejectTargetGroup.value = conflictGroup
+  rejectReason.value = ''
+}
+const rejectMutation = useMutation({
+  mutationFn: () =>
+    conflictsApi.resolve(props.competitionId, rejectTargetGroup.value ?? '', {
+      resolution: 'reject',
+      reason: rejectReason.value,
+    }),
+  onSuccess: async () => {
+    rejectTargetGroup.value = null
+    await refresh()
+    toast.show('Saisie refusée. Elle reste consultable dans le journal.', 'success')
+  },
+  onError: (error) => {
+    toast.show(
+      error instanceof ApiError ? (error.detail ?? error.title) : 'Refus impossible.',
+      'error',
+    )
+  },
+})
+
 const STATUS_OPTIONS = [
   { value: 'valid', label: 'Validé' },
   { value: 'dns', label: 'DNS — absent' },
@@ -124,8 +150,21 @@ const newValueMutation = useMutation({
       <li
         v-for="conflict in conflicts"
         :key="conflict.conflictGroup"
-        class="flex flex-col gap-3 rounded-lg border border-red-300 bg-red-50 p-4"
+        class="flex flex-col gap-3 rounded-lg border p-4"
+        :class="
+          conflict.kind === 'revoked_access'
+            ? 'border-amber-300 bg-amber-50'
+            : 'border-red-300 bg-red-50'
+        "
+        :data-testid="`conflict-${conflict.kind}`"
       >
+        <div v-if="conflict.kind === 'revoked_access'" class="flex flex-col gap-1">
+          <h3 class="font-bold text-amber-950">Saisie d'un accès révoqué — à valider</h3>
+          <p class="text-sm text-amber-950">
+            Reçue après la révocation de ce juge. Elle ne compte pas au classement tant que vous ne
+            l'avez pas acceptée.
+          </p>
+        </div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div
             v-for="entry in conflict.ascents"
@@ -148,10 +187,35 @@ const newValueMutation = useMutation({
                 })
               "
             >
-              Choisir cette valeur
+              {{ conflict.kind === 'revoked_access' ? 'Accepter' : 'Choisir cette valeur' }}
             </Button>
           </div>
         </div>
+
+        <template v-if="conflict.kind === 'revoked_access'">
+          <form
+            v-if="rejectTargetGroup === conflict.conflictGroup"
+            class="flex flex-col gap-3 rounded-lg bg-white p-3"
+            @submit.prevent="rejectMutation.mutate()"
+          >
+            <TextField v-model="rejectReason" label="Motif du refus (obligatoire)" required />
+            <div class="flex gap-2">
+              <Button
+                type="submit"
+                variant="danger"
+                :disabled="rejectMutation.isPending.value || rejectReason.trim() === ''"
+              >
+                Refuser cette saisie
+              </Button>
+              <Button type="button" variant="secondary" @click="rejectTargetGroup = null">
+                Annuler
+              </Button>
+            </div>
+          </form>
+          <Button v-else variant="secondary" @click="startReject(conflict.conflictGroup)">
+            Refuser
+          </Button>
+        </template>
 
         <template v-if="newValueTargetGroup === conflict.conflictGroup">
           <form class="flex flex-col gap-3 rounded-lg bg-white p-3" @submit.prevent="newValueMutation.mutate()">
@@ -174,7 +238,11 @@ const newValueMutation = useMutation({
           </form>
         </template>
         <Button v-else variant="secondary" @click="startNewValue(conflict.conflictGroup)">
-          Saisir une troisième valeur
+          {{
+            conflict.kind === 'revoked_access'
+              ? 'Saisir une autre valeur'
+              : 'Saisir une troisième valeur'
+          }}
         </Button>
       </li>
     </ul>

@@ -37,7 +37,8 @@ function alertLabel(alert: DashboardAlert): string {
     case 'judge_silent':
       return 'Juge muet depuis plus de 10 minutes'
     case 'unresolved_conflict':
-      return 'Conflit de saisie non résolu'
+      // Lot 21 (ADR-078) : couvre aussi une saisie d'accès révoqué en attente.
+      return 'Saisie à trancher dans l’onglet Conflits'
     case 'competitor_no_ascent':
       return 'Compétiteur sans aucun passage alors que le tour est fermé'
   }
