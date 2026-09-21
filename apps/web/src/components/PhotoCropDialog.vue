@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Button } from '@climbcontest/ui'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 
+import { useZoomableFrame, ZOOMS } from '../composables/useZoomableFrame'
 import {
   FULL_CROP,
   isFullCrop,
@@ -27,8 +28,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ apply: [crop: CropRect | null]; close: [] }>()
 
-const ZOOMS = [1, 2, 3] as const
-const zoom = ref<(typeof ZOOMS)[number]>(1)
+const scroller = ref<HTMLElement | null>(null)
+const { zoom, frameWidth, setZoom, onImageLoad } = useZoomableFrame(scroller)
 const draft = ref<CropRect>({ ...FULL_CROP })
 const frame = ref<HTMLElement | null>(null)
 const dialog = ref<HTMLElement | null>(null)
@@ -122,61 +123,6 @@ function onKey(event: KeyboardEvent, corner: CropCorner | null): void {
   const step = event.shiftKey ? 0.05 : 0.01
   const [dx, dy] = [arrow[0] * step, arrow[1] * step]
   draft.value = corner ? resizeCrop(draft.value, corner, dx, dy) : moveCrop(draft.value, dx, dy)
-}
-
-// --- Zoom : garde au centre de l'écran ce qui y était.
-const scroller = ref<HTMLElement | null>(null)
-
-// À ×1 la photo doit tenir ENTIÈRE dans l'espace disponible (sinon, sur un
-// téléphone, on recadre une photo dont on ne voit pas le bas) : sa largeur de base
-// est celle qui remplit la largeur ou la hauteur, la première qui bute. Les
-// 48 px sont le rembourrage (`p-6`) qui laisse les coins atteignables au bord.
-const PADDING = 48
-const aspect = ref(0)
-const room = ref<{ width: number; height: number } | null>(null)
-let observer: ResizeObserver | null = null
-
-function measure(): void {
-  const el = scroller.value
-  if (el) room.value = { width: el.clientWidth - PADDING, height: el.clientHeight - PADDING }
-}
-watch(scroller, (el) => {
-  observer?.disconnect()
-  observer = null
-  if (!el) return
-  measure()
-  if (typeof ResizeObserver !== 'undefined') {
-    observer = new ResizeObserver(measure)
-    observer.observe(el)
-  }
-})
-onBeforeUnmount(() => observer?.disconnect())
-
-function onImageLoad(event: Event): void {
-  const image = event.target as HTMLImageElement
-  aspect.value = image.naturalHeight > 0 ? image.naturalWidth / image.naturalHeight : 0
-}
-
-// Repli sur la largeur du conteneur tant que les tailles ne sont pas connues.
-const frameWidth = computed(() => {
-  const size = room.value
-  if (aspect.value <= 0 || !size || size.width <= 0 || size.height <= 0) {
-    return `${zoom.value * 100}%`
-  }
-  const base = Math.min(size.width, size.height * aspect.value)
-  return `${Math.max(1, base) * zoom.value}px`
-})
-async function setZoom(level: (typeof ZOOMS)[number]): Promise<void> {
-  const el = scroller.value
-  const centerX =
-    el && el.scrollWidth > 0 ? (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth : 0.5
-  const centerY =
-    el && el.scrollHeight > 0 ? (el.scrollTop + el.clientHeight / 2) / el.scrollHeight : 0.5
-  zoom.value = level
-  await nextTick()
-  if (!el) return
-  el.scrollLeft = centerX * el.scrollWidth - el.clientWidth / 2
-  el.scrollTop = centerY * el.scrollHeight - el.clientHeight / 2
 }
 
 function apply(): void {
