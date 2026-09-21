@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { Button } from '@climbcontest/ui'
 import { useId } from 'vue'
 
-import LandingPill from './LandingPill.vue'
 import RoleIcon from './RoleIcon.vue'
 
 /**
@@ -33,10 +33,10 @@ const hintId = `${id}-hint`
           class="border-navy/40 text-ink min-h-12 w-full rounded-full border bg-white pr-4 pl-12 text-base placeholder:text-gray-600 disabled:cursor-not-allowed"
         />
       </div>
-      <LandingPill disabled>
+      <Button disabled>
         <RoleIcon name="peak" class="size-5" />
         Trouver une compétition
-      </LandingPill>
+      </Button>
     </div>
     <p :id="hintId" class="text-sm text-gray-700">
       Recherche bientôt disponible. En attendant, ouvrez le lien ou le QR code partagé par

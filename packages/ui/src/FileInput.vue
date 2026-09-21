@@ -33,7 +33,7 @@ function onChange(event: Event): void {
     </label>
     <label
       :for="id"
-      class="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border px-4 text-base focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue-700"
+      class="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border bg-white px-4 text-base focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue-700"
       :class="error ? 'border-red-700' : 'border-gray-400'"
     >
       <span

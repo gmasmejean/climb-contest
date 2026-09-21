@@ -300,7 +300,7 @@ function routeLabels(routeIds: string[]): string {
         <input
           v-model="form.displayName"
           type="text"
-          class="min-h-12 rounded-lg border border-gray-400 px-3 text-base"
+          class="min-h-12 rounded-lg border border-gray-400 bg-white px-3 text-base"
           required
         />
       </label>
@@ -310,7 +310,7 @@ function routeLabels(routeIds: string[]): string {
           v-model="form.email"
           type="email"
           placeholder="pour envoyer le lien d'accès directement"
-          class="min-h-12 rounded-lg border border-gray-400 px-3 text-base"
+          class="min-h-12 rounded-lg border border-gray-400 bg-white px-3 text-base"
         />
       </label>
       <fieldset class="flex flex-col gap-2">

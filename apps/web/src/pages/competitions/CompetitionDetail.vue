@@ -14,6 +14,7 @@ import PilotageTab from './tabs/PilotageTab.vue'
 import ReadinessTab from './tabs/ReadinessTab.vue'
 import RoundsTab from './tabs/RoundsTab.vue'
 import RoutesTab from './tabs/RoutesTab.vue'
+import BrandShell from '../../components/brand/BrandShell.vue'
 
 const route = useRoute()
 const competitionId = computed(() => String(route.params.id))
@@ -47,30 +48,34 @@ const tabs = computed(() => {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-4 py-8">
-    <header class="flex flex-col gap-2">
-      <RouterLink
-        :to="{ name: 'competition-list' }"
-        class="inline-flex min-h-12 w-fit items-center text-sm font-medium text-blue-700 hover:underline"
-      >
-        ← Mes compétitions
-      </RouterLink>
-      <h1 class="text-2xl font-bold text-gray-900">{{ competition?.name }}</h1>
-      <p class="text-sm text-gray-600">{{ competition?.venue }}</p>
-    </header>
+  <BrandShell>
+    <main class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-8">
+      <header class="flex flex-col gap-2">
+        <RouterLink
+          :to="{ name: 'competition-list' }"
+          class="inline-flex min-h-12 w-fit items-center text-sm font-medium text-blue-700 hover:underline"
+        >
+          ← Mes compétitions
+        </RouterLink>
+        <h1 class="font-display text-ink text-4xl leading-none font-bold">
+          {{ competition?.name }}
+        </h1>
+        <p class="text-sm text-gray-600">{{ competition?.venue }}</p>
+      </header>
 
-    <Tabs v-model="activeTab" :tabs="tabs" />
+      <Tabs v-model="activeTab" :tabs="tabs" />
 
-    <div v-if="competition">
-      <InfosTab v-if="activeTab === 'infos'" :competition="competition" />
-      <CategoriesTab v-else-if="activeTab === 'categories'" :competition-id="competitionId" />
-      <CompetitorsTab v-else-if="activeTab === 'competitors'" :competition-id="competitionId" />
-      <RoutesTab v-else-if="activeTab === 'routes'" :competition-id="competitionId" />
-      <RoundsTab v-else-if="activeTab === 'rounds'" :competition-id="competitionId" />
-      <JudgesTab v-else-if="activeTab === 'judges'" :competition="competition" />
-      <ReadinessTab v-else-if="activeTab === 'readiness'" :competition-id="competitionId" />
-      <PilotageTab v-else-if="activeTab === 'pilotage'" :competition="competition" />
-      <ExportsTab v-else-if="activeTab === 'exports'" :competition="competition" />
-    </div>
-  </main>
+      <div v-if="competition">
+        <InfosTab v-if="activeTab === 'infos'" :competition="competition" />
+        <CategoriesTab v-else-if="activeTab === 'categories'" :competition-id="competitionId" />
+        <CompetitorsTab v-else-if="activeTab === 'competitors'" :competition-id="competitionId" />
+        <RoutesTab v-else-if="activeTab === 'routes'" :competition-id="competitionId" />
+        <RoundsTab v-else-if="activeTab === 'rounds'" :competition-id="competitionId" />
+        <JudgesTab v-else-if="activeTab === 'judges'" :competition="competition" />
+        <ReadinessTab v-else-if="activeTab === 'readiness'" :competition-id="competitionId" />
+        <PilotageTab v-else-if="activeTab === 'pilotage'" :competition="competition" />
+        <ExportsTab v-else-if="activeTab === 'exports'" :competition="competition" />
+      </div>
+    </main>
+  </BrandShell>
 </template>

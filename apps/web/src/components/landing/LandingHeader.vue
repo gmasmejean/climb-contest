@@ -1,10 +1,10 @@
 <script setup lang="ts">
+import { Button } from '@climbcontest/ui'
 import { useRouter } from 'vue-router'
 
 import { apiFetch } from '../../api/client'
 import { clearSession, currentUser } from '../../api/session'
-import BrandLogo from './BrandLogo.vue'
-import LandingPill from './LandingPill.vue'
+import BrandLogo from '../brand/BrandLogo.vue'
 import RoleIcon from './RoleIcon.vue'
 
 const router = useRouter()
@@ -30,16 +30,16 @@ async function onLogout(): Promise<void> {
       <p class="text-ink max-w-[12rem] truncate text-base">
         <span class="sr-only">Connecté·e : </span>{{ currentUser.displayName }}
       </p>
-      <LandingPill :to="{ name: 'competition-list' }">Mes compétitions</LandingPill>
-      <LandingPill variant="outline" @click="onLogout">Se déconnecter</LandingPill>
+      <Button :to="{ name: 'competition-list' }">Mes compétitions</Button>
+      <Button variant="secondary" @click="onLogout">Se déconnecter</Button>
     </div>
 
-    <LandingPill v-else variant="glass" :to="{ name: 'login' }">
+    <Button v-else variant="glass" :to="{ name: 'login' }">
       <RoleIcon name="user" class="size-5" />
       <span class="flex flex-col items-start leading-tight">
         <span class="text-sm font-bold">Espace organisateur</span>
         <span class="text-xs font-normal">Connexion · Inscription</span>
       </span>
-    </LandingPill>
+    </Button>
   </header>
 </template>

@@ -7,6 +7,7 @@ import { ApiError } from '../../api/client'
 import { judgeAuthApi } from '../../api/judge-auth'
 import { setJudgeSession } from '../../api/judge-session'
 import { bootstrapJudge } from '../../judge/bootstrap'
+import BrandShell from '../../components/brand/BrandShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -57,48 +58,52 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 px-4 py-8">
-    <template v-if="access === 'loading'">
-      <p class="text-center text-gray-600">Chargement…</p>
-    </template>
+  <BrandShell decor>
+    <main class="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-8">
+      <template v-if="access === 'loading'">
+        <p class="text-center text-gray-600">Chargement…</p>
+      </template>
 
-    <template v-else-if="access === 'invalid'">
-      <h1 class="text-xl font-bold text-gray-900">Lien invalide</h1>
-      <p class="text-gray-700">
-        Ce lien n'est plus valide — contactez l'organisateur de la compétition pour en obtenir un
-        nouveau.
-      </p>
-    </template>
-
-    <template v-else>
-      <h1 class="text-2xl font-bold text-gray-900">Bonjour {{ access.displayName }}</h1>
-
-      <form v-if="access.pinRequired" class="flex flex-col gap-4" @submit.prevent="submit">
-        <label class="flex flex-col gap-2">
-          <span class="text-sm font-medium text-gray-900">Votre code à 6 chiffres</span>
-          <input
-            v-model="pin"
-            type="tel"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            maxlength="6"
-            autofocus
-            class="min-h-16 rounded-xl border border-gray-400 px-4 text-center text-3xl tracking-[0.5em]"
-          />
-        </label>
-        <p v-if="authError" role="alert" class="text-sm text-red-700">{{ authError }}</p>
-        <Button type="submit" full-width :disabled="submitting || pin.length !== 6">
-          {{ submitting ? 'Vérification…' : 'Valider' }}
-        </Button>
-      </form>
+      <template v-else-if="access === 'invalid'">
+        <h1 class="font-display text-ink text-4xl leading-none font-bold">Lien invalide</h1>
+        <p class="text-gray-700">
+          Ce lien n'est plus valide — contactez l'organisateur de la compétition pour en obtenir un
+          nouveau.
+        </p>
+      </template>
 
       <template v-else>
-        <p class="text-gray-700">Prêt à noter les passages sur vos voies.</p>
-        <p v-if="authError" role="alert" class="text-sm text-red-700">{{ authError }}</p>
-        <Button full-width :disabled="submitting" @click="submit">
-          {{ submitting ? 'Connexion…' : 'Commencer' }}
-        </Button>
+        <h1 class="font-display text-ink text-4xl leading-none font-bold">
+          Bonjour {{ access.displayName }}
+        </h1>
+
+        <form v-if="access.pinRequired" class="flex flex-col gap-4" @submit.prevent="submit">
+          <label class="flex flex-col gap-2">
+            <span class="text-sm font-medium text-gray-900">Votre code à 6 chiffres</span>
+            <input
+              v-model="pin"
+              type="tel"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength="6"
+              autofocus
+              class="min-h-16 rounded-xl border border-gray-400 bg-white px-4 text-center text-3xl tracking-[0.5em]"
+            />
+          </label>
+          <p v-if="authError" role="alert" class="text-sm text-red-700">{{ authError }}</p>
+          <Button type="submit" full-width :disabled="submitting || pin.length !== 6">
+            {{ submitting ? 'Vérification…' : 'Valider' }}
+          </Button>
+        </form>
+
+        <template v-else>
+          <p class="text-gray-700">Prêt à noter les passages sur vos voies.</p>
+          <p v-if="authError" role="alert" class="text-sm text-red-700">{{ authError }}</p>
+          <Button full-width :disabled="submitting" @click="submit">
+            {{ submitting ? 'Connexion…' : 'Commencer' }}
+          </Button>
+        </template>
       </template>
-    </template>
-  </main>
+    </main>
+  </BrandShell>
 </template>

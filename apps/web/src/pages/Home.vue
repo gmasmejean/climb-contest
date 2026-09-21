@@ -1,11 +1,5 @@
 <script setup lang="ts">
-// Polices auto-hébergées (OFL), importées ICI et non dans `style.css` : elles
-// partent dans le chunk de la page d'accueil, les écrans juge ne les
-// téléchargent jamais (ADR-070).
-import '@fontsource/caveat/latin-700.css'
-import '@fontsource/source-sans-3/latin-400.css'
-import '@fontsource/source-sans-3/latin-600.css'
-import '@fontsource/source-sans-3/latin-700.css'
+import '../brand-fonts'
 
 import { computed } from 'vue'
 
