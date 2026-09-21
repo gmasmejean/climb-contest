@@ -36,6 +36,11 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // `.webp` et `.woff2` sont volontairement ABSENTS : ce sont les
+        // visuels et polices de la page d'accueil publique (ADR-070),
+        // quelques centaines de Ko qui n'ont rien à faire dans le précache
+        // installé sur le téléphone d'un juge. Ils passent par le cache à la
+        // demande (`runtimeCaching` ci-dessous, destinations `image`/`font`).
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         // Lot 6 (SPEC.md § 6.3) : réponse réseau d'abord avec repli cache
         // pour les données API (utile au premier chargement du bootstrap

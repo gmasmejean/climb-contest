@@ -186,6 +186,12 @@ importers:
       '@climbcontest/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@fontsource/caveat-brush':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/source-sans-3':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@tanstack/vue-query':
         specifier: 5.102.8
         version: 5.102.8(vue@3.5.42(typescript@5.9.3))
@@ -1349,6 +1355,12 @@ packages:
   '@faker-js/faker@10.6.0':
     resolution: {integrity: sha512-3RQHgEtvL1Frl/d1cSreo7qhJ3Gk1OdNUai/CtZ8G+wYeRQnJih3s9xJ9/kgYekPQRdwgh0HXRPqMlzWGwivIQ==}
     engines: {node: ^20.19.0 || ^22.13.0 || ^23.5.0 || >=24.0.0, npm: '>=10'}
+
+  '@fontsource/caveat-brush@5.3.0':
+    resolution: {integrity: sha512-BHSP/9EKNUtnSj7h4TXuYKOrQWgnkCGm7QMHYiie0xSxtlWKbND6wLkhAgwUtUpbz5k8XL8CWPRrL6tDV+JC8w==}
+
+  '@fontsource/source-sans-3@5.3.0':
+    resolution: {integrity: sha512-VrWixSgF93kOVSEkwjs9ImnAbxrBew4PgcnaJYEitG9TyJSwxjFUNJIgzB1XFP/acyAWcTDg7+sWe7JI8LTB9w==}
 
   '@grpc/grpc-js@1.14.4':
     resolution: {integrity: sha512-k9Dj3DV/itK9D06Y8f190Qgop7/Ui+D0njFV3LHMPwPT75DpXLQohE9Wmz0QElrJnzsjB7KPWiKJbOl7IPDArQ==}
@@ -5661,6 +5673,10 @@ snapshots:
   '@exodus/bytes@1.15.1': {}
 
   '@faker-js/faker@10.6.0': {}
+
+  '@fontsource/caveat-brush@5.3.0': {}
+
+  '@fontsource/source-sans-3@5.3.0': {}
 
   '@grpc/grpc-js@1.14.4':
     dependencies:

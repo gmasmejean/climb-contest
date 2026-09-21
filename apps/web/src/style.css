@@ -1,2 +1,21 @@
 @import 'tailwindcss';
 @source '../../../packages/ui/src';
+
+@theme {
+  /*
+   * Page d'accueil publique (DECISIONS.md ADR-070). Couleurs relevées sur les
+   * maquettes aquarelle. Pour l'instant, SEULE la page d'accueil les utilise :
+   * le bouton partagé, `theme-color` et le manifest restent sur blue-700
+   * (unification de la charte notée dans TODO.md).
+   */
+  --color-ink: #0f3241;
+  --color-navy: #184e67;
+  --color-navy-deep: #0e3b4e;
+  --color-paper: #f9f7f1;
+  --color-card-yellow: #fde6ba;
+  --color-card-green: #cedbc8;
+  --color-card-blue: #c8e0f0;
+  --color-card-purple: #e3d1dd;
+  --font-display: 'Caveat Brush', cursive;
+  --font-body: 'Source Sans 3', system-ui, sans-serif;
+}

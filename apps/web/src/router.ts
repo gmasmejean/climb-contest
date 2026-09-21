@@ -19,10 +19,14 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      // Page d'accueil publique (ADR-070) : pas d'authentification requise,
+      // mais PAS de `skipOrganizerSession` non plus — la session organisateur
+      // est restaurée au F5 pour afficher l'état connecté dans l'en-tête. Si
+      // l'API est injoignable, la garde ci-dessous avale l'erreur et la page
+      // s'affiche en anonyme.
       path: '/',
       name: 'home',
       component: () => import('./pages/Home.vue'),
-      meta: { requiresAuth: true },
     },
     {
       path: '/competitions',

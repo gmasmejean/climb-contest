@@ -91,7 +91,7 @@ describe('router — restauration de la session au chargement direct (F5)', () =
     expect(bootstrapSession).not.toHaveBeenCalled()
   })
 
-  it("ne tente jamais de restaurer une session organisateur sur les écrans juge", async () => {
+  it('ne tente jamais de restaurer une session organisateur sur les écrans juge', async () => {
     const { router, bootstrapSession } = await freshRouter({ refreshSucceeds: true })
 
     await router.push('/j/home')
@@ -99,5 +99,24 @@ describe('router — restauration de la session au chargement direct (F5)', () =
 
     await router.push('/j/un-token')
     expect(bootstrapSession).not.toHaveBeenCalled()
+  })
+
+  // ADR-070 : `/` est publique (pas de `requiresAuth`) mais restaure la
+  // session organisateur (pas de `skipOrganizerSession`) pour l'en-tête.
+  it("affiche l'accueil sans session, après avoir tenté de la restaurer", async () => {
+    const { router, bootstrapSession } = await freshRouter({ refreshSucceeds: false })
+
+    await router.push('/')
+
+    expect(bootstrapSession).toHaveBeenCalledTimes(1)
+    expect(router.currentRoute.value.name).toBe('home')
+  })
+
+  it("reste sur l'accueil quand la session est restaurable", async () => {
+    const { router } = await freshRouter({ refreshSucceeds: true })
+
+    await router.push('/')
+
+    expect(router.currentRoute.value.fullPath).toBe('/')
   })
 })
