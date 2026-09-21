@@ -157,13 +157,32 @@ la session y est restaurée au rechargement.
   existe déjà sur l'appareil ; Spectateurs et Grimpeurs (« Bientôt ») ne sont
   pas des liens.
 - Visuels : `apps/web/src/assets/landing/*.webp`, recadrés des maquettes
-  fournies (provisoires, voir `TODO.md`) ; logo SVG dans
-  `components/landing/BrandLogo.vue`. Polices auto-hébergées (`@fontsource`,
-  OFL), importées par `Home.vue` seulement. Images et polices ne sont pas dans
+  fournies (provisoires, voir `TODO.md`). Images et polices ne sont pas dans
   le précache du service worker (cache à la demande).
-- Jetons de couleur et de police dans `apps/web/src/style.css` (`@theme`),
-  utilisés par cette page uniquement ; le reste de l'application garde
-  `blue-700`.
+
+## Charte graphique
+
+La charte aquarelle de l'accueil s'applique à toute l'application (ADR-071).
+
+- **Couleurs** : `apps/web/src/style.css` redéfinit dans `@theme` les échelles
+  Tailwind `gray` (neutres encre), `blue` (navy, `blue-700` = `#184e67`),
+  `red` (corail), `amber` (ocre) et `green` (sauge). On continue d'écrire
+  `text-red-700` ou `bg-blue-50` : c'est la valeur qui change, pas la classe.
+  `brand-contrast.test.ts` lit ce fichier et exige le contraste AA pour chaque
+  couple texte/fond utilisé — **ne modifiez pas une teinte sans le relancer**,
+  et ajoutez-y tout nouveau couple.
+- **`Button`** (`packages/ui`) est une pilule : `primary`, `secondary`,
+  `danger`, `glass` (translucide, à poser sur un décor) ; avec `to`, c'est un
+  vrai lien.
+- **`BrandShell`** (`components/brand/`) enveloppe les pages hors notation
+  (connexion, inscription, organisateur, page publique, accès juge) : polices
+  Source Sans 3 / Caveat (`brand-fonts.ts`, auto-hébergées, OFL), fond papier,
+  en-tête avec le logo (`BrandLogo.vue`) ; `decor` ajoute le mur aquarelle
+  (pages d'entrée seulement). Le `<main>` de la page porte `flex-1`.
+- **Écrans de notation du juge** (`/j/home`, voies, saisie) : couleurs
+  seulement. Ni `BrandShell`, ni police, ni image — rien de plus à précacher.
+  L'écran de salle (`/c/<slug>/salle`) reste sombre.
+- Favicon, icônes PWA, `theme-color` et manifest portent le logo navy.
 
 ## Page publique et temps réel
 

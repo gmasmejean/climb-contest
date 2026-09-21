@@ -2679,6 +2679,19 @@ pour les grands textes et pastilles (bouton TOP du juge : blanc sur `green-600` 
 contre 3,2:1 avec le vert Tailwind d'origine). Trois crans ont été assombris pour passer :
 `gray-500`, `green-600`, et toute la moitié sombre de `blue`.
 
+**Conséquences :** `style.css` (échelles + fond papier sur `body`) ;
+`brand-contrast.test.ts` ; `packages/ui` : `Button` en pilule avec `to` et `glass`
+(`vue-router` devient dépendance pair), champs et cartes en fond blanc sur le papier ;
+`LandingPill` supprimé ; `components/brand/` (`BrandShell`, `BrandLogo` déplacé,
+`watercolor.ts` partagé avec `RoleCard`) ; `brand-fonts.ts` ; huit pages enveloppées dans
+`BrandShell`, titres en Caveat (`text-3xl`, `md:text-4xl`) ; `JudgeAccess.vue` refaite
+(panneau aquarelle vert, icône juge, rappel « vous pourrez noter sans réseau », lien
+invalide en corail) ; favicon, icônes PWA, `theme-color` `#0e3b4e`, `background_color`
+papier, nom « Climb Contest ». Sur mobile le décor de `BrandShell` est un bandeau à hauteur
+de l'en-tête : en pleine hauteur, le titre de la page publique passait sur le grimpeur.
+L'ADR-070 point 7 est remplacé par cet ADR ; ses points 5 et 6 (hors précache) tiennent
+toujours. L'écran de salle reste sombre.
+
 **Alternatives écartées :** jetons sémantiques (`brand`, `danger`…) et remplacement classe
 par classe — plus propre à la lecture, mais 500 modifications dans des écrans validés pour un
 rendu identique (« tu ne réécris pas ce qui marche ») ; Source Sans 3 chez les juges

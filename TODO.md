@@ -479,11 +479,26 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **Remplacer les visuels recadrés des maquettes IA** (`apps/web/src/assets/landing/*.webp`,
   941 px de large pour le mobile, statut juridique flou) par des illustrations HD à licence
   claire ; le logo SVG de `BrandLogo.vue` est une approximation du badge.
-- **Unifier la charte** une fois la page validée : `Button` partagé, `theme-color`, manifest,
-  favicon et icônes PWA (toujours le « CC » bleu), `title` « ClimbContest » vs « Climb
-  Contest ». Les jetons `@theme` de `style.css` ne servent qu'à l'accueil pour l'instant.
+- ~~**Unifier la charte**~~ Fait, ADR-071.
 - **Menu hamburger** de la maquette mobile : omis, il n'y a rien à y mettre.
 - **`prettier-plugin-tailwindcss` ne connaît pas les jetons `@theme`** (il classe `bg-paper`,
   `text-ink`… en tête) : lui indiquer `tailwindStylesheet: apps/web/src/style.css` dans
   `.prettierrc.json` stabiliserait l'ordre des classes.
 
+## Depuis l'extension de la charte (ADR-071)
+
+- **`<RouterLink><Button>` imbriqués** dans `CompetitionList.vue` (« Nouvelle compétition »,
+  « Corbeille ») : un bouton dans un lien est du HTML invalide. `Button` accepte maintenant
+  `to` ; la conversion change le rôle ARIA (`button` → `link`) que des tests e2e ciblent —
+  à faire avec eux.
+- **28 fichiers ne sont pas au format Prettier** sur `main` (`pnpm format:check`), sans lien
+  avec la charte ; non reformatés ici pour garder des diffs lisibles.
+- **Cases à cocher natives** : seules deux portent `accent-blue-700` ; les autres gardent le
+  bleu du navigateur.
+- **Pilules sur deux lignes à 360 px** (« Voir l'accès », « Régénérer le PIN » dans l'onglet
+  Juges) : lisibles et ≥ 48 px, mais massives. Libellés plus courts ou pile verticale à voir.
+- **Écran de salle** (`PublicRoomScreen`) : fond sombre conservé, seulement re-teinté par les
+  échelles. Une version « charte » (logo, Caveat pour le nom de catégorie) reste à décider.
+- **Test instable** `JudgeAscentEntry.test.ts` › « Voir la voie ouvre le panneau… sans
+  réseau » : a échoué 2 fois sur ~6 exécutions de la suite complète (`vi.fn()` réseau appelé
+  1 fois), passe seul. Vu avant tout changement sur les écrans juge.
