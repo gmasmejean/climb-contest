@@ -2610,7 +2610,7 @@ ni icône, ni jeton de couleur (`style.css` faisait deux lignes ; la couleur de 
 5. **Hors précache.** `.webp` et `.woff2` ne sont pas dans `globPatterns` du service worker :
    les visuels et polices de l'accueil ne s'installent jamais sur le téléphone d'un juge ;
    ils passent par le `runtimeCaching` à la demande (`image`/`font`).
-6. **Polices auto-hébergées** (`@fontsource/caveat-brush` pour le titre,
+6. **Polices auto-hébergées** (`@fontsource/caveat`, graisse 700 bold, pour le titre et le logo,
    `@fontsource/source-sans-3` pour le corps, OFL 1.1), importées dans `Home.vue` donc dans
    le chunk de la page seulement. Pas de CDN : PWA, réseau catastrophique, RGPD.
 7. **Jetons de marque limités à l'accueil.** Un bloc `@theme` (`ink`, `navy`, `paper`,

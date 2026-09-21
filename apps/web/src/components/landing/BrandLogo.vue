@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Logo de la page d'accueil (ADR-070) : pastille sombre avec une silhouette de
- * grimpeur, et le nom en écriture pinceau. Le favicon et les icônes PWA
+ * grimpeur, et le nom en Caveat bold. Le favicon et les icônes PWA
  * gardent l'ancien « CC » pour l'instant (TODO.md).
  */
 </script>
@@ -28,7 +28,7 @@
       <circle cx="38" cy="36" r="1.7" class="fill-white/60" />
       <circle cx="16" cy="12" r="1.5" class="fill-white/60" />
     </svg>
-    <span class="font-display text-ink text-2xl leading-[0.9] md:text-3xl">
+    <span class="font-display text-ink text-2xl leading-[0.9] font-bold md:text-3xl">
       Climb<br />Contest
     </span>
   </div>

@@ -2,7 +2,7 @@
 // Polices auto-hébergées (OFL), importées ICI et non dans `style.css` : elles
 // partent dans le chunk de la page d'accueil, les écrans juge ne les
 // téléchargent jamais (ADR-070).
-import '@fontsource/caveat-brush'
+import '@fontsource/caveat/latin-700.css'
 import '@fontsource/source-sans-3/latin-400.css'
 import '@fontsource/source-sans-3/latin-600.css'
 import '@fontsource/source-sans-3/latin-700.css'
@@ -60,7 +60,7 @@ const judgesTarget = computed(() => (judgeToken.value ? { name: 'judge-home' } :
       <LandingHeader />
 
       <section class="mt-10 max-w-[60%] md:mx-auto md:mt-14 md:max-w-2xl md:text-center">
-        <h1 class="font-display text-5xl leading-[0.95] md:text-6xl">
+        <h1 class="font-display text-5xl leading-[0.95] font-bold md:text-6xl">
           Découvrir.<br class="md:hidden" />
           Suivre.<br class="md:hidden" />
           Vivre.
