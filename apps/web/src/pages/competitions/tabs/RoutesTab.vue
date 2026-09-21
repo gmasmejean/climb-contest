@@ -1,11 +1,24 @@
 <script setup lang="ts">
 import { createRouteInputSchema, type RouteHold } from '@climbcontest/contracts'
-import { Button, NumberField, TextField, useToast } from '@climbcontest/ui'
+import {
+  Button,
+  DataList,
+  NumberField,
+  TextField,
+  useToast,
+  type DataListColumn,
+} from '@climbcontest/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, reactive, ref } from 'vue'
 
 import { ApiError } from '../../../api/client'
-import { categoriesApi, routePhotoApi, routesApi } from '../../../api/competitions'
+import {
+  categoriesApi,
+  routePhotoApi,
+  routesApi,
+  type RouteWithCategories,
+} from '../../../api/competitions'
+import { DESKTOP_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
 import { highestHoldNumber } from '../../../lib/hold-numbering'
 import type { PickedPhoto } from '../../../lib/photo-crop'
 import { PhotoUnreadableError, resizeToJpeg } from '../../../lib/photo-resize'
@@ -249,6 +262,53 @@ function categoryLabels(ids: string[]): string {
 }
 
 const categoryList = computed(() => categories.value ?? [])
+
+const isDesktop = useMediaQuery(DESKTOP_QUERY)
+
+/** Action de ligne compacte sous pointeur fin seulement (ADR-073). */
+const rowActionClass =
+  'fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+
+/**
+ * Aucune colonne triable (Lot 18) : l'ordre d'une compétition est celui que
+ * l'organisateur a posé avec les flèches, pas l'ordre alphabétique. Un tri
+ * masquerait ce que les flèches viennent de faire.
+ */
+const columns = computed<DataListColumn<RouteWithCategories>[]>(() => [
+  {
+    key: 'identity',
+    label: 'Voie',
+    card: 'title',
+    tableHidden: true,
+    value: (row) => `Voie ${row.number}${row.name ? ` — ${row.name}` : ''}`,
+  },
+  {
+    key: 'number',
+    label: 'N°',
+    card: 'hidden',
+    cellClass: 'w-16',
+    value: (row) => String(row.number),
+  },
+  { key: 'name', label: 'Nom', card: 'hidden', value: (row) => row.name ?? '—' },
+  {
+    key: 'holdCount',
+    label: 'Prises',
+    card: 'hidden',
+    cellClass: 'w-20',
+    value: (row) => String(row.holdCount),
+  },
+  {
+    key: 'sector',
+    label: 'Secteur',
+    card: 'hidden',
+    cellClass: 'w-28',
+    value: (row) => row.sector ?? '—',
+  },
+  { key: 'color', label: 'Couleur', card: 'hidden', cellClass: 'w-28' },
+  { key: 'categories', label: 'Catégories', card: 'subtitle' },
+  { key: 'media', label: 'Média', card: 'hidden', cellClass: 'w-28' },
+  { key: 'actions', label: 'Actions', card: 'actions', labelHidden: true, cellClass: 'w-44' },
+])
 </script>
 
 <template>
@@ -264,26 +324,51 @@ const categoryList = computed(() => categories.value ?? [])
         Un PDF, une page par voie ayant une photo, avec ses prises numérotées.
       </p>
     </div>
-    <ul v-if="!isPending" class="flex flex-col gap-2">
-      <li
-        v-for="(route, index) in routes"
-        :key="route.id"
-        class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div>
-          <span class="font-medium text-gray-900"
-            >Voie {{ route.number }}<span v-if="route.name"> — {{ route.name }}</span></span
-          >
-          <p class="text-sm text-gray-600">
-            {{ route.holdCount }} prises · {{ categoryLabels(route.categoryIds)
-            }}<template v-if="route.photoAssetId"> · photo annotée</template>
-          </p>
-        </div>
+    <DataList
+      v-if="!isPending"
+      :rows="routes ?? []"
+      :columns="columns"
+      :layout="isDesktop ? 'table' : 'cards'"
+      label="Voies, dans l’ordre de la compétition"
+      empty-text="Aucune voie."
+    >
+      <!-- Le sous-titre de la carte reproduit la ligne d'avant mot pour mot ;
+           en tableau, chaque élément a sa colonne. -->
+      <template #cell-categories="{ row }">
+        <template v-if="isDesktop">{{ categoryLabels(row.categoryIds) }}</template>
+        <template v-else
+          >{{ row.holdCount }} prises · {{ categoryLabels(row.categoryIds)
+          }}<template v-if="row.photoAssetId"> · photo annotée</template></template
+        >
+      </template>
+
+      <template #cell-color="{ row }">
+        <span v-if="row.color" class="inline-flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            class="inline-block size-3 shrink-0 rounded-full ring-1 ring-gray-400"
+            :style="{ backgroundColor: row.color }"
+          />
+          {{ row.color }}
+        </span>
+        <template v-else>—</template>
+      </template>
+
+      <template #cell-media="{ row }">
+        <template v-if="row.photoAssetId && (row.videoUrl || row.videoAssetId)">
+          Photo, vidéo
+        </template>
+        <template v-else-if="row.photoAssetId">Photo</template>
+        <template v-else-if="row.videoUrl || row.videoAssetId">Vidéo</template>
+        <template v-else>—</template>
+      </template>
+
+      <template #cell-actions="{ row, index }">
         <div class="flex items-center gap-1">
           <button
             type="button"
             aria-label="Monter"
-            class="min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
+            class="fine:min-h-10 fine:min-w-10 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
             :disabled="index === 0"
             @click="move(index, -1)"
           >
@@ -292,17 +377,21 @@ const categoryList = computed(() => categories.value ?? [])
           <button
             type="button"
             aria-label="Descendre"
-            class="min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
+            class="fine:min-h-10 fine:min-w-10 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
             :disabled="!routes || index === routes.length - 1"
             @click="move(index, 1)"
           >
             ↓
           </button>
-          <Button variant="secondary" @click="startEdit(route)">Modifier</Button>
+          <!-- Nommé exactement « Modifier » : trois parcours e2e (photo, recadrage,
+               vidéo) ciblent ce bouton par son nom et prennent le premier. -->
+          <button v-if="isDesktop" type="button" :class="rowActionClass" @click="startEdit(row)">
+            Modifier
+          </button>
+          <Button v-else variant="secondary" @click="startEdit(row)">Modifier</Button>
         </div>
-      </li>
-      <li v-if="routes && routes.length === 0" class="text-gray-600">Aucune voie.</li>
-    </ul>
+      </template>
+    </DataList>
 
     <form
       class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"

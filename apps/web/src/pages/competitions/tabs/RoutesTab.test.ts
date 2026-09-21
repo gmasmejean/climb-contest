@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../../api/client'
 import type { RouteWithCategories } from '../../../api/competitions'
+import { stubDesktop } from '../../../test-utils/media-query'
 
 const api = vi.hoisted(() => ({
   routes: { list: vi.fn(), create: vi.fn(), update: vi.fn(), reorder: vi.fn() },
@@ -107,6 +108,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   for (const wrapper of mounted.splice(0)) wrapper.unmount()
   document.body.innerHTML = ''
 })
@@ -364,5 +366,61 @@ describe('RoutesTab — annotation à la création : le nombre de prises suit la
     expect(wrapper.find('[data-testid="photo-preview"]').exists()).toBe(false)
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(buttonNamed(wrapper, 'Annuler')).toBeUndefined()
+  })
+})
+
+describe('RoutesTab — tableau des grands écrans (Lot 18)', () => {
+  const three = [
+    aRoute({ id: 'r1', number: 1, name: 'Dalle', sector: 'Gauche', color: '#ff0000' }),
+    aRoute({ id: 'r2', number: 2, name: 'Dièdre' }),
+    aRoute({ id: 'r3', number: 3, name: 'Toit' }),
+  ]
+
+  it('montre en colonnes le secteur et la couleur, invisibles en cartes', async () => {
+    api.routes.list.mockResolvedValue(three)
+    const cards = await mountTab()
+    expect(cards.text()).not.toContain('Gauche')
+
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    const table = await mountTab()
+    expect(table.find('table').exists()).toBe(true)
+    expect(table.text()).toContain('Gauche')
+    expect(table.text()).toContain('#ff0000')
+  })
+
+  it('n’offre aucun tri : l’ordre de la compétition fait foi', async () => {
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    const wrapper = await mountTab()
+    expect(wrapper.findAll('thead button')).toHaveLength(0)
+    expect(wrapper.findAll('thead th[aria-sort]')).toHaveLength(0)
+  })
+
+  /**
+   * `route-photo`, `route-photo-create-crop` et `route-video` prennent le
+   * PREMIER bouton nommé « Modifier » et comptent sur l'ordre de la compétition.
+   */
+  it('garde un bouton « Modifier » par ligne, dans l’ordre reçu', async () => {
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    const wrapper = await mountTab()
+    const editors = wrapper.findAll('button').filter((button) => button.text() === 'Modifier')
+    expect(editors).toHaveLength(3)
+    await editors[0]?.trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll<HTMLInputElement>('input[type="number"]')[0]?.element.value).toBe('1')
+  })
+
+  it('remonte une voie depuis le tableau', async () => {
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    api.routes.reorder.mockResolvedValue(undefined)
+    const wrapper = await mountTab()
+    const up = wrapper.findAll('button[aria-label="Monter"]')
+    expect(up[0]?.attributes('disabled')).toBeDefined()
+    await up[1]?.trigger('click')
+    await flushPromises()
+    expect(api.routes.reorder).toHaveBeenCalledWith('comp-1', ['r2', 'r1', 'r3'])
   })
 })
