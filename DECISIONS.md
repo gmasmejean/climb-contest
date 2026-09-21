@@ -2522,8 +2522,10 @@ le champ « Nombre de prises » s'il est déjà renseigné**.
 
 - Trois requêtes : si l'onglet est fermé entre deux, la voie existe sans photo ou sans prises ;
   l'éditeur (Modifier) permet de terminer.
-- Les prises se placent sur un aperçu de 640 px de côté long, sans zoom : à vérifier sur un mur
-  chargé (le zoom existe dans le recadrage, pas dans le placement, comme dans l'éditeur).
+- ~~Les prises se placent sur un aperçu de 640 px de côté long, sans zoom : à vérifier sur un
+  mur chargé (le zoom existe dans le recadrage, pas dans le placement, comme dans l'éditeur).~~
+  **Levé au Lot 19, ADR-077 :** le placement a un zoom ×1/×2/×3 et un mode plein écran, à
+  toutes les largeurs, et l'aperçu de création est passé à 1280 px.
 - Vérifié en émulation mobile 360 px, **pas sur un vrai téléphone devant un mur**.
 
 **Alternatives écartées :** créer la voie dès le choix de la photo (voies orphelines) ; recaler
@@ -2847,6 +2849,144 @@ séparés carte/tableau (le contenu diverge fatalement) ; `hidden lg:table` (poi
 rendre la ligne entière cliquable (ni rôle, ni focus, ni clavier, et la sélection de texte
 cassée — le lien vit dans l'en-tête de ligne) ; une case « tout cocher » en en-tête (les
 deux écrans concernés ont déjà un bouton « Tout sélectionner »).
+
+---
+
+## ADR-075 — Maître–détail des voies et des juges : la sélection vit dans l'adresse
+
+**Date :** 2026-09-21
+**Contexte :** Lot 19 (D3 de la série desktop). Après le Lot 18, `RoutesTab` et `JudgesTab`
+empilent un tableau pleine largeur puis un formulaire **en dessous**. Sur un portable de
+1440 px, modifier la voie 7 veut dire perdre la liste des yeux, et la moitié droite de l'écran
+reste vide pendant toute la préparation.
+
+**Décisions :**
+
+1. **Grille à deux colonnes à partir de `lg`**, en classes responsives pures sur un seul arbre :
+   `lg:grid lg:grid-cols-[minmax(0,1fr)_26rem]`. Sous 1024 px, aucune classe ne s'applique et le
+   DOM est celui d'aujourd'hui. Ce n'est pas une entorse à ADR-074 point 2 : celui-ci interdit
+   **deux copies du même contenu** dont une masquée, pas les classes responsives — la page
+   compétition en pose déjà (`hidden lg:inline` sur la date et le lien public). `useMediaQuery`
+   reste requis là où le **comportement** diffère, pas la mise en page.
+2. **`minmax(0,1fr)` sur la colonne de gauche, pas `1fr`.** Le `table-fixed` de `DataList`
+   déborderait la grille et ferait apparaître un défilement horizontal à 1280 px.
+3. **Pas de conteneur de défilement autour du panneau.** La colonne de droite est
+   `lg:sticky lg:top-24` sans `overflow-y-auto` : un conteneur de défilement décrocherait
+   l'en-tête collant du tableau (ADR-074 point 9), et le panneau contient une photo dont on veut
+   la hauteur naturelle. Un panneau plus haut que l'écran défile avec la page ; c'est
+   l'annotateur plein écran (ADR-077) qui règle le cas de la grande photo.
+4. **La sélection vit dans l'adresse** : `?route=<id>`, `?judge=<id>`, sur le patron `?section=`
+   du pilotage (ADR-072 point 5) — dans l'onglet, pas dans le routeur. Recharger la page en
+   pleine annotation ne referme pas la voie. Écriture par `router.replace` et non `push` : une
+   entrée d'historique par ligne cliquée ferait du bouton « précédent » un désélecteur au lieu
+   d'un retour. Un id inconnu retombe silencieusement sur « aucune sélection », le reste de la
+   query préservé. C'est un écart assumé à la note du Lot 18 (« recherche et filtre des onglets
+   ne sont pas dans l'adresse ») : une sélection ouvre un panneau d'édition, un filtre non.
+5. **Changer de sélection est refusé tant qu'une création est en reprise** (`created !== null`,
+   ADR-067 point 5 / ADR-068 point 4 : une voie créée dont la photo ou les prises ne sont pas
+   parties). Auparavant, « Modifier » écrasait cet état sans rien dire ; avec une liste cliquable
+   en permanence à côté du panneau, ce clic devient facile et fait perdre la reprise.
+6. **Chez les juges, les trois actions quittent la ligne sur grand écran** (« Voir l'accès »,
+   « Régénérer le PIN », « Révoquer ») et vivent dans la fiche ; la ligne ne garde que
+   l'ouverture. Les laisser aux deux endroits, ce sont exactement « des boutons d'action en
+   double, que les sélecteurs e2e atteignent au hasard » qu'ADR-074 point 2 interdit. Sous `lg`,
+   les boutons de carte ne bougent pas.
+7. **Les modales qui avertissent restent des modales, aux deux largeurs** : l'accès révélé après
+   création et le PIN régénéré sont des « à noter maintenant » (ADR-026), ils doivent bloquer.
+   Seule « Voir l'accès », qui est de la consultation, est remplacée par la fiche au-dessus de
+   1024 px.
+8. **Le panneau garde un mode unique création/édition.** Afficher « Ajouter une voie » et
+   l'édition en même temps donnerait deux formulaires côte à côte, alors que la séquence
+   reprenable d'ADR-068 point 4 suppose un seul brouillon vivant.
+
+**Limites connues :** les modifications non enregistrées ne survivent pas au rechargement — la
+voie se rouvre, ses valeurs sont relues du serveur (`RouteEditorPanel` n'a pas de
+`useFormDraft`, contrairement à `InfosTab` et `CompetitionCreate`). La largeur de 26 rem du
+panneau n'a pas été mesurée sur un 1366×768 réel.
+
+**Alternatives écartées :** un composant `MasterDetail` dans `packages/ui` (deux usages et six
+classes ; `ListToolbar` a déjà tranché que le seuil de 1024 px est une décision de
+l'application, pas du composant) ; la sélection en état local (plus simple, mais un rechargement
+accidentel referme le panneau, ce que `CLAUDE.md` proscrit) ; rendre la ligne entière cliquable
+(écarté par ADR-074) ; un panneau latéral glissant comme chez le juge (la liste doit rester
+visible, c'est tout l'intérêt).
+
+---
+
+## ADR-076 — Le QR code du juge est généré dans le navigateur
+
+**Date :** 2026-09-21
+**Contexte :** Lot 19, fiche juge. Jusqu'ici le QR n'existe que côté serveur, dans la planche
+PDF (`apps/api/src/lib/qrcode-pdf.ts`) ; la dépendance `qrcode` n'est déclarée que par
+`apps/api` et aucun écran web n'affiche de QR. L'organisateur qui veut faire scanner un juge
+doit imprimer la planche.
+
+**Décision (actée avec l'utilisateur) :** `qrcode` devient aussi une dépendance de `apps/web`
+(même version épinglée, `1.5.4`), et la fiche rend un **SVG** produit dans le navigateur à
+partir du lien d'accès.
+
+**La raison décisive n'est pas le confort, c'est un cas que le serveur ne sait pas traiter.**
+Quand `judgeCredentialsStored` est désactivé (ADR-027), le serveur ne conserve **aucun** clair :
+le jeton n'existe qu'une seule fois, dans la réponse de création, et vit ensuite dans la mémoire
+du navigateur (`revealedJudgeTokens`). Un point d'API `.../qrcode.svg` serait donc incapable de
+dessiner le QR précisément du juge qu'on vient de créer — le moment où on en a le plus besoin.
+
+**Conséquences :**
+
+- Le jeton d'accès ne transite jamais dans une URL d'image : ni journal d'accès, ni `Referer`,
+  ni cache de proxy.
+- Le SVG est injecté en `v-html`. C'est acceptable **parce que la chaîne vient de la
+  bibliothèque**, pas d'une saisie ; le commentaire du composant le dit, sans quoi c'est une
+  alerte de revue de sécurité légitime.
+- Aucun QR n'est rendu pour un juge révoqué, ni quand ni le clair stocké ni un jeton de session
+  ne sont disponibles : la fiche dit quoi faire à la place.
+- Deux implémentations de QR coexistent dans le dépôt (le PDF garde la sienne). Assumé : elles
+  ne partagent ni le support ni les contraintes.
+- Le PIN ne s'affiche jamais **dans** le QR, comme il ne s'imprime pas sur la planche (ADR-026).
+
+**Alternatives écartées :** un point d'API image (ne couvre pas le cas ci-dessus, ajoute une
+route, un contrat et des tests de sécurité pour un secret qui transiterait en image) ; pas de QR
+à l'écran (la planche PDF reste le seul support, mais le libellé du lot demande la fiche).
+
+---
+
+## ADR-077 — Zoom et plein écran dans l'annotateur, à toutes les largeurs
+
+**Date :** 2026-09-21
+**Contexte :** ADR-068 listait en limite connue que « les prises se placent sur un aperçu de
+640 px de côté long, sans zoom : à vérifier sur un mur chargé ». Sur une voie de quarante prises
+serrées, le placement est approximatif. La série des Lots 17–20 pose par ailleurs que tout est
+**additif à partir de `lg`** et que le rendu mobile ne change pas (ADR-072 point 1).
+
+**Décision (actée avec l'utilisateur) :** le zoom ×1/×2/×3 et le mode plein écran de
+l'annotateur sont disponibles **à toutes les largeurs, mobile compris**. C'est un écart assumé
+à ADR-072 point 1 : ce n'est pas de la mise en page pour grand écran, c'est la correction d'un
+défaut de saisie documenté, et l'organisateur qui annote devant le mur est justement celui qui
+a un téléphone en main.
+
+**Conséquences :**
+
+1. **L'aperçu de création passe de 640 px à 1280 px** (qualité 0,7 → 0,8). Sans cela, le ×3 est
+   flou. Sans effet sur la correction : les prises sont en coordonnées normalisées (ADR-066
+   point 4) et la photo envoyée est ré-encodée depuis le **fichier d'origine**, pas depuis
+   l'aperçu. Effet réel : `resizeToJpeg` est synchrone sur le thread principal et traite quatre
+   fois plus de pixels — c'est le seul point du lot où « le rendu mobile ne change pas » peut
+   être enfreint sans qu'aucun test ne le voie, donc il se mesure sur un téléphone.
+2. **Le cadre zoomable devient un composable partagé** (`useZoomableFrame`), extrait du dialogue
+   de recadrage qui l'avait déjà écrit : largeur de base qui fait tenir la photo entière à ×1,
+   recentrage du défilement autour du milieu de l'écran au changement de niveau.
+3. **L'écran juge n'est pas converti.** `RoutePhotoPanel` porte la troisième copie du même zoom ;
+   le gain serait cosmétique et `CLAUDE.md` déclare les écrans juge non négociables. Noté dans
+   `TODO.md`.
+4. Le dialogue plein écran restitue le focus à son ouvrant, comme le dialogue de recadrage.
+   `Modal` de `packages/ui` ne le fait toujours pas : troisième implémentation maison du même
+   besoin, notée dans `TODO.md`.
+
+**Alternatives écartées :** réserver le zoom à `lg` (respecte la lettre de la série, mais laisse
+la limite d'ADR-068 ouverte exactement là où elle gêne) ; monter l'aperçu à 1600 px, la taille
+de la photo stockée (le coût de ré-encodage sur téléphone n'est pas justifié par le gain à ×3) ;
+un second aperçu haute résolution calculé à l'ouverture du dialogue seulement (plus économe,
+mais deux aperçus à garder cohérents et un garde anti-course de plus).
 
 ---
 
