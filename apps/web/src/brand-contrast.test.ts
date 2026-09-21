@@ -78,6 +78,11 @@ const TEXT_PAIRS: [string, string][] = [
   ['gray-900', 'gray-100'],
   ['gray-500', 'white'],
   ['gray-500', 'paper'],
+  // Tableaux de l'espace organisateur (Lot 18)
+  ['gray-700', 'gray-50'],
+  ['gray-900', 'gray-50'],
+  ['gray-900', 'blue-50'],
+  ['gray-600', 'blue-50'],
   // Écran de salle (fond sombre)
   ['white', 'gray-900'],
   ['gray-300', 'gray-900'],
@@ -104,5 +109,26 @@ describe('charte — contrastes WCAG des échelles re-teintées (ADR-071)', () =
 
   it('blue-700 est exactement le navy de la marque', () => {
     expect(tokens.get('blue-700')).toBe(tokens.get('navy'))
+  })
+})
+
+/*
+ * La variante supprimée, toutes les classes `fine:` retomberaient en silence :
+ * rien ne casserait à l'écran, les tableaux redeviendraient simplement larges.
+ * D'où ce test.
+ */
+describe('densité compacte à la souris (ADR-073)', () => {
+  const variant = /@custom-variant fine \(([^)]*\)?[^;]*)\);/.exec(css)?.[1] ?? ''
+
+  it('déclare la variante fine', () => {
+    expect(variant).not.toBe('')
+  })
+
+  it('ne se déclenche qu’avec un pointeur fin', () => {
+    expect(variant).toContain('pointer: fine')
+  })
+
+  it('exclut tout appareil où le doigt reste possible', () => {
+    expect(variant).toContain('not (any-pointer: coarse)')
   })
 })

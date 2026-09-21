@@ -1,6 +1,19 @@
 @import 'tailwindcss';
 @source '../../../packages/ui/src';
 
+/*
+ * Densité compacte à la souris seulement (ADR-073, amendé au Lot 18). Les
+ * lignes de tableau de l'espace organisateur descendent à ~40 px sous cette
+ * variante, et à 48 px partout ailleurs.
+ *
+ * `not (any-pointer: coarse)` en plus de `pointer: fine` : un portable à écran
+ * tactile rapporte `pointer: fine` pour son pavé tactile, mais le doigt y reste
+ * possible. Dès qu'un doigt est possible, on garde 48 px.
+ *
+ * Utilisable depuis `packages/ui` : le `@source` ci-dessus y scanne les classes.
+ */
+@custom-variant fine (@media (pointer: fine) and (not (any-pointer: coarse)));
+
 @theme {
   /*
    * Charte aquarelle (DECISIONS.md ADR-070, étendue à toute l'application par
