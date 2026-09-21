@@ -20,7 +20,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ApiError } from '../../../api/client'
 import { competitionsApi, routesApi } from '../../../api/competitions'
 import { judgesApi, revealedJudgeTokens, type JudgeWithRoutes } from '../../../api/judges'
-import { DESKTOP_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
+import {
+  DESKTOP_QUERY,
+  MASTER_DETAIL_QUERY,
+  useMediaQuery,
+} from '../../../composables/useMediaQuery'
 import { judgeAccessUrl } from '../../../lib/judge-access'
 import { compareText, sortRows } from '../../../lib/table-sort'
 import JudgeCard from '../JudgeCard.vue'
@@ -28,6 +32,9 @@ import JudgeCard from '../JudgeCard.vue'
 const props = defineProps<{ competition: Competition }>()
 
 const isDesktop = useMediaQuery(DESKTOP_QUERY)
+// Le tableau arrive à 1024 px, la fiche seulement à 1440 px : entre les deux, la
+// place manque pour les deux côte à côte (ADR-075, seuil mesuré).
+const isMasterDetail = useMediaQuery(MASTER_DETAIL_QUERY)
 
 const queryClient = useQueryClient()
 const toast = useToast()
@@ -282,7 +289,7 @@ const columns = computed<DataListColumn<JudgeWithRoutes>[]>(() => [
     card: 'actions',
     labelHidden: true,
     // En tableau, la ligne n'ouvre que la fiche ; les actions y vivent (ADR-075 point 6).
-    cellClass: isDesktop.value ? 'w-24' : 'w-72',
+    cellClass: isMasterDetail.value ? 'w-24' : 'w-72',
   },
 ])
 
@@ -291,11 +298,13 @@ const shown = computed(() => sortRows(judges.value ?? [], sort.value, columns.va
 /**
  * Action de ligne du tableau : compacte sous pointeur fin seulement (ADR-073).
  * `Button` reste la pilule de 48 px de la charte, y compris en cartes. Depuis le
- * Lot 19, la seule action de ligne est l'ouverture de la fiche : plus de
- * variante « danger » ici, « Révoquer » vit dans la fiche.
+ * Lot 19, au-dessus de 1440 px la seule action de ligne est l'ouverture de la
+ * fiche ; entre 1024 et 1440 px, le tableau garde les actions du Lot 18.
  */
 const rowActionClass =
   'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
+const dangerRowActionClass =
+  'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-50'
 </script>
 
 <template>
@@ -339,7 +348,7 @@ const rowActionClass =
          tableau dans sa colonne. -->
     <div
       v-else
-      class="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-8"
+      class="flex flex-col gap-6 min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1fr)_24rem] min-[1440px]:items-start min-[1440px]:gap-8"
     >
       <div class="flex min-w-0 flex-col gap-6">
         <DataList
@@ -364,10 +373,10 @@ const rowActionClass =
 
           <template #cell-actions="{ row }">
             <div class="flex flex-wrap items-center gap-2">
-              <!-- En tableau, la ligne n'ouvre que la fiche : les actions y vivent,
-               jamais aux deux endroits (ADR-074 point 2, ADR-075 point 6). -->
+              <!-- Dès qu'il y a une fiche, la ligne n'ouvre qu'elle : les actions
+                   y vivent, jamais aux deux endroits (ADR-074 point 2). -->
               <button
-                v-if="isDesktop"
+                v-if="isMasterDetail"
                 type="button"
                 :class="rowActionClass"
                 :aria-current="row.id === selectedJudgeId ? 'true' : undefined"
@@ -375,6 +384,36 @@ const rowActionClass =
               >
                 Fiche
               </button>
+              <!-- Entre 1024 et 1440 px : un tableau, mais pas de place pour une
+                   fiche à côté — les actions du Lot 18 restent sur la ligne. -->
+              <template v-else-if="isDesktop">
+                <button
+                  v-if="row.accessUrl"
+                  type="button"
+                  :class="rowActionClass"
+                  @click="viewAccess(row)"
+                >
+                  Voir l'accès
+                </button>
+                <button
+                  v-if="row.hasPin && !row.revokedAt"
+                  type="button"
+                  :class="rowActionClass"
+                  :disabled="regenerateMutation.isPending.value"
+                  @click="regenerateMutation.mutate(row.id)"
+                >
+                  Régénérer le PIN
+                </button>
+                <button
+                  v-if="!row.revokedAt"
+                  type="button"
+                  :class="dangerRowActionClass"
+                  :disabled="revokeMutation.isPending.value"
+                  @click="revokeMutation.mutate(row.id)"
+                >
+                  Révoquer
+                </button>
+              </template>
               <template v-else>
                 <Button v-if="row.accessUrl" variant="secondary" @click="viewAccess(row)">
                   Voir l'accès
@@ -410,9 +449,9 @@ const rowActionClass =
         </p>
       </div>
 
-      <div class="lg:sticky lg:top-24">
+      <div class="min-[1440px]:sticky min-[1440px]:top-24">
         <JudgeCard
-          v-if="isDesktop && selectedJudge"
+          v-if="isMasterDetail && selectedJudge"
           :judge="selectedJudge"
           :status="judgeStatus(selectedJudge)"
           :route-labels="routeLabels(selectedJudge.routeIds)"

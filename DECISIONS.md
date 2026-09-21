@@ -2862,14 +2862,22 @@ reste vide pendant toute la préparation.
 
 **Décisions :**
 
-1. **Grille à deux colonnes à partir de `lg`**, en classes responsives pures sur un seul arbre :
-   `lg:grid lg:grid-cols-[minmax(0,1fr)_26rem]`. Sous 1024 px, aucune classe ne s'applique et le
-   DOM est celui d'aujourd'hui. Ce n'est pas une entorse à ADR-074 point 2 : celui-ci interdit
-   **deux copies du même contenu** dont une masquée, pas les classes responsives — la page
-   compétition en pose déjà (`hidden lg:inline` sur la date et le lien public). `useMediaQuery`
-   reste requis là où le **comportement** diffère, pas la mise en page.
-2. **`minmax(0,1fr)` sur la colonne de gauche, pas `1fr`.** Le `table-fixed` de `DataList`
-   déborderait la grille et ferait apparaître un défilement horizontal à 1280 px.
+1. **Grille à deux colonnes à partir de 1440 px, et non de `lg`.** Le cadrage disait 1024 px ;
+   la mesure en navigateur dit non. Les largeurs fixes du tableau des voies totalisent **656 px**
+   (528 px pour celui des juges) ; avec la barre latérale de 15 rem et un panneau de 24 rem, la
+   liste ne retrouve ces 656 px qu'à **1440 px**. En dessous, le tableau déborde sa colonne et
+   passe **sous** le panneau collant, qui intercepte alors les clics — défaut trouvé par le test
+   e2e, invisible autrement puisque `BrandShell` coupe le débordement (`overflow-x-clip`) et
+   qu'aucun défilement horizontal n'apparaît. Le seuil est donc `min-[1440px]:`, apparié à
+   `MASTER_DETAIL_QUERY`. Entre 1024 et 1440 px, les deux onglets gardent exactement le rendu du
+   Lot 18 : tableau, actions sur la ligne, éditeur en dessous.
+   La grille elle-même est en classes responsives pures sur un seul arbre. Ce n'est pas une
+   entorse à ADR-074 point 2 : celui-ci interdit **deux copies du même contenu** dont une
+   masquée, pas les classes responsives — la page compétition en pose déjà (`hidden lg:inline`
+   sur la date et le lien public). `useMediaQuery` reste requis là où le **comportement**
+   diffère, pas la mise en page.
+2. **`minmax(0,1fr)` sur la colonne de gauche, pas `1fr`.** Sans lui, le `table-fixed` de
+   `DataList` élargit la piste de grille au lieu de tenir dedans.
 3. **Pas de conteneur de défilement autour du panneau.** La colonne de droite est
    `lg:sticky lg:top-24` sans `overflow-y-auto` : un conteneur de défilement décrocherait
    l'en-tête collant du tableau (ADR-074 point 9), et le panneau contient une photo dont on veut
@@ -2886,23 +2894,24 @@ reste vide pendant toute la préparation.
    ADR-067 point 5 / ADR-068 point 4 : une voie créée dont la photo ou les prises ne sont pas
    parties). Auparavant, « Modifier » écrasait cet état sans rien dire ; avec une liste cliquable
    en permanence à côté du panneau, ce clic devient facile et fait perdre la reprise.
-6. **Chez les juges, les trois actions quittent la ligne sur grand écran** (« Voir l'accès »,
+6. **Chez les juges, les trois actions quittent la ligne dès qu'une fiche existe** (« Voir l'accès »,
    « Régénérer le PIN », « Révoquer ») et vivent dans la fiche ; la ligne ne garde que
    l'ouverture. Les laisser aux deux endroits, ce sont exactement « des boutons d'action en
-   double, que les sélecteurs e2e atteignent au hasard » qu'ADR-074 point 2 interdit. Sous `lg`,
-   les boutons de carte ne bougent pas.
-7. **Les modales qui avertissent restent des modales, aux deux largeurs** : l'accès révélé après
+   double, que les sélecteurs e2e atteignent au hasard » qu'ADR-074 point 2 interdit. En dessous
+   de 1440 px — donc aussi dans la bande où il y a un tableau mais pas de fiche — rien ne bouge.
+7. **Les modales qui avertissent restent des modales, à toutes les largeurs** : l'accès révélé après
    création et le PIN régénéré sont des « à noter maintenant » (ADR-026), ils doivent bloquer.
    Seule « Voir l'accès », qui est de la consultation, est remplacée par la fiche au-dessus de
-   1024 px.
+   1440 px.
 8. **Le panneau garde un mode unique création/édition.** Afficher « Ajouter une voie » et
    l'édition en même temps donnerait deux formulaires côte à côte, alors que la séquence
    reprenable d'ADR-068 point 4 suppose un seul brouillon vivant.
 
 **Limites connues :** les modifications non enregistrées ne survivent pas au rechargement — la
 voie se rouvre, ses valeurs sont relues du serveur (`RouteEditorPanel` n'a pas de
-`useFormDraft`, contrairement à `InfosTab` et `CompetitionCreate`). La largeur de 26 rem du
-panneau n'a pas été mesurée sur un 1366×768 réel.
+`useFormDraft`, contrairement à `InfosTab` et `CompetitionCreate`). Un portable de 1366 px de
+large n'a donc pas le maître–détail : c'est le prix de colonnes de tableau à largeur fixe
+(`table-fixed`, ADR-074), pas une limite de principe.
 
 **Alternatives écartées :** un composant `MasterDetail` dans `packages/ui` (deux usages et six
 classes ; `ListToolbar` a déjà tranché que le seuil de 1024 px est une décision de

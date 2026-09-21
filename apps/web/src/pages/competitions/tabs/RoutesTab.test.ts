@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../../api/client'
 import type { RouteWithCategories } from '../../../api/competitions'
-import { stubDesktop } from '../../../test-utils/media-query'
+import { stubDesktop, stubViewport } from '../../../test-utils/media-query'
 
 const api = vi.hoisted(() => ({
   routes: { list: vi.fn(), create: vi.fn(), update: vi.fn(), reorder: vi.fn() },
@@ -597,5 +597,21 @@ describe('RoutesTab — maître–détail (Lot 19)', () => {
     await flushPromises()
 
     expect(wrapper.find('button[aria-current]').exists()).toBe(false)
+  })
+})
+
+describe('RoutesTab — seuil du maître–détail (ADR-075)', () => {
+  it('garde le tableau dès 1024 px, avec l’éditeur toujours accessible', async () => {
+    // Le maître–détail n'arrive qu'à 1440 px : ici l'éditeur reste sous la
+    // liste, mais « Modifier » l'ouvre exactement pareil.
+    stubViewport(1280)
+    api.routes.list.mockResolvedValue([aRoute({ id: 'r1', number: 1 })])
+    const wrapper = await mountTab()
+
+    expect(wrapper.find('table').exists()).toBe(true)
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier la voie')
+    expect(router.currentRoute.value.query.route).toBe('r1')
   })
 })

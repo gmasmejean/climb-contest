@@ -4,13 +4,14 @@ import { FINE_TARGET, noHorizontalScroll, tooSmall } from './support/a11y'
 import { apiJson, loginApi, registerAndVerifyOrganizer } from './support/api'
 
 /**
- * Lot 19 (ADR-075, ADR-077) : au-dessus de 1024 px, les voies et les juges
+ * Lot 19 (ADR-075, ADR-077) : au-dessus de 1440 px, les voies et les juges
  * s'éditent à côté de leur liste, la voie ou le juge ouvert vit dans l'adresse,
  * et les prises se placent en plein écran avec un zoom. Parcours de bureau
  * seulement — le projet `mobile` (360 px) vérifie ailleurs que rien n'a bougé
- * en cartes.
+ * en cartes. Le seuil de 1440 px est MESURÉ : les largeurs fixes du tableau des
+ * voies totalisent 656 px, et en dessous il passerait sous le panneau.
  */
-test.skip(({ isMobile }) => isMobile === true, 'Le maître–détail n’existe qu’au-dessus de 1024 px.')
+test.skip(({ isMobile }) => isMobile === true, 'Le maître–détail n’existe qu’au-dessus de 1440 px.')
 
 test('voies et juges : liste à gauche, détail à droite, sélection dans l’adresse', async ({
   page,
@@ -68,6 +69,7 @@ test('voies et juges : liste à gauche, détail à droite, sélection dans l’a
   await expect(page).toHaveURL('/')
 
   // --- Voies : l'éditeur se pose à DROITE de la liste ---
+  await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(`/competitions/${competition.id}/routes`)
   const rows = page.getByTestId('data-list-row')
   await expect(rows).toHaveCount(3)
@@ -112,19 +114,28 @@ test('voies et juges : liste à gauche, détail à droite, sélection dans l’a
   await expect(card).toBeVisible()
   await expect(card).toContainText('Voie 1')
   await expect(page).toHaveURL(/judge=/)
-  // Le juge vient d'être créé par l'API, sans accès conservé : pas de QR, et on
-  // dit pourquoi plutôt que de montrer un carré vide (ADR-076).
-  await expect(card).toContainText('n’a été montré qu’une fois')
+  // La compétition conserve les accès en clair (ADR-027) : le lien et son QR
+  // sont dessinés dans le navigateur (ADR-076).
+  await expect(card.getByRole('textbox', { name: 'Lien d’accès du juge' })).toHaveValue(/\/j\//)
+  await expect(card.getByTestId('judge-qr-code')).toBeVisible()
+  await expect(card.getByTestId('judge-qr-code').locator('svg')).toHaveCount(1)
   await page.screenshot({ path: testInfo.outputPath('2-juges.png'), fullPage: true })
 
   await card.getByRole('button', { name: 'Révoquer' }).click()
   await expect(page.getByRole('table')).toContainText('Révoqué')
   expect(await noHorizontalScroll(page)).toBe(true)
 
-  // --- Juste sous le seuil : tout repasse empilé, et aux 48 px ---
+  // --- Juste sous le seuil du maître–détail : le tableau du Lot 18 revient,
+  //     actions sur la ligne, sans fiche ---
+  await page.setViewportSize({ width: 1439, height: 900 })
+  await expect(page.getByTestId('judge-card')).toHaveCount(0)
+  await expect(page.getByRole('table')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Fiche' })).toHaveCount(0)
+  expect(await noHorizontalScroll(page)).toBe(true)
+
+  // --- Sous 1024 px : cartes, et 48 px partout ---
   await page.setViewportSize({ width: 1023, height: 800 })
   await expect(page.getByRole('table')).toHaveCount(0)
-  await expect(page.getByTestId('judge-card')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Ajouter un juge' })).toBeVisible()
   expect(await tooSmall(page)).toEqual([])
   expect(await noHorizontalScroll(page)).toBe(true)
@@ -155,6 +166,7 @@ test('annotateur : la photo se place en plein écran, avec un zoom', async ({ pa
   await page.getByRole('button', { name: 'Se connecter' }).click()
   await expect(page).toHaveURL('/')
 
+  await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto(`/competitions/${competition.id}/routes`)
   await page.getByLabel('Numéro').fill('1')
   await page.getByLabel('Nombre de prises').fill('12')

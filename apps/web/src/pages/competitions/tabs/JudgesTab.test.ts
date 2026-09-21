@@ -5,7 +5,7 @@ import { createRouter, createWebHistory, type Router } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { revealedJudgeTokens, type JudgeWithRoutes } from '../../../api/judges'
-import { stubDesktop } from '../../../test-utils/media-query'
+import { stubDesktop, stubViewport } from '../../../test-utils/media-query'
 
 const api = vi.hoisted(() => ({
   judges: {
@@ -356,5 +356,30 @@ describe('JudgesTab — fiche du juge (Lot 19)', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="judge-card"]').exists()).toBe(false)
     expect(document.body.textContent).toContain('Accès du juge')
+  })
+})
+
+describe('JudgesTab — entre 1024 et 1440 px (ADR-075)', () => {
+  it('garde le tableau et ses actions de ligne, sans fiche', async () => {
+    // Le tableau tient dès 1024 px, mais pas une fiche à côté : les largeurs
+    // fixes du tableau des juges totalisent 528 px.
+    stubViewport(1280)
+    api.judges.list.mockResolvedValue([aJudge({ accessUrl: 'https://exemple.test/j/abc' })])
+    const wrapper = await mountTab()
+
+    expect(wrapper.find('table').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="judge-card"]').exists()).toBe(false)
+    expect(buttonNamed(wrapper, 'Fiche')).toBeUndefined()
+    expect(buttonNamed(wrapper, 'Révoquer')).toBeDefined()
+    expect(buttonNamed(wrapper, "Voir l'accès")).toBeDefined()
+  })
+
+  it('bascule sur la fiche à 1440 px', async () => {
+    stubViewport(1440)
+    api.judges.list.mockResolvedValue([aJudge({ accessUrl: 'https://exemple.test/j/abc' })])
+    const wrapper = await mountTab()
+
+    expect(buttonNamed(wrapper, 'Fiche')).toBeDefined()
+    expect(wrapper.get('[data-testid="data-list-row"]').text()).not.toContain('Révoquer')
   })
 })

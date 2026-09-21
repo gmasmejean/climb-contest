@@ -17,3 +17,22 @@ export function stubDesktop(matches: boolean): void {
     })),
   )
 }
+
+/**
+ * Comme `stubDesktop`, mais évalue chaque `(min-width: Npx)` contre une largeur
+ * donnée : indispensable depuis que deux seuils cohabitent (1024 px pour le
+ * tableau, 1440 px pour le maître–détail — ADR-075).
+ */
+export function stubViewport(width: number): void {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => {
+      const min = /\(min-width:\s*(\d+)px\)/.exec(query)
+      return {
+        matches: min?.[1] !== undefined && width >= Number(min[1]),
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }
+    }),
+  )
+}

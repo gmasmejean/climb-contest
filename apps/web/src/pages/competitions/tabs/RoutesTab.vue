@@ -188,10 +188,11 @@ const columns = computed<DataListColumn<RouteWithCategories>[]>(() => [
 </script>
 
 <template>
-  <!-- Maître–détail à partir de `lg` (ADR-075) : `minmax(0,1fr)` et non `1fr`,
-       sinon le `table-fixed` de DataList déborde et la page défile en travers. -->
+  <!-- Maître–détail au seuil MESURÉ de 1440 px (ADR-075) : en dessous, les
+       656 px de largeurs fixes du tableau déborderaient sous le panneau.
+       `minmax(0,1fr)` et non `1fr`, sinon le `table-fixed` élargit la colonne. -->
   <div
-    class="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-8"
+    class="flex flex-col gap-6 min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1fr)_24rem] min-[1440px]:items-start min-[1440px]:gap-8"
   >
     <div class="flex min-w-0 flex-col gap-6">
       <p v-if="isPending" class="text-gray-600">Chargement…</p>
@@ -284,7 +285,7 @@ const columns = computed<DataListColumn<RouteWithCategories>[]>(() => [
 
     <!-- Pas de conteneur de défilement ici : il décrocherait l'en-tête collant
          du tableau (ADR-074 point 9). -->
-    <div class="lg:sticky lg:top-24">
+    <div class="min-[1440px]:sticky min-[1440px]:top-24">
       <RouteEditorPanel
         ref="editorPanel"
         :competition-id="competitionId"
