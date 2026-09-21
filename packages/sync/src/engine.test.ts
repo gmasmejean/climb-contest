@@ -269,8 +269,11 @@ describe('SyncEngine', () => {
     const transport = new FakeTransport<Payload>()
     const engine = new SyncEngine<Payload>(storage, transport, { debounceMs: 10_000 })
     expect(engine.snapshot()).toEqual([]) // rien avant hydrate()
+    // Lot 21 : cet instantané vide ne prouve rien tant que la file n'est pas lue.
+    expect(engine.isHydrated).toBe(false)
 
     await engine.hydrate()
+    expect(engine.isHydrated).toBe(true)
     expect(engine.snapshot()).toEqual([seeded])
 
     await engine.flush()
