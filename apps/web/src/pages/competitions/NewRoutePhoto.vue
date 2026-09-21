@@ -4,6 +4,7 @@ import { Button, Modal } from '@climbcontest/ui'
 import { computed, ref, watch } from 'vue'
 
 import HoldAnnotator from '../../components/HoldAnnotator.vue'
+import HoldAnnotatorDialog from '../../components/HoldAnnotatorDialog.vue'
 import type { PickedPhoto } from '../../lib/photo-crop'
 import RoutePhotoPicker from './RoutePhotoPicker.vue'
 
@@ -20,6 +21,8 @@ const holds = defineModel<RouteHold[]>('holds', { required: true })
 
 const stage = ref<'crop' | 'annotate'>('crop')
 const confirmingRecrop = ref(false)
+// Placement en plein écran (ADR-077), à toutes les largeurs.
+const annotating = ref(false)
 
 // Autre fichier, ou champ vidé (voie créée) : on reprend au début, sans prises.
 watch(
@@ -58,13 +61,25 @@ function askBackToCrop(): void {
       @crop-applied="stage = 'annotate'"
     >
       <template #preview="{ url }">
-        <HoldAnnotator
-          v-if="stage === 'annotate'"
-          v-model="holds"
-          :image-url="url"
-          :route-number="props.routeNumber"
-          :hold-count="null"
-        />
+        <template v-if="stage === 'annotate'">
+          <HoldAnnotator
+            v-model="holds"
+            :image-url="url"
+            :route-number="props.routeNumber"
+            :hold-count="null"
+          />
+          <div>
+            <Button variant="secondary" @click="annotating = true">Agrandir la photo</Button>
+          </div>
+          <HoldAnnotatorDialog
+            v-model="holds"
+            :open="annotating"
+            :image-url="url"
+            :route-number="props.routeNumber"
+            :hold-count="null"
+            @close="annotating = false"
+          />
+        </template>
         <img
           v-else
           :src="url"

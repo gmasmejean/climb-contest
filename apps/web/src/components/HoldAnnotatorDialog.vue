@@ -1,0 +1,79 @@
+<script setup lang="ts">
+import type { RouteHold } from '@climbcontest/contracts'
+import { Button } from '@climbcontest/ui'
+import { nextTick, ref, watch } from 'vue'
+
+import HoldAnnotator from './HoldAnnotator.vue'
+
+/**
+ * Placement des prises en plein écran (ADR-077), avec zoom et défilement. Le
+ * même `v-model` que l'annotateur en ligne : fermer ne perd rien, et rien n'est
+ * envoyé ici. Disponible à toutes les largeurs — sur un mur chargé, c'est le
+ * téléphone devant le mur qui en a le plus besoin.
+ */
+const props = defineProps<{
+  open: boolean
+  imageUrl: string | null
+  imageError?: boolean
+  routeNumber: number | null
+  holdCount: number | null
+}>()
+const emit = defineEmits<{ close: [] }>()
+const holds = defineModel<RouteHold[]>({ required: true })
+
+const dialog = ref<HTMLElement | null>(null)
+let previouslyFocused: HTMLElement | null = null
+
+// Le focus part sur « Fermer » à l'ouverture et revient à l'ouvrant après —
+// `Modal` de packages/ui ne le fait pas encore, le dialogue de recadrage si.
+watch(
+  () => props.open,
+  async (isOpen) => {
+    if (isOpen) {
+      previouslyFocused =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null
+      await nextTick()
+      dialog.value?.querySelector<HTMLElement>('[data-close]')?.focus()
+    } else {
+      previouslyFocused?.focus()
+      previouslyFocused = null
+    }
+  },
+  { immediate: true },
+)
+</script>
+
+<template>
+  <Teleport to="body">
+    <div
+      v-if="props.open"
+      ref="dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Placer les prises"
+      data-testid="hold-annotator-dialog"
+      class="fixed inset-0 z-50 flex flex-col bg-white"
+      @keydown.esc="emit('close')"
+    >
+      <header class="flex items-center justify-between gap-2 px-4 py-2">
+        <h2 class="text-lg font-bold text-gray-900">
+          Placer les prises<template v-if="props.routeNumber">
+            — voie {{ props.routeNumber }}</template
+          >
+        </h2>
+        <Button data-close variant="secondary" @click="emit('close')">Fermer</Button>
+      </header>
+
+      <div class="flex min-h-0 flex-1 flex-col px-4 pb-3">
+        <HoldAnnotator
+          v-model="holds"
+          expanded
+          :image-url="props.imageUrl"
+          :image-error="props.imageError"
+          :route-number="props.routeNumber"
+          :hold-count="props.holdCount"
+        />
+      </div>
+    </div>
+  </Teleport>
+</template>

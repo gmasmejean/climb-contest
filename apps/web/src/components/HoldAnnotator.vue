@@ -11,6 +11,7 @@ import {
 import { Button, NumberField } from '@climbcontest/ui'
 import { computed, ref, watch } from 'vue'
 
+import { useZoomableFrame, ZOOMS } from '../composables/useZoomableFrame'
 import { numberingGap } from '../lib/hold-numbering'
 import HoldMarker from './HoldMarker.vue'
 
@@ -33,6 +34,12 @@ const props = defineProps<{
    * `null` à la création, où c'est le nombre de prises placées qui le fixe.
    */
   holdCount: number | null
+  /**
+   * Mode plein écran (ADR-077) : la photo occupe la hauteur disponible, avec le
+   * zoom et le défilement. Hors de ce mode, elle remplit la largeur du parent,
+   * comme avant — c'est le rendu inchangé de la colonne et du téléphone.
+   */
+  expanded?: boolean
 }>()
 const holds = defineModel<RouteHold[]>({ required: true })
 
@@ -53,6 +60,8 @@ const gapAt = computed(() => numberingGap(holds.value))
 
 // --- Placement des prises.
 const frame = ref<HTMLElement | null>(null)
+const scroller = ref<HTMLElement | null>(null)
+const { zoom, frameWidth, setZoom, onImageLoad } = useZoomableFrame(scroller)
 
 function pointOf(event: { clientX: number; clientY: number }): { x: number; y: number } | null {
   const rect = frame.value?.getBoundingClientRect()
@@ -149,56 +158,83 @@ const counterText = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3" data-testid="hold-annotator">
+  <div
+    class="flex flex-col gap-3"
+    :class="props.expanded ? 'min-h-0 flex-1' : ''"
+    data-testid="hold-annotator"
+  >
     <p class="text-sm text-gray-700">
       Touchez la photo pour placer une prise. Touchez une prise pour la sélectionner, glissez-la
       pour la déplacer.
     </p>
 
-    <div
-      ref="frame"
-      class="relative w-full touch-manipulation overflow-hidden rounded-lg bg-gray-100 select-none"
-      data-testid="photo-frame"
-      @click="onFrameClick"
-    >
-      <img
-        v-if="props.imageUrl"
-        :src="props.imageUrl"
-        :alt="props.routeNumber ? `Photo de la voie ${props.routeNumber}` : 'Photo de la voie'"
-        class="block h-auto w-full"
-        draggable="false"
-      />
-      <p v-else-if="props.imageError" role="alert" class="p-4 text-sm text-red-700">
-        Impossible de charger la photo. Vérifiez le réseau puis rechargez la page.
-      </p>
-      <p v-else class="p-4 text-sm text-gray-700">Chargement de la photo…</p>
+    <div v-if="props.expanded" class="flex gap-2" role="group" aria-label="Zoom">
+      <Button
+        v-for="level in ZOOMS"
+        :key="level"
+        :variant="zoom === level ? 'primary' : 'secondary'"
+        :aria-pressed="zoom === level"
+        full-width
+        @click="setZoom(level)"
+      >
+        ×{{ level }}
+      </Button>
+    </div>
 
-      <template v-if="props.imageUrl">
-        <HoldMarker
-          v-for="hold in holds"
-          :key="`m-${hold.number}`"
-          :number="hold.number"
-          :x="hold.x"
-          :y="hold.y"
-          :selected="hold.number === selected"
+    <div
+      ref="scroller"
+      :class="
+        props.expanded ? 'min-h-0 flex-1 overflow-auto overscroll-contain bg-gray-200 p-6' : ''
+      "
+    >
+      <div
+        ref="frame"
+        class="relative touch-manipulation overflow-hidden rounded-lg bg-gray-100 select-none"
+        :class="props.expanded ? 'mx-auto' : 'w-full'"
+        :style="props.expanded ? { width: frameWidth } : undefined"
+        data-testid="photo-frame"
+        @click="onFrameClick"
+      >
+        <img
+          v-if="props.imageUrl"
+          :src="props.imageUrl"
+          :alt="props.routeNumber ? `Photo de la voie ${props.routeNumber}` : 'Photo de la voie'"
+          class="block h-auto w-full max-w-none"
+          draggable="false"
+          @load="onImageLoad"
         />
-        <button
-          v-for="hold in holds"
-          :key="`b-${hold.number}`"
-          type="button"
-          class="absolute h-12 w-12 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
-          :style="{ left: `${hold.x * 100}%`, top: `${hold.y * 100}%` }"
-          :aria-label="`Prise ${hold.number}`"
-          :aria-pressed="hold.number === selected"
-          data-testid="hold-handle"
-          @click.stop="selected = hold.number"
-          @pointerdown.stop="onMarkerDown($event, hold.number)"
-          @pointermove="onMarkerMove"
-          @pointerup="onMarkerUp"
-          @pointercancel="onMarkerUp"
-          @keydown="onMarkerKey($event, hold)"
-        />
-      </template>
+        <p v-else-if="props.imageError" role="alert" class="p-4 text-sm text-red-700">
+          Impossible de charger la photo. Vérifiez le réseau puis rechargez la page.
+        </p>
+        <p v-else class="p-4 text-sm text-gray-700">Chargement de la photo…</p>
+
+        <template v-if="props.imageUrl">
+          <HoldMarker
+            v-for="hold in holds"
+            :key="`m-${hold.number}`"
+            :number="hold.number"
+            :x="hold.x"
+            :y="hold.y"
+            :selected="hold.number === selected"
+          />
+          <button
+            v-for="hold in holds"
+            :key="`b-${hold.number}`"
+            type="button"
+            class="absolute h-12 w-12 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+            :style="{ left: `${hold.x * 100}%`, top: `${hold.y * 100}%` }"
+            :aria-label="`Prise ${hold.number}`"
+            :aria-pressed="hold.number === selected"
+            data-testid="hold-handle"
+            @click.stop="selected = hold.number"
+            @pointerdown.stop="onMarkerDown($event, hold.number)"
+            @pointermove="onMarkerMove"
+            @pointerup="onMarkerUp"
+            @pointercancel="onMarkerUp"
+            @keydown="onMarkerKey($event, hold)"
+          />
+        </template>
+      </div>
     </div>
 
     <p v-if="limitError" role="alert" class="text-sm text-red-700">{{ limitError }}</p>

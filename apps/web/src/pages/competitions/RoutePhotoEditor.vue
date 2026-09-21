@@ -6,6 +6,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ApiError } from '../../api/client'
 import { routePhotoApi } from '../../api/competitions'
 import HoldAnnotator from '../../components/HoldAnnotator.vue'
+import HoldAnnotatorDialog from '../../components/HoldAnnotatorDialog.vue'
 import { numberingGap } from '../../lib/hold-numbering'
 import type { PickedPhoto } from '../../lib/photo-crop'
 import { PhotoUnreadableError, resizeToJpeg } from '../../lib/photo-resize'
@@ -148,6 +149,9 @@ async function saveHolds(): Promise<void> {
   }
 }
 
+// Placement en plein écran (ADR-077), à toutes les largeurs.
+const annotating = ref(false)
+
 const printing = ref(false)
 async function printSheet(): Promise<void> {
   error.value = ''
@@ -178,9 +182,24 @@ async function printSheet(): Promise<void> {
         :route-number="props.routeNumber"
         :hold-count="props.holdCount"
       />
-      <div v-if="dirty">
-        <Button variant="secondary" @click="loadSaved">Annuler les modifications</Button>
+      <div class="flex flex-wrap gap-3">
+        <Button variant="secondary" :disabled="!imageUrl" @click="annotating = true">
+          Agrandir la photo
+        </Button>
+        <Button v-if="dirty" variant="secondary" @click="loadSaved">
+          Annuler les modifications
+        </Button>
       </div>
+
+      <HoldAnnotatorDialog
+        v-model="holds"
+        :open="annotating"
+        :image-url="imageUrl"
+        :image-error="imageError"
+        :route-number="props.routeNumber"
+        :hold-count="props.holdCount"
+        @close="annotating = false"
+      />
 
       <div
         v-if="holds.length > 0 && holds.length !== props.holdCount && isContiguous && !dirty"
