@@ -75,6 +75,7 @@ const TEXT_PAIRS: [string, string][] = [
   ['gray-600', 'gray-50'],
   ['gray-600', 'gray-100'],
   ['gray-700', 'gray-100'],
+  ['gray-900', 'gray-100'],
   ['gray-500', 'white'],
   ['gray-500', 'paper'],
   // Écran de salle (fond sombre)

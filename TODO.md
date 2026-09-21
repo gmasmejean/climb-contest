@@ -502,3 +502,28 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **Test instable** `JudgeAscentEntry.test.ts` › « Voir la voie ouvre le panneau… sans
   réseau » : a échoué 2 fois sur ~6 exécutions de la suite complète (`vi.fn()` réseau appelé
   1 fois), passe seul. Vu avant tout changement sur les écrans juge.
+  **Cause vue au Lot 17 :** l'appel parasite est un `POST /api/v1/judge/ascents/batch` — une
+  synchronisation mise en file par un test précédent du même fichier, qui part pendant
+  celui-ci. C'est un défaut d'isolation des tests, pas de l'écran.
+
+## Depuis le socle desktop (Lot 17, ADR-072)
+
+- **Liste, corbeille et création restent une colonne étroite** (`max-w-3xl` / `max-w-2xl`),
+  désormais alignée à gauche du conteneur large : la moitié droite est vide à 1440 px. La
+  grille de cartes et les tableaux sont le Lot 18.
+- **`Tabs` n'a pas de pastille** (`badge`) : prévue au plan, non écrite tant que rien ne
+  l'alimente (compteurs de conflits / alertes / points bloquants → Lot 20).
+- **Identifiants DOM en double** : les onglets de la page et les sous-onglets du pilotage
+  produisent tous deux `#tab-rounds` (et `aria-controls="panel-…"` ne pointe sur aucun
+  élément). Antérieur au Lot 17 ; `Tabs` devrait recevoir un préfixe d'identifiant et les
+  panneaux porter `role="tabpanel"`.
+- **Correction d'adresse `rounds` hors phases** (`CompetitionDetail`, `watchEffect`) : vérifiée
+  en navigateur, couverte en unitaire par `resolveCompetitionTab` seulement — pas de test de
+  composant de la page.
+- **Pistes desktop écartées des Lots 17–20**, à arbitrer plus tard : sélection multiple et
+  actions en lot sur les compétiteurs ; matrice juges × voies ; tours en colonnes côte à
+  côte ; modales → panneau latéral ; classement provisoire à côté de la matrice de pilotage ;
+  raccourcis clavier globaux ; navigation clavier dans les tableaux ; glisser-déposer des
+  voies et dépôt de fichier ; sélecteur rapide de compétition ; feuille d'impression ; lien
+  vers l'écran de salle depuis le pilotage ; exports en grille ; « Prêt à démarrer ? » en
+  deux colonnes.

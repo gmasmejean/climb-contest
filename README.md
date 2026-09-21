@@ -307,6 +307,25 @@ elle n'a pas encore été téléchargée, le panneau le dit et la saisie continu
 photos sont sur le volume `uploads-data`, comme les vidéos. Voir DECISIONS.md
 ADR-066.
 
+## Espace organisateur sur grand écran
+
+À partir de 1024 px de large (`lg`), l'espace organisateur prend la largeur de l'écran
+(ADR-072) ; en dessous, rien ne change et les 360 px restent la référence.
+
+- `BrandShell` accepte `width="wide"` : en-tête et contenu bornés à `max-w-screen-2xl`. Les
+  pages d'entrée et publiques gardent `narrow`, la valeur par défaut.
+- Sur la page d'une compétition, les onglets deviennent une **barre latérale** groupée
+  *Préparer / Vérifier / Jour J*, et l'en-tête (retour, nom, lieu, date, lien vers la page
+  publique) reste **collant**. C'est le même composant `Tabs` de `packages/ui`, en
+  `orientation="vertical"` : mêmes rôles ARIA, flèches ↑/↓ comme ←/→, le focus suit.
+- **L'onglet est dans l'adresse** : `/competitions/:id/routes`, `/competitors`,
+  `/pilotage?section=conflicts`, etc. (identifiants
+  dans `apps/web/src/lib/competition-tabs.ts`). Rechargement, lien profond et bouton
+  « précédent » fonctionnent ; un segment inconnu, ou `rounds` hors format à phases, ramène
+  à Infos.
+- La densité compacte à la souris (`pointer: fine`, ADR-073) n'est pas encore appliquée :
+  elle arrive avec les tableaux du Lot 18.
+
 ## Liste des compétitions et corbeille
 
 **Mes compétitions** se recherche (nom ou lieu, sans tenir compte des accents ni

@@ -77,16 +77,13 @@ const startsOn = computed(() =>
       <header
         class="bg-paper z-20 flex flex-col gap-1 py-4 lg:sticky lg:top-0 lg:flex-row lg:items-center lg:gap-6 lg:border-b lg:border-gray-200"
       >
-        <div class="flex min-w-0 flex-col lg:flex-1">
-          <nav aria-label="Fil d’Ariane" class="text-sm">
-            <RouterLink
-              :to="{ name: 'competition-list' }"
-              class="inline-flex min-h-12 items-center font-medium text-blue-700 hover:underline lg:min-h-0"
-            >
-              <span aria-hidden="true" class="lg:hidden">←&nbsp;</span>Mes compétitions
-            </RouterLink>
-            <span aria-hidden="true" class="hidden px-2 text-gray-500 lg:inline">›</span>
-          </nav>
+        <div class="flex min-w-0 flex-col lg:flex-1 lg:flex-row lg:items-baseline lg:gap-4">
+          <RouterLink
+            :to="{ name: 'competition-list' }"
+            class="inline-flex min-h-12 w-fit shrink-0 items-center text-sm font-medium text-blue-700 hover:underline lg:min-h-0"
+          >
+            ← Mes compétitions
+          </RouterLink>
           <h1
             class="font-display text-ink text-3xl leading-none font-bold md:text-4xl lg:truncate lg:pb-1"
           >
@@ -110,7 +107,7 @@ const startsOn = computed(() =>
       <div
         class="flex flex-col gap-6 pt-2 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10 lg:pt-6"
       >
-        <aside class="lg:sticky lg:top-28 lg:self-start">
+        <aside class="lg:sticky lg:top-24 lg:self-start">
           <Tabs
             v-model="activeTab"
             :tabs="tabs"

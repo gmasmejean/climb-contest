@@ -2737,6 +2737,16 @@ sur un portable à la table de l'organisation**, le téléphone ne servant que d
 6. **Le pilotage sur portable devient la cible d'optimisation** (Lot 20) ; son rendu mobile
    reste fonctionnel.
 
+**Mise en œuvre (Lot 17) :** `BrandShell` en `wide` coupe le débordement avec
+`overflow-x-clip` et non `overflow-x-hidden` — `hidden` fait de la coque un conteneur de
+défilement, et ni l'en-tête ni la barre latérale n'y seraient collants. L'en-tête de
+compétition n'est collant qu'à partir de `lg` (sur un téléphone il mangerait la hauteur
+utile). Le lien retour garde son libellé « ← Mes compétitions » à toutes les largeurs : un fil
+d'Ariane à deux niveaux n'apporte rien de plus, et deux parcours e2e le ciblent par ce nom.
+L'orientation de `Tabs` suit `useMediaQuery('(min-width: 1024px)')` : un seul `tablist` dans
+le DOM, jamais deux dont un masqué en CSS. La liste des onglets et la résolution du segment
+d'URL sont des fonctions pures (`lib/competition-tabs.ts`).
+
 **Alternatives écartées :** onglets horizontaux simplement élargis (neuf libellés à plat,
 sans hiérarchie, et toujours pas de place pour des pastilles d'alerte) ; une barre latérale
 en `<nav>` de liens (sémantique défendable, mais réécriture de 28 sélecteurs e2e pour un
