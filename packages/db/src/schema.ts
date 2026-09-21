@@ -486,6 +486,11 @@ export const ascent = pgTable(
     // ADR-002 : marque une saisie contradictoire, sort temporairement de
     // l'unicité (round_id, route_id, competitor_id).
     conflictGroup: uuid('conflict_group'),
+    // ADR-078 : saisie refusée par l'organisateur (quarantaine d'un accès
+    // révoqué). La ligne GARDE son `conflict_group` — elle reste ainsi hors de
+    // tous les filtres « actif » et de `ascent_active_key` — et sort seulement
+    // des lectures de conflits non résolus.
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
