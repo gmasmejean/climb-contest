@@ -16,12 +16,24 @@ import BrandLogo from './BrandLogo.vue'
  *
  * La page fournit son propre `<main>` dans le slot ; il doit porter `flex-1`
  * (et non `min-h-dvh`) pour occuper la hauteur restante sous l'en-tête.
+ *
+ * `width="wide"` (ADR-072) : pages de travail de l'organisateur, qui prennent la
+ * largeur de l'écran. La page donne à son `<main>` les mêmes bornes que l'en-tête :
+ * `max-w-screen-2xl px-4 lg:px-8`.
+ * On y coupe le débordement avec `clip` et non `hidden` : `hidden` ferait de
+ * la coque un conteneur de défilement, et plus rien n'y serait collant.
  */
-withDefaults(defineProps<{ decor?: boolean }>(), { decor: false })
+withDefaults(defineProps<{ decor?: boolean; width?: 'narrow' | 'wide' }>(), {
+  decor: false,
+  width: 'narrow',
+})
 </script>
 
 <template>
-  <div class="bg-paper font-body text-ink relative flex min-h-dvh flex-col overflow-x-hidden">
+  <div
+    class="bg-paper font-body text-ink relative flex min-h-dvh flex-col"
+    :class="width === 'wide' ? 'overflow-x-clip' : 'overflow-x-hidden'"
+  >
     <template v-if="decor">
       <!--
         Décor, sous le contenu, jamais lu par les lecteurs d'écran. Sur mobile :
@@ -50,7 +62,8 @@ withDefaults(defineProps<{ decor?: boolean }>(), { decor: false })
     </template>
 
     <header
-      class="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 pt-4 md:px-8 md:pt-6"
+      class="relative z-10 mx-auto flex w-full items-center justify-between gap-4 px-4 pt-4 md:pt-6"
+      :class="width === 'wide' ? 'max-w-screen-2xl lg:px-8' : 'max-w-6xl md:px-8'"
     >
       <RouterLink
         to="/"

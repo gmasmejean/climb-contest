@@ -199,226 +199,238 @@ async function trashSelected(): Promise<void> {
 </script>
 
 <template>
-  <BrandShell>
-    <main class="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-8">
-      <header class="flex items-center justify-between gap-4">
-        <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">Mes compétitions</h1>
-        <RouterLink :to="{ name: 'competition-create' }">
-          <Button>Nouvelle compétition</Button>
-        </RouterLink>
-      </header>
-      <div class="flex flex-wrap gap-3">
-        <Button variant="secondary" @click="importOpen = true">Importer une sauvegarde</Button>
-        <RouterLink :to="{ name: 'competition-trash' }">
-          <Button variant="secondary">
-            Corbeille<template v-if="trashCount > 0"> ({{ trashCount }})</template>
-          </Button>
-        </RouterLink>
-      </div>
-      <ImportBackupModal :open="importOpen" @close="importOpen = false" />
-
-      <div
-        v-if="bilan"
-        role="status"
-        class="flex flex-col items-start gap-2 rounded-lg border p-4 text-base"
-        :class="
-          bilan.partial
-            ? 'border-amber-700 bg-amber-50 text-amber-900'
-            : 'border-green-700 bg-green-50 text-green-900'
-        "
-      >
-        <p>{{ bilan.text }}</p>
-        <RouterLink
-          v-if="bilan.movedSome"
-          :to="{ name: 'competition-trash' }"
-          class="inline-flex min-h-12 items-center font-semibold underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"
-        >
-          Voir la corbeille pour la restaurer
-        </RouterLink>
-      </div>
-
-      <p v-if="isPending" class="text-gray-600">Chargement…</p>
-      <div v-else-if="isError && !data" role="alert" class="flex flex-col items-start gap-3">
-        <p class="text-red-700">{{ UNREACHABLE_MESSAGE }}</p>
-        <Button variant="secondary" @click="() => refetch()">Réessayer</Button>
-      </div>
-      <p v-else-if="data?.length === 0" class="text-gray-600">
-        Aucune compétition pour l'instant — créez la première.
-      </p>
-
-      <template v-else>
-        <section aria-label="Rechercher, filtrer et trier" class="flex flex-col gap-4">
-          <TextField
-            :model-value="searchText"
-            label="Rechercher (nom ou lieu)"
-            autocomplete="off"
-            @update:model-value="onSearchInput"
-          />
-          <Select
-            :model-value="sortValue"
-            label="Trier par"
-            :options="sortOptions"
-            @update:model-value="setSort"
-          />
-          <div class="flex flex-wrap items-center gap-3">
-            <Button
-              variant="secondary"
-              :aria-expanded="showFilters"
-              aria-controls="competition-filters"
-              @click="showFilters = !showFilters"
-            >
-              Filtres<template v-if="activeFilterCount > 0"> ({{ activeFilterCount }})</template>
+  <BrandShell width="wide">
+    <main class="mx-auto w-full max-w-screen-2xl flex-1 px-4 py-8 lg:px-8">
+      <div class="flex max-w-3xl flex-col gap-6">
+        <header class="flex items-center justify-between gap-4">
+          <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
+            Mes compétitions
+          </h1>
+          <RouterLink :to="{ name: 'competition-create' }">
+            <Button>Nouvelle compétition</Button>
+          </RouterLink>
+        </header>
+        <div class="flex flex-wrap gap-3">
+          <Button variant="secondary" @click="importOpen = true">Importer une sauvegarde</Button>
+          <RouterLink :to="{ name: 'competition-trash' }">
+            <Button variant="secondary">
+              Corbeille<template v-if="trashCount > 0"> ({{ trashCount }})</template>
             </Button>
-            <Button v-if="hasFilter" variant="secondary" @click="reset">Réinitialiser</Button>
-          </div>
-
-          <div v-show="showFilters" id="competition-filters" class="flex flex-col gap-4">
-            <fieldset class="flex flex-col gap-2">
-              <legend class="text-sm font-medium text-gray-900">Statut</legend>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="status in STATUS_ORDER"
-                  :key="status"
-                  type="button"
-                  :aria-pressed="view.statuses.includes(status)"
-                  :class="chipClass(view.statuses.includes(status))"
-                  @click="toggleStatus(status)"
-                >
-                  {{ statusLabels[status] }}
-                </button>
-              </div>
-              <p class="text-sm text-gray-600">Aucun statut choisi : toutes les compétitions.</p>
-            </fieldset>
-
-            <fieldset class="flex flex-col gap-2">
-              <legend class="text-sm font-medium text-gray-900">Date</legend>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  :aria-pressed="view.when === 'upcoming'"
-                  :class="chipClass(view.when === 'upcoming')"
-                  @click="toggleWhen('upcoming')"
-                >
-                  À venir ou en cours
-                </button>
-                <button
-                  type="button"
-                  :aria-pressed="view.when === 'past'"
-                  :class="chipClass(view.when === 'past')"
-                  @click="toggleWhen('past')"
-                >
-                  Passées
-                </button>
-              </div>
-              <div class="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-                <TextField
-                  :model-value="view.from"
-                  type="date"
-                  label="Début à partir du"
-                  @update:model-value="(value) => update({ from: value })"
-                />
-                <TextField
-                  :model-value="view.to"
-                  type="date"
-                  label="Début jusqu’au"
-                  @update:model-value="(value) => update({ to: value })"
-                />
-              </div>
-            </fieldset>
-          </div>
-        </section>
-
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p class="text-sm text-gray-700" aria-live="polite">
-            <template v-if="shown.length === data?.length">
-              {{ shown.length }} compétition{{ shown.length > 1 ? 's' : '' }}
-            </template>
-            <template v-else>{{ shown.length }} sur {{ data?.length }} compétitions</template>
-          </p>
-          <div class="flex flex-wrap gap-2">
-            <template v-if="selecting">
-              <Button variant="secondary" :disabled="busy" @click="selectAllShown">
-                Tout sélectionner
-              </Button>
-              <Button variant="secondary" :disabled="busy" @click="stopSelecting">Terminer</Button>
-            </template>
-            <Button v-else variant="secondary" @click="startSelecting">Sélectionner</Button>
-          </div>
+          </RouterLink>
         </div>
-
-        <div v-if="shown.length === 0" class="flex flex-col items-start gap-3">
-          <p class="text-gray-700">Aucune compétition ne correspond à votre recherche.</p>
-          <Button variant="secondary" @click="reset">Réinitialiser la recherche</Button>
-        </div>
-
-        <ul v-else class="flex flex-col gap-3">
-          <li v-for="competition in shown" :key="competition.id">
-            <label
-              v-if="selecting"
-              class="flex min-h-12 items-center gap-4 rounded-lg border px-4 py-3"
-              :class="[
-                selected.includes(competition.id)
-                  ? 'border-blue-700 bg-blue-50'
-                  : 'border-gray-200',
-                competition.status === 'running' ? 'opacity-70' : 'cursor-pointer hover:bg-gray-50',
-              ]"
-            >
-              <input
-                type="checkbox"
-                class="size-6 shrink-0 accent-blue-700"
-                :checked="selected.includes(competition.id)"
-                :disabled="competition.status === 'running' || busy"
-                @change="toggleSelected(competition.id)"
-              />
-              <span class="flex min-w-0 flex-col">
-                <span class="font-medium text-gray-900">{{ competition.name }}</span>
-                <span class="text-sm text-gray-600"
-                  >{{ competition.venue }} — {{ competition.startsOn }}</span
-                >
-                <span v-if="competition.status === 'running'" class="text-sm text-gray-700">
-                  En cours : clôturez-la pour pouvoir la supprimer.
-                </span>
-              </span>
-            </label>
-            <RouterLink
-              v-else
-              :to="{ name: 'competition-detail', params: { id: competition.id } }"
-              class="flex min-h-12 items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
-            >
-              <div class="flex min-w-0 flex-col">
-                <span class="font-medium text-gray-900">{{ competition.name }}</span>
-                <span class="text-sm text-gray-600"
-                  >{{ competition.venue }} — {{ competition.startsOn }}</span
-                >
-              </div>
-              <div class="flex flex-col items-end gap-1">
-                <Badge :tone="competition.status === 'draft' ? 'neutral' : 'success'">
-                  {{ statusLabels[competition.status] ?? competition.status }}
-                </Badge>
-                <Badge v-if="competition.purgedAt" tone="neutral">Données supprimées</Badge>
-                <Badge
-                  v-else-if="reminderOf(competition.endsOn)"
-                  :tone="reminderOf(competition.endsOn)!.tone"
-                >
-                  {{ reminderOf(competition.endsOn)!.label }}
-                </Badge>
-              </div>
-            </RouterLink>
-          </li>
-        </ul>
+        <ImportBackupModal :open="importOpen" @close="importOpen = false" />
 
         <div
-          v-if="selecting"
-          class="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-white px-4 py-3"
+          v-if="bilan"
+          role="status"
+          class="flex flex-col items-start gap-2 rounded-lg border p-4 text-base"
+          :class="
+            bilan.partial
+              ? 'border-amber-700 bg-amber-50 text-amber-900'
+              : 'border-green-700 bg-green-50 text-green-900'
+          "
         >
-          <p class="text-base font-medium text-gray-900" aria-live="polite">
-            {{ selected.length }} sélectionnée{{ selected.length > 1 ? 's' : '' }}
-          </p>
-          <Button variant="danger" :disabled="selected.length === 0 || busy" @click="trashSelected">
-            {{ busy ? 'En cours…' : 'Mettre à la corbeille' }}
-          </Button>
+          <p>{{ bilan.text }}</p>
+          <RouterLink
+            v-if="bilan.movedSome"
+            :to="{ name: 'competition-trash' }"
+            class="inline-flex min-h-12 items-center font-semibold underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"
+          >
+            Voir la corbeille pour la restaurer
+          </RouterLink>
         </div>
-      </template>
+
+        <p v-if="isPending" class="text-gray-600">Chargement…</p>
+        <div v-else-if="isError && !data" role="alert" class="flex flex-col items-start gap-3">
+          <p class="text-red-700">{{ UNREACHABLE_MESSAGE }}</p>
+          <Button variant="secondary" @click="() => refetch()">Réessayer</Button>
+        </div>
+        <p v-else-if="data?.length === 0" class="text-gray-600">
+          Aucune compétition pour l'instant — créez la première.
+        </p>
+
+        <template v-else>
+          <section aria-label="Rechercher, filtrer et trier" class="flex flex-col gap-4">
+            <TextField
+              :model-value="searchText"
+              label="Rechercher (nom ou lieu)"
+              autocomplete="off"
+              @update:model-value="onSearchInput"
+            />
+            <Select
+              :model-value="sortValue"
+              label="Trier par"
+              :options="sortOptions"
+              @update:model-value="setSort"
+            />
+            <div class="flex flex-wrap items-center gap-3">
+              <Button
+                variant="secondary"
+                :aria-expanded="showFilters"
+                aria-controls="competition-filters"
+                @click="showFilters = !showFilters"
+              >
+                Filtres<template v-if="activeFilterCount > 0"> ({{ activeFilterCount }})</template>
+              </Button>
+              <Button v-if="hasFilter" variant="secondary" @click="reset">Réinitialiser</Button>
+            </div>
+
+            <div v-show="showFilters" id="competition-filters" class="flex flex-col gap-4">
+              <fieldset class="flex flex-col gap-2">
+                <legend class="text-sm font-medium text-gray-900">Statut</legend>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="status in STATUS_ORDER"
+                    :key="status"
+                    type="button"
+                    :aria-pressed="view.statuses.includes(status)"
+                    :class="chipClass(view.statuses.includes(status))"
+                    @click="toggleStatus(status)"
+                  >
+                    {{ statusLabels[status] }}
+                  </button>
+                </div>
+                <p class="text-sm text-gray-600">Aucun statut choisi : toutes les compétitions.</p>
+              </fieldset>
+
+              <fieldset class="flex flex-col gap-2">
+                <legend class="text-sm font-medium text-gray-900">Date</legend>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    :aria-pressed="view.when === 'upcoming'"
+                    :class="chipClass(view.when === 'upcoming')"
+                    @click="toggleWhen('upcoming')"
+                  >
+                    À venir ou en cours
+                  </button>
+                  <button
+                    type="button"
+                    :aria-pressed="view.when === 'past'"
+                    :class="chipClass(view.when === 'past')"
+                    @click="toggleWhen('past')"
+                  >
+                    Passées
+                  </button>
+                </div>
+                <div class="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
+                  <TextField
+                    :model-value="view.from"
+                    type="date"
+                    label="Début à partir du"
+                    @update:model-value="(value) => update({ from: value })"
+                  />
+                  <TextField
+                    :model-value="view.to"
+                    type="date"
+                    label="Début jusqu’au"
+                    @update:model-value="(value) => update({ to: value })"
+                  />
+                </div>
+              </fieldset>
+            </div>
+          </section>
+
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm text-gray-700" aria-live="polite">
+              <template v-if="shown.length === data?.length">
+                {{ shown.length }} compétition{{ shown.length > 1 ? 's' : '' }}
+              </template>
+              <template v-else>{{ shown.length }} sur {{ data?.length }} compétitions</template>
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <template v-if="selecting">
+                <Button variant="secondary" :disabled="busy" @click="selectAllShown">
+                  Tout sélectionner
+                </Button>
+                <Button variant="secondary" :disabled="busy" @click="stopSelecting"
+                  >Terminer</Button
+                >
+              </template>
+              <Button v-else variant="secondary" @click="startSelecting">Sélectionner</Button>
+            </div>
+          </div>
+
+          <div v-if="shown.length === 0" class="flex flex-col items-start gap-3">
+            <p class="text-gray-700">Aucune compétition ne correspond à votre recherche.</p>
+            <Button variant="secondary" @click="reset">Réinitialiser la recherche</Button>
+          </div>
+
+          <ul v-else class="flex flex-col gap-3">
+            <li v-for="competition in shown" :key="competition.id">
+              <label
+                v-if="selecting"
+                class="flex min-h-12 items-center gap-4 rounded-lg border px-4 py-3"
+                :class="[
+                  selected.includes(competition.id)
+                    ? 'border-blue-700 bg-blue-50'
+                    : 'border-gray-200',
+                  competition.status === 'running'
+                    ? 'opacity-70'
+                    : 'cursor-pointer hover:bg-gray-50',
+                ]"
+              >
+                <input
+                  type="checkbox"
+                  class="size-6 shrink-0 accent-blue-700"
+                  :checked="selected.includes(competition.id)"
+                  :disabled="competition.status === 'running' || busy"
+                  @change="toggleSelected(competition.id)"
+                />
+                <span class="flex min-w-0 flex-col">
+                  <span class="font-medium text-gray-900">{{ competition.name }}</span>
+                  <span class="text-sm text-gray-600"
+                    >{{ competition.venue }} — {{ competition.startsOn }}</span
+                  >
+                  <span v-if="competition.status === 'running'" class="text-sm text-gray-700">
+                    En cours : clôturez-la pour pouvoir la supprimer.
+                  </span>
+                </span>
+              </label>
+              <RouterLink
+                v-else
+                :to="{ name: 'competition-detail', params: { id: competition.id } }"
+                class="flex min-h-12 items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+              >
+                <div class="flex min-w-0 flex-col">
+                  <span class="font-medium text-gray-900">{{ competition.name }}</span>
+                  <span class="text-sm text-gray-600"
+                    >{{ competition.venue }} — {{ competition.startsOn }}</span
+                  >
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                  <Badge :tone="competition.status === 'draft' ? 'neutral' : 'success'">
+                    {{ statusLabels[competition.status] ?? competition.status }}
+                  </Badge>
+                  <Badge v-if="competition.purgedAt" tone="neutral">Données supprimées</Badge>
+                  <Badge
+                    v-else-if="reminderOf(competition.endsOn)"
+                    :tone="reminderOf(competition.endsOn)!.tone"
+                  >
+                    {{ reminderOf(competition.endsOn)!.label }}
+                  </Badge>
+                </div>
+              </RouterLink>
+            </li>
+          </ul>
+
+          <div
+            v-if="selecting"
+            class="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-white px-4 py-3"
+          >
+            <p class="text-base font-medium text-gray-900" aria-live="polite">
+              {{ selected.length }} sélectionnée{{ selected.length > 1 ? 's' : '' }}
+            </p>
+            <Button
+              variant="danger"
+              :disabled="selected.length === 0 || busy"
+              @click="trashSelected"
+            >
+              {{ busy ? 'En cours…' : 'Mettre à la corbeille' }}
+            </Button>
+          </div>
+        </template>
+      </div>
     </main>
   </BrandShell>
 </template>

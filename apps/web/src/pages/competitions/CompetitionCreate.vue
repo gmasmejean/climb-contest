@@ -100,52 +100,56 @@ async function onSubmit(): Promise<void> {
 </script>
 
 <template>
-  <BrandShell>
-    <main class="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-8">
-      <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">Nouvelle compétition</h1>
+  <BrandShell width="wide">
+    <main class="mx-auto w-full max-w-screen-2xl flex-1 px-4 py-8 lg:px-8">
+      <div class="flex max-w-2xl flex-col gap-6">
+        <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
+          Nouvelle compétition
+        </h1>
 
-      <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
-        <TextField
-          v-model="form.name"
-          label="Nom de la compétition"
-          required
-          :error="errors.name"
-        />
-        <TextField v-model="form.venue" label="Lieu" required :error="errors.venue" />
-        <div class="grid grid-cols-2 gap-4">
+        <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
           <TextField
-            v-model="form.startsOn"
-            type="date"
-            label="Date de début"
+            v-model="form.name"
+            label="Nom de la compétition"
             required
-            :error="errors.startsOn"
-            @update:model-value="onStartsOnInput"
+            :error="errors.name"
           />
-          <TextField
-            v-model="form.endsOn"
-            type="date"
-            label="Date de fin"
+          <TextField v-model="form.venue" label="Lieu" required :error="errors.venue" />
+          <div class="grid grid-cols-2 gap-4">
+            <TextField
+              v-model="form.startsOn"
+              type="date"
+              label="Date de début"
+              required
+              :error="errors.startsOn"
+              @update:model-value="onStartsOnInput"
+            />
+            <TextField
+              v-model="form.endsOn"
+              type="date"
+              label="Date de fin"
+              required
+              :error="errors.endsOn"
+            />
+          </div>
+          <Select v-model="form.format" label="Format" :options="formatOptions" required />
+          <NumberField
+            v-if="form.format === 'contest'"
+            v-model="form.routesCounted"
+            label="Nombre de voies comptées (M)"
+            :min="1"
+            hint="Chaque compétiteur grimpe librement ses voies ; les M meilleures sont additionnées."
             required
-            :error="errors.endsOn"
           />
-        </div>
-        <Select v-model="form.format" label="Format" :options="formatOptions" required />
-        <NumberField
-          v-if="form.format === 'contest'"
-          v-model="form.routesCounted"
-          label="Nombre de voies comptées (M)"
-          :min="1"
-          hint="Chaque compétiteur grimpe librement ses voies ; les M meilleures sont additionnées."
-          required
-        />
-        <p class="text-sm text-gray-600">Moteur de cotation : FFME — Difficulté 2026.</p>
+          <p class="text-sm text-gray-600">Moteur de cotation : FFME — Difficulté 2026.</p>
 
-        <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
+          <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
 
-        <Button type="submit" full-width :disabled="submitting">
-          {{ submitting ? 'Création…' : 'Créer la compétition' }}
-        </Button>
-      </form>
+          <Button type="submit" full-width :disabled="submitting">
+            {{ submitting ? 'Création…' : 'Créer la compétition' }}
+          </Button>
+        </form>
+      </div>
     </main>
   </BrandShell>
 </template>
