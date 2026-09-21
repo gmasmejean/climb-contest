@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import { bootstrapSession } from './api/client'
 import { currentUser } from './api/session'
+import { judgeScreens } from './judge/screens'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -78,23 +79,23 @@ const router = createRouter({
       // `JudgeLayout` monte le bandeau de synchronisation UNE SEULE FOIS
       // (Lot 6, ROADMAP.md point 6) pour les trois écrans juge authentifiés.
       path: '/j',
-      component: () => import('./pages/judge/JudgeLayout.vue'),
+      component: judgeScreens.layout,
       meta: { skipOrganizerSession: true },
       children: [
         {
           path: 'home',
           name: 'judge-home',
-          component: () => import('./pages/judge/JudgeHome.vue'),
+          component: judgeScreens.home,
         },
         {
           path: 'routes/:routeId',
           name: 'judge-route',
-          component: () => import('./pages/judge/JudgeRoute.vue'),
+          component: judgeScreens.route,
         },
         {
           path: 'routes/:routeId/competitors/:competitorId',
           name: 'judge-ascent-entry',
-          component: () => import('./pages/judge/JudgeAscentEntry.vue'),
+          component: judgeScreens.ascentEntry,
         },
       ],
     },

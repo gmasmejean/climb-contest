@@ -7,6 +7,7 @@ import { ApiError } from '../../api/client'
 import { judgeAuthApi } from '../../api/judge-auth'
 import { setJudgeSession } from '../../api/judge-session'
 import { bootstrapJudge } from '../../judge/bootstrap'
+import { preloadJudgeScreens } from '../../judge/screens'
 import BrandShell from '../../components/brand/BrandShell.vue'
 import { TONE_CLASS, watercolorBackground } from '../../components/brand/watercolor'
 import RoleIcon from '../../components/landing/RoleIcon.vue'
@@ -38,7 +39,9 @@ async function submit(): Promise<void> {
     try {
       // Déclenché une fois, au moment où le juge a encore du réseau
       // (SPEC.md § 6.3) — plus aucun écran juge n'en dépendra ensuite.
-      await bootstrapJudge()
+      // Les écrans eux-mêmes aussi : le précache du service worker peut ne
+      // pas être terminé à cet instant (voir `judge/screens.ts`).
+      await Promise.all([bootstrapJudge(), preloadJudgeScreens()])
     } catch {
       throw new Error(
         'Connexion réussie, mais impossible de télécharger vos voies — vérifiez votre réseau et réessayez.',
@@ -70,7 +73,9 @@ async function submit(): Promise<void> {
         :class="TONE_CLASS.coral"
         :style="{ backgroundImage: watercolorBackground('coral') }"
       >
-        <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">Lien invalide</h1>
+        <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
+          Lien invalide
+        </h1>
         <p class="text-ink text-base">
           Ce lien n'est plus valide — contactez l'organisateur de la compétition pour en obtenir un
           nouveau.

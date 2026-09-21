@@ -2692,6 +2692,15 @@ de l'en-tête : en pleine hauteur, le titre de la page publique passait sur le g
 L'ADR-070 point 7 est remplacé par cet ADR ; ses points 5 et 6 (hors précache) tiennent
 toujours. L'écran de salle reste sombre.
 
+**Régression trouvée et corrigée en route :** le décor de la page d'accès juge (polices +
+images) ralentissait le précache du service worker ; `e2e/judge-conflict` (deux appareils
+qui passent hors ligne juste après s'être connectés) échouait de façon déterministe —
+`Failed to fetch dynamically imported module …/JudgeAscentEntry.js`. La course existait
+avant, le décor l'a rendue visible. Correctif : `judge/screens.ts` partage les chargeurs des
+écrans juge entre le routeur et `JudgeAccess`, qui les **précharge tous** (en parallèle de
+`bootstrapJudge`) avant d'ouvrir `/j/home`. Un juge peut donc perdre le réseau dès la
+seconde où il voit ses voies.
+
 **Alternatives écartées :** jetons sémantiques (`brand`, `danger`…) et remplacement classe
 par classe — plus propre à la lecture, mais 500 modifications dans des écrans validés pour un
 rendu identique (« tu ne réécris pas ce qui marche ») ; Source Sans 3 chez les juges
