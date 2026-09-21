@@ -2643,6 +2643,49 @@ raster ; Google Fonts.
 
 ---
 
+## ADR-071 — La charte aquarelle de l'accueil s'étend à toute l'application
+
+**Date :** 2026-09-21
+**Contexte :** l'ADR-070 (point 7) limitait les jetons de marque à la page d'accueil, le temps
+de la valider. L'utilisateur l'a validée et demande que « l'ensemble des pages colle au style
+de la landing ». Cinquante fichiers `.vue` portent des utilitaires Tailwind de couleur
+(345 `gray-*`, 67 `red-*`, 50 `blue-*`, 32 `amber-*`, 24 `green-*`) ; aucune mise en page
+commune n'existe (chaque page a son `<main>`).
+
+**Décisions (actées avec l'utilisateur, 2026-09-21) :**
+
+1. **Écrans juge : couleurs seulement**, sauf la **page d'accès** (`/j/:token`, affichée avec
+   du réseau par construction) qui est refaite en profondeur. Aucune image, aucune police
+   supplémentaire sur les écrans de notation : rien de plus à précacher, l'ADR-070 points 5
+   et 6 restent vrais pour eux.
+2. **Organisateur, public, connexion : charte + touches déco.** Source Sans 3, titres de page
+   en Caveat, fond papier, en-tête commun avec le logo. Décor aquarelle (mur) seulement sur
+   connexion, inscription, accès juge et page publique de compétition ; les écrans de travail
+   denses (pilotage, tableaux) restent sobres.
+3. **`Button` partagé en pilule partout** (navy plein / contour navy / danger), y compris
+   chez les juges : c'est une forme, pas une image, et la cible tactile ≥ 48 px ne change pas.
+   `LandingPill` fusionne dans `Button` (prop `to`, variante `glass`).
+4. **Couleurs sémantiques harmonisées aussi** (erreur, avertissement, confirmé — statuts de
+   synchro compris).
+
+**Mise en œuvre de la couleur :** plutôt que de réécrire 500 classes, les échelles Tailwind
+`gray`, `blue`, `red`, `amber` et `green` sont **redéfinies dans `@theme`** (`style.css`) :
+neutres teintés encre (teinte 232°), `blue` → navy (`blue-700` = `#184e67`, `blue-800` =
+navy-deep, `blue-900` = encre), `red` → corail (30°), `amber` → ocre (78°), `green` → sauge
+(148°). Chaque cran garde la clarté OKLCH du cran Tailwind d'origine, donc les contrastes
+validés bougent peu ; ils sont néanmoins **mesurés** : `brand-contrast.test.ts` lit
+`style.css` et exige AA (4,5:1) pour chaque couple texte/fond réellement utilisé, et 3:1
+pour les grands textes et pastilles (bouton TOP du juge : blanc sur `green-600` = 3,8:1,
+contre 3,2:1 avec le vert Tailwind d'origine). Trois crans ont été assombris pour passer :
+`gray-500`, `green-600`, et toute la moitié sombre de `blue`.
+
+**Alternatives écartées :** jetons sémantiques (`brand`, `danger`…) et remplacement classe
+par classe — plus propre à la lecture, mais 500 modifications dans des écrans validés pour un
+rendu identique (« tu ne réécris pas ce qui marche ») ; Source Sans 3 chez les juges
+(~60 Ko de `.woff2` à précacher) ; décor aquarelle dans les écrans organisateur.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
