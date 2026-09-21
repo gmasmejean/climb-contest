@@ -72,7 +72,7 @@ describe('RoutePhotoPicker', () => {
     expect(wrapper.find('[data-testid="photo-preview"]').exists()).toBe(true)
     expect(resize.resizeToJpeg).toHaveBeenLastCalledWith(
       file,
-      expect.objectContaining({ crop: null, maxSide: 640 }),
+      expect.objectContaining({ crop: null, maxSide: 1280 }),
     )
 
     wrapper.findComponent(PhotoCropDialog).vm.$emit('apply', crop)

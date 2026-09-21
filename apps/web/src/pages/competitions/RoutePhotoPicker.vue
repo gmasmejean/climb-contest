@@ -25,8 +25,11 @@ const emit = defineEmits<{
   'crop-applied': [crop: CropRect | null]
 }>()
 
-const PREVIEW_SIDE = 640
-const PREVIEW_QUALITY = 0.7
+// L'aperçu est ce sur quoi on ANNOTE à la création (ADR-068) : depuis le zoom
+// ×3 de l'annotateur (ADR-077), 640 px donnaient une bouillie. Il reste sous les
+// 1600 px de la photo envoyée, qui est ré-encodée depuis le fichier d'origine.
+const PREVIEW_SIDE = 1280
+const PREVIEW_QUALITY = 0.8
 
 const error = ref('')
 const previewUrl = ref<string | null>(null)
