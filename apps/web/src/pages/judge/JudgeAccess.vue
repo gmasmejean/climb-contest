@@ -8,6 +8,8 @@ import { judgeAuthApi } from '../../api/judge-auth'
 import { setJudgeSession } from '../../api/judge-session'
 import { bootstrapJudge } from '../../judge/bootstrap'
 import BrandShell from '../../components/brand/BrandShell.vue'
+import { TONE_CLASS, watercolorBackground } from '../../components/brand/watercolor'
+import RoleIcon from '../../components/landing/RoleIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -60,26 +62,40 @@ async function submit(): Promise<void> {
 <template>
   <BrandShell decor>
     <main class="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-8">
-      <template v-if="access === 'loading'">
-        <p class="text-center text-gray-600">Chargement…</p>
-      </template>
+      <p v-if="access === 'loading'" class="text-center text-gray-600">Chargement…</p>
 
-      <template v-else-if="access === 'invalid'">
-        <h1 class="font-display text-ink text-4xl leading-none font-bold">Lien invalide</h1>
-        <p class="text-gray-700">
+      <section
+        v-else-if="access === 'invalid'"
+        class="flex flex-col gap-3 rounded-2xl bg-cover bg-center p-5"
+        :class="TONE_CLASS.coral"
+        :style="{ backgroundImage: watercolorBackground('coral') }"
+      >
+        <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">Lien invalide</h1>
+        <p class="text-ink text-base">
           Ce lien n'est plus valide — contactez l'organisateur de la compétition pour en obtenir un
           nouveau.
         </p>
-      </template>
+      </section>
 
-      <template v-else>
-        <h1 class="font-display text-ink text-4xl leading-none font-bold">
-          Bonjour {{ access.displayName }}
-        </h1>
+      <section
+        v-else
+        class="flex flex-col gap-5 rounded-2xl bg-cover bg-center p-5"
+        :class="TONE_CLASS.green"
+        :style="{ backgroundImage: watercolorBackground('green') }"
+      >
+        <header class="flex items-center gap-3">
+          <RoleIcon name="judges" class="text-ink size-12 shrink-0" />
+          <div class="flex flex-col">
+            <p class="text-ink text-sm font-semibold tracking-wide uppercase">Espace juge</p>
+            <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
+              Bonjour {{ access.displayName }}
+            </h1>
+          </div>
+        </header>
 
         <form v-if="access.pinRequired" class="flex flex-col gap-4" @submit.prevent="submit">
           <label class="flex flex-col gap-2">
-            <span class="text-sm font-medium text-gray-900">Votre code à 6 chiffres</span>
+            <span class="text-ink text-base font-semibold">Votre code à 6 chiffres</span>
             <input
               v-model="pin"
               type="tel"
@@ -87,23 +103,40 @@ async function submit(): Promise<void> {
               pattern="[0-9]*"
               maxlength="6"
               autofocus
-              class="min-h-16 rounded-xl border border-gray-400 bg-white px-4 text-center text-3xl tracking-[0.5em]"
+              class="border-navy text-ink focus-visible:outline-navy min-h-16 rounded-2xl border bg-white px-4 text-center text-3xl tracking-[0.5em] focus-visible:outline-2 focus-visible:outline-offset-2"
             />
           </label>
-          <p v-if="authError" role="alert" class="text-sm text-red-700">{{ authError }}</p>
+          <p
+            v-if="authError"
+            role="alert"
+            class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900"
+          >
+            {{ authError }}
+          </p>
           <Button type="submit" full-width :disabled="submitting || pin.length !== 6">
             {{ submitting ? 'Vérification…' : 'Valider' }}
           </Button>
         </form>
 
         <template v-else>
-          <p class="text-gray-700">Prêt à noter les passages sur vos voies.</p>
-          <p v-if="authError" role="alert" class="text-sm text-red-700">{{ authError }}</p>
+          <p class="text-ink text-base">Prêt à noter les passages sur vos voies.</p>
+          <p
+            v-if="authError"
+            role="alert"
+            class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-900"
+          >
+            {{ authError }}
+          </p>
           <Button full-width :disabled="submitting" @click="submit">
             {{ submitting ? 'Connexion…' : 'Commencer' }}
           </Button>
         </template>
-      </template>
+
+        <p class="text-ink text-sm">
+          Vos voies sont téléchargées sur ce téléphone à la connexion : vous pourrez ensuite noter
+          même sans réseau.
+        </p>
+      </section>
     </main>
   </BrandShell>
 </template>

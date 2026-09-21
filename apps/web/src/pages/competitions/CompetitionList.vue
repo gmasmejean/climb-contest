@@ -202,7 +202,7 @@ async function trashSelected(): Promise<void> {
   <BrandShell>
     <main class="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-8">
       <header class="flex items-center justify-between gap-4">
-        <h1 class="font-display text-ink text-4xl leading-none font-bold">Mes compétitions</h1>
+        <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">Mes compétitions</h1>
         <RouterLink :to="{ name: 'competition-create' }">
           <Button>Nouvelle compétition</Button>
         </RouterLink>

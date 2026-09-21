@@ -51,7 +51,7 @@ async function onSubmit(): Promise<void> {
 <template>
   <BrandShell decor>
     <main class="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-8">
-      <h1 class="font-display text-ink text-4xl leading-none font-bold">
+      <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
         Créer un compte organisateur
       </h1>
 

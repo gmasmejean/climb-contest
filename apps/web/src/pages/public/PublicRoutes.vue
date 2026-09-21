@@ -23,7 +23,7 @@ const { data, isPending, isError } = useQuery({
     <p v-else-if="data?.length === 0" class="text-gray-600">Aucune voie pour cette catégorie.</p>
 
     <ul v-else-if="data" class="flex flex-col gap-4">
-      <li v-for="routeItem in data" :key="routeItem.id" class="rounded-lg border border-gray-200 p-3">
+      <li v-for="routeItem in data" :key="routeItem.id" class="rounded-lg border border-gray-200 bg-white p-3">
         <div class="flex items-center justify-between gap-2">
           <span class="font-medium text-gray-900">
             Voie {{ routeItem.number }}<template v-if="routeItem.name"> — {{ routeItem.name }}</template>

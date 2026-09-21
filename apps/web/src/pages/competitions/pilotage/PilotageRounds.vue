@@ -132,7 +132,7 @@ function change(roundId: string, status: RoundStatus, categories: CategoryState[
       <li
         v-for="r in rounds"
         :key="r.roundId"
-        class="flex flex-col gap-3 rounded-lg border border-gray-200 p-4"
+        class="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4"
         :data-testid="`round-${r.roundId}`"
       >
         <h3 class="font-medium text-gray-900">{{ r.label }}</h3>

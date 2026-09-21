@@ -164,7 +164,7 @@ async function printSheet(): Promise<void> {
 
 <template>
   <section
-    class="flex flex-col gap-3 rounded-lg border border-gray-200 p-4"
+    class="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4"
     aria-label="Photo annotée de la voie"
     data-testid="route-photo-editor"
   >

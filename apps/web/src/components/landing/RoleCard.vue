@@ -2,10 +2,7 @@
 import { Badge } from '@climbcontest/ui'
 import { RouterLink, type RouteLocationRaw } from 'vue-router'
 
-import blueTexture from '../../assets/landing/card-blue.webp'
-import coralTexture from '../../assets/landing/card-coral.webp'
-import greenTexture from '../../assets/landing/card-green.webp'
-import yellowTexture from '../../assets/landing/card-yellow.webp'
+import { TONE_CLASS, watercolorBackground, type WatercolorTone } from '../brand/watercolor'
 
 /**
  * Carte « pour qui » de la page d'accueil (ADR-070). Toute la carte est le
@@ -18,28 +15,10 @@ import yellowTexture from '../../assets/landing/card-yellow.webp'
 defineProps<{
   title: string
   text: string
-  tone: 'yellow' | 'green' | 'blue' | 'coral'
+  tone: WatercolorTone
   to?: RouteLocationRaw | undefined
   badge?: string | undefined
 }>()
-
-const TONE_CLASS = {
-  yellow: 'bg-card-yellow',
-  green: 'bg-card-green',
-  blue: 'bg-card-blue',
-  coral: 'bg-card-coral',
-} as const
-
-const TEXTURE = {
-  yellow: yellowTexture,
-  green: greenTexture,
-  blue: blueTexture,
-  coral: coralTexture,
-} as const
-
-// Voile blanc de 25 % sous le texte : sans lui, les coins foncés des textures
-// vert, bleu et corail passent sous 4,5:1 avec l'encre (AA, CLAUDE.md § 4).
-const VEIL = 'linear-gradient(rgb(255 255 255 / 0.25), rgb(255 255 255 / 0.25))'
 </script>
 
 <template>
@@ -54,7 +33,7 @@ const VEIL = 'linear-gradient(rgb(255 255 255 / 0.25), rgb(255 255 255 / 0.25))'
         to &&
           'focus-visible:outline-ink transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2',
       ]"
-      :style="{ backgroundImage: `${VEIL}, url(${TEXTURE[tone]})` }"
+      :style="{ backgroundImage: watercolorBackground(tone) }"
     >
       <span class="text-ink">
         <slot name="icon" />

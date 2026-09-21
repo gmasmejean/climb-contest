@@ -69,7 +69,7 @@ function askBackToCrop(): void {
           v-else
           :src="url"
           alt="Aperçu de la photo"
-          class="max-h-96 max-w-full self-start rounded-lg border border-gray-300"
+          class="max-h-96 max-w-full self-start rounded-lg border border-gray-300 bg-white"
           data-testid="photo-preview"
         />
       </template>

@@ -206,7 +206,7 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
 <template>
   <div class="flex flex-col gap-6">
     <form
-      class="flex flex-col gap-4 rounded-lg border border-gray-200 p-4"
+      class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
       @submit.prevent="onCreate"
     >
       <h2 class="font-medium text-gray-900">Ajouter un compétiteur</h2>
@@ -240,7 +240,7 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
       <li
         v-for="competitor in filtered"
         :key="competitor.id"
-        class="flex flex-col gap-2 rounded-lg border border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <template v-if="editingId === competitor.id">
           <div class="flex flex-1 flex-wrap items-end gap-3">

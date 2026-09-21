@@ -37,7 +37,7 @@ function formatFrozenAt(iso: string): string {
     :data-testid="`round-qualifiers-${roundId}`"
   >
     <h3 class="text-sm font-semibold text-gray-900">Qualifiés de ce tour</h3>
-    <details v-for="cat in categories" :key="cat.categoryId" class="rounded-lg border border-gray-200">
+    <details v-for="cat in categories" :key="cat.categoryId" class="rounded-lg border border-gray-200 bg-white">
       <summary
         class="flex min-h-12 cursor-pointer flex-wrap items-center gap-2 rounded-lg px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
       >

@@ -118,7 +118,7 @@ onBeforeUnmount(() => {
         <img
           :src="previewUrl"
           alt="Aperçu de la photo qui sera envoyée"
-          class="max-h-64 max-w-full self-start rounded-lg border border-gray-300"
+          class="max-h-64 max-w-full self-start rounded-lg border border-gray-300 bg-white"
           data-testid="photo-preview"
         />
       </slot>

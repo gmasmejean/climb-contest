@@ -23,12 +23,15 @@ withDefaults(defineProps<{ decor?: boolean }>(), { decor: false })
 <template>
   <div class="bg-paper font-body text-ink relative flex min-h-dvh flex-col overflow-x-hidden">
     <template v-if="decor">
-      <!-- Décor, sous le contenu, jamais lu par les lecteurs d'écran. -->
+      <!--
+        Décor, sous le contenu, jamais lu par les lecteurs d'écran. Sur mobile :
+        un bandeau à hauteur de l'en-tête seulement, jamais sous un titre.
+      -->
       <img
         :src="wallNarrow"
         alt=""
         aria-hidden="true"
-        class="pointer-events-none absolute top-0 right-0 z-0 w-[40%] max-w-56 mask-b-from-50% mask-l-from-70% opacity-70 md:hidden"
+        class="pointer-events-none absolute top-0 right-0 z-0 h-24 w-[45%] max-w-56 mask-b-from-40% mask-l-from-60% object-cover object-[50%_12%] md:hidden"
       />
       <img
         :src="wallLeft"

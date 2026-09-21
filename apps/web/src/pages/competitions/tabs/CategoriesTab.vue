@@ -112,7 +112,7 @@ const { mutate: remove, isPending: isDeleting } = useMutation({
       <li
         v-for="(category, index) in categories"
         :key="category.id"
-        class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-4 py-2"
+        class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2"
       >
         <div class="flex items-center gap-3">
           <span class="font-medium text-gray-900">{{ category.label }}</span>
@@ -159,7 +159,7 @@ const { mutate: remove, isPending: isDeleting } = useMutation({
     </ul>
 
     <form
-      class="flex flex-col gap-4 rounded-lg border border-gray-200 p-4"
+      class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
       @submit.prevent="onCreate"
     >
       <h2 class="font-medium text-gray-900">Ajouter une catégorie libre</h2>

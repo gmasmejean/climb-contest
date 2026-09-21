@@ -102,7 +102,7 @@ async function onSubmit(): Promise<void> {
 <template>
   <BrandShell>
     <main class="mx-auto flex w-full max-w-lg flex-1 flex-col gap-6 px-4 py-8">
-      <h1 class="font-display text-ink text-4xl leading-none font-bold">Nouvelle compétition</h1>
+      <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">Nouvelle compétition</h1>
 
       <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
         <TextField

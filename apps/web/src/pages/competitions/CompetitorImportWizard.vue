@@ -75,7 +75,7 @@ const canCommit = () =>
 </script>
 
 <template>
-  <div class="flex flex-col gap-4 rounded-lg border border-gray-200 p-4">
+  <div class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4">
     <h2 class="font-medium text-gray-900">Import CSV</h2>
     <p class="text-sm text-gray-600">
       Colonnes attendues : <code>dossard</code> (optionnel), <code>prenom</code>, <code>nom</code>,
@@ -96,7 +96,7 @@ const canCommit = () =>
       <p class="text-sm text-gray-900">
         {{ report.validRows }} / {{ report.totalRows }} ligne(s) valide(s).
       </p>
-      <div class="max-h-64 overflow-y-auto rounded-lg border border-gray-200">
+      <div class="max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50">
             <tr>

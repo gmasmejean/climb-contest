@@ -268,7 +268,7 @@ const categoryList = computed(() => categories.value ?? [])
       <li
         v-for="(route, index) in routes"
         :key="route.id"
-        class="flex flex-col gap-2 rounded-lg border border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
           <span class="font-medium text-gray-900"
@@ -305,7 +305,7 @@ const categoryList = computed(() => categories.value ?? [])
     </ul>
 
     <form
-      class="flex flex-col gap-4 rounded-lg border border-gray-200 p-4"
+      class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
       @submit.prevent="onSubmit"
     >
       <h2 class="font-medium text-gray-900">

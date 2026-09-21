@@ -134,7 +134,7 @@ onBeforeUnmount(() => controller?.abort())
 </script>
 
 <template>
-  <div class="flex flex-col gap-3 rounded-lg border border-gray-200 p-4">
+  <div class="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4">
     <h3 class="text-sm font-semibold text-gray-900">Vidéo téléversée</h3>
 
     <p v-if="hasVideo" class="flex flex-wrap items-center gap-3 text-sm text-gray-800">

@@ -16,14 +16,14 @@ export default defineConfig({
       includeAssets: ['favicon.svg'],
       manifest: {
         id: '/',
-        name: 'ClimbContest',
-        short_name: 'ClimbContest',
+        name: 'Climb Contest',
+        short_name: 'Climb Contest',
         description: "Gestion de compétitions d'escalade de difficulté",
         lang: 'fr',
         start_url: '/',
         display: 'standalone',
-        background_color: '#ffffff',
-        theme_color: '#1d4ed8',
+        background_color: '#f9f7f1',
+        theme_color: '#0e3b4e',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },

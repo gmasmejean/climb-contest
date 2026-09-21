@@ -121,7 +121,7 @@ const lastUpdatedLabel = computed(() => {
 
       <template v-else-if="meta">
         <header class="flex flex-col gap-1">
-          <h1 class="font-display text-ink text-4xl leading-none font-bold">
+          <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
             {{ meta.competition.name }}
           </h1>
           <p class="text-sm text-gray-600">

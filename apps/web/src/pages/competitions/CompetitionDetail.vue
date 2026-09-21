@@ -57,7 +57,7 @@ const tabs = computed(() => {
         >
           ← Mes compétitions
         </RouterLink>
-        <h1 class="font-display text-ink text-4xl leading-none font-bold">
+        <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
           {{ competition?.name }}
         </h1>
         <p class="text-sm text-gray-600">{{ competition?.venue }}</p>

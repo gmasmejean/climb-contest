@@ -162,7 +162,10 @@ const filtered = computed(() => {
               </div>
             </RouterLink>
 
-            <div v-else class="flex flex-col gap-2 rounded-lg border border-gray-200 px-4 py-3">
+            <div
+              v-else
+              class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3"
+            >
               <div class="flex items-center justify-between gap-4">
                 <div class="flex flex-col">
                   <span class="font-medium text-gray-900">

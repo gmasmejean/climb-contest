@@ -92,7 +92,7 @@ const namesHidden = computed(() => Math.max(0, toDelete.value.length - MAX_NAMES
         >
           ← Mes compétitions
         </RouterLink>
-        <h1 class="font-display text-ink text-4xl leading-none font-bold">Corbeille</h1>
+        <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">Corbeille</h1>
         <p class="text-gray-700">
           Une compétition mise à la corbeille n’apparaît plus nulle part : ni pour vous, ni pour les
           juges, ni pour le public. Vous pouvez la restaurer à tout moment. Tant que vous ne la

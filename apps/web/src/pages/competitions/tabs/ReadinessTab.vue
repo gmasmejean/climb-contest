@@ -35,7 +35,7 @@ const checkLabels: Record<string, string> = {
         <li
           v-for="check in data.checks"
           :key="check.id"
-          class="rounded-lg border border-gray-200 p-4"
+          class="rounded-lg border border-gray-200 bg-white p-4"
         >
           <div class="flex items-center justify-between gap-3">
             <span class="font-medium text-gray-900">{{ checkLabels[check.id] ?? check.id }}</span>

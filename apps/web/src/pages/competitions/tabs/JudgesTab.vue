@@ -207,7 +207,7 @@ function routeLabels(routeIds: string[]): string {
 
 <template>
   <div class="flex flex-col gap-6">
-    <div class="flex flex-col gap-2 rounded-lg border border-gray-200 p-4">
+    <div class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-4">
       <label class="flex min-h-12 items-center gap-3">
         <input
           type="checkbox"
@@ -246,7 +246,7 @@ function routeLabels(routeIds: string[]): string {
       <li
         v-for="j in judges"
         :key="j.id"
-        class="flex flex-col gap-2 rounded-lg border border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
           <div class="flex items-center gap-2">
@@ -291,7 +291,7 @@ function routeLabels(routeIds: string[]): string {
     </p>
 
     <form
-      class="flex flex-col gap-4 rounded-lg border border-gray-200 p-4"
+      class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
       @submit.prevent="onSubmit"
     >
       <h2 class="font-medium text-gray-900">Ajouter un juge</h2>
