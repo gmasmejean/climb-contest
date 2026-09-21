@@ -160,15 +160,15 @@ const counterText = computed(() => {
 <template>
   <div
     class="flex flex-col gap-3"
-    :class="props.expanded ? 'min-h-0 flex-1' : ''"
+    :class="props.expanded ? 'min-h-0 flex-1 overflow-y-auto' : ''"
     data-testid="hold-annotator"
   >
-    <p class="text-sm text-gray-700">
+    <p v-if="!props.expanded" class="text-sm text-gray-700">
       Touchez la photo pour placer une prise. Touchez une prise pour la sélectionner, glissez-la
       pour la déplacer.
     </p>
 
-    <div v-if="props.expanded" class="flex gap-2" role="group" aria-label="Zoom">
+    <div v-if="props.expanded" class="flex max-w-md gap-2" role="group" aria-label="Zoom">
       <Button
         v-for="level in ZOOMS"
         :key="level"
@@ -184,7 +184,9 @@ const counterText = computed(() => {
     <div
       ref="scroller"
       :class="
-        props.expanded ? 'min-h-0 flex-1 overflow-auto overscroll-contain bg-gray-200 p-6' : ''
+        props.expanded
+          ? 'h-[45vh] shrink-0 overflow-auto overscroll-contain bg-gray-200 p-3 sm:h-[55vh] sm:p-6'
+          : ''
       "
     >
       <div
@@ -241,7 +243,7 @@ const counterText = computed(() => {
 
     <div v-if="selectedHold" class="flex flex-col gap-3 rounded-lg bg-blue-50 p-3">
       <p class="text-sm font-medium text-gray-900">Prise {{ selectedHold.number }} sélectionnée</p>
-      <div class="flex items-end gap-3">
+      <div class="flex flex-wrap items-end gap-3">
         <NumberField
           v-model="numberDraft"
           label="Numéro de la prise"
@@ -268,7 +270,7 @@ const counterText = computed(() => {
     >
       {{ counterText }}
     </p>
-    <p v-if="gapAt !== null" class="text-sm text-amber-800">
+    <p v-if="gapAt !== null && !props.expanded" class="text-sm text-amber-800">
       La numérotation a un trou : le numéro {{ gapAt }} n'est utilisé par aucune prise.
     </p>
 
@@ -277,7 +279,7 @@ const counterText = computed(() => {
         Renuméroter de bas en haut
       </Button>
     </div>
-    <p class="text-sm text-gray-600">
+    <p v-if="!props.expanded" class="text-sm text-gray-600">
       « Renuméroter » classe les prises d'après leur hauteur sur la photo. À vérifier sur une
       traversée ou un dévers, où la hauteur ne suit pas le parcours.
     </p>

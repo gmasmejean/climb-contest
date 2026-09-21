@@ -24,6 +24,7 @@ import {
   DESKTOP_QUERY,
   MASTER_DETAIL_QUERY,
   useMediaQuery,
+  WIDE_QUERY,
 } from '../../../composables/useMediaQuery'
 import { judgeAccessUrl } from '../../../lib/judge-access'
 import { compareText, sortRows } from '../../../lib/table-sort'
@@ -35,6 +36,7 @@ const isDesktop = useMediaQuery(DESKTOP_QUERY)
 // Le tableau arrive à 1024 px, la fiche seulement à 1440 px : entre les deux, la
 // place manque pour les deux côte à côte (ADR-075, seuil mesuré).
 const isMasterDetail = useMediaQuery(MASTER_DETAIL_QUERY)
+const isWide = useMediaQuery(WIDE_QUERY)
 
 const queryClient = useQueryClient()
 const toast = useToast()
@@ -271,13 +273,24 @@ const columns = computed<DataListColumn<JudgeWithRoutes>[]>(() => [
     cellClass: 'w-32',
     compare: (a, b) => statusRank(a) - statusRank(b),
   },
-  { key: 'pin', label: 'PIN', card: 'aside', cellClass: 'w-40' },
+  // Colonnes de confort (ADR-074 point 7) : entre 1280 et 1440 px seulement. En
+  // dessous, ou en maître–détail, leurs largeurs fixes réduisent « Juge » à une
+  // soixantaine de pixels et poussent les actions hors de l'écran — la fiche,
+  // elle, montre le PIN et le dernier accès du juge ouvert.
+  {
+    key: 'pin',
+    label: 'PIN',
+    card: 'aside',
+    cellClass: 'w-40',
+    tableHidden: isMasterDetail.value || !isWide.value,
+  },
   { key: 'routes', label: 'Voies', card: 'subtitle', value: (row) => routeLabels(row.routeIds) },
   {
     key: 'lastSeen',
     label: 'Dernier accès',
     card: 'hidden',
     cellClass: 'w-36',
+    tableHidden: isMasterDetail.value || !isWide.value,
     value: lastSeenLabel,
     compare: (a, b) =>
       new Date(a.lastSeenAt ?? 0).getTime() - new Date(b.lastSeenAt ?? 0).getTime(),

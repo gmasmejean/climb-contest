@@ -118,7 +118,8 @@ describe('JudgesTab — disposition', () => {
   })
 
   it('rend un tableau avec le dernier accès sur grand écran', async () => {
-    stubDesktop(true)
+    // 1280 px : tableau du Lot 18, sans fiche — le dernier accès y a sa colonne.
+    stubViewport(1280)
     api.judges.list.mockResolvedValue([aJudge()])
     const wrapper = await mountTab()
     expect(headerNamed(wrapper, 'Dernier accès')).toBeDefined()
@@ -154,7 +155,7 @@ describe('JudgesTab — statut', () => {
   })
 
   it('remplit la colonne PIN sur grand écran', async () => {
-    stubDesktop(true)
+    stubViewport(1280)
     api.judges.list.mockResolvedValue([aJudge(), aJudge({ id: 'judge-2', hasPin: false })])
     const wrapper = await mountTab()
     expect(rowTexts(wrapper)[0]).toContain('Oui')
@@ -164,7 +165,8 @@ describe('JudgesTab — statut', () => {
 
 describe('JudgesTab — tri', () => {
   beforeEach(() => {
-    stubDesktop(true)
+    // 1280 px : toutes les colonnes triables sont présentes.
+    stubViewport(1280)
     api.judges.list.mockResolvedValue([
       aJudge({ id: 'a', displayName: 'Zoé' }),
       aJudge({ id: 'b', displayName: 'Ana' }),
@@ -381,5 +383,18 @@ describe('JudgesTab — entre 1024 et 1440 px (ADR-075)', () => {
 
     expect(buttonNamed(wrapper, 'Fiche')).toBeDefined()
     expect(wrapper.get('[data-testid="data-list-row"]').text()).not.toContain('Révoquer')
+  })
+})
+
+describe('JudgesTab — colonnes de confort sous 1280 px', () => {
+  it('retire le PIN et le dernier accès : sinon le nom du juge disparaît', async () => {
+    stubViewport(1024)
+    api.judges.list.mockResolvedValue([aJudge({ displayName: 'Bruno Costa' })])
+    const wrapper = await mountTab()
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text())
+    expect(headers).not.toContain('PIN')
+    expect(headers.some((h) => h.startsWith('Dernier accès'))).toBe(false)
+    expect(wrapper.get('[data-testid="data-list-row"]').text()).toContain('Bruno Costa')
   })
 })

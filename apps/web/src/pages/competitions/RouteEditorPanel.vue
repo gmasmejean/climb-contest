@@ -5,6 +5,7 @@ import { useMutation } from '@tanstack/vue-query'
 import { computed, reactive, ref, watch } from 'vue'
 
 import { ApiError } from '../../api/client'
+import { MASTER_DETAIL_QUERY, useMediaQuery } from '../../composables/useMediaQuery'
 import { routePhotoApi, routesApi, type RouteWithCategories } from '../../api/competitions'
 import { highestHoldNumber } from '../../lib/hold-numbering'
 import type { PickedPhoto } from '../../lib/photo-crop'
@@ -27,6 +28,17 @@ const props = defineProps<{
 const emit = defineEmits<{ saved: []; cancel: []; changed: [] }>()
 
 const toast = useToast()
+
+/**
+ * Devenu le panneau de 24 rem du maître–détail (ADR-075), le formulaire n'a plus
+ * la place de quatre colonnes : les valeurs y seraient tronquées. On le décide
+ * ici et non en CSS, pour ne pas dépendre de l'ordre de cascade entre `sm:` et
+ * le seuil de 1440 px.
+ */
+const isMasterDetail = useMediaQuery(MASTER_DETAIL_QUERY)
+const fieldGridClass = computed(() =>
+  isMasterDetail.value ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4',
+)
 
 function emptyForm() {
   return {
@@ -207,7 +219,7 @@ function onCancel(): void {
     <h2 class="font-medium text-gray-900">
       {{ props.route ? 'Modifier la voie' : 'Ajouter une voie' }}
     </h2>
-    <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+    <div class="grid gap-4" :class="fieldGridClass">
       <NumberField v-model="form.number" label="Numéro" :min="1" required />
       <div
         v-if="annotatedCount !== null"

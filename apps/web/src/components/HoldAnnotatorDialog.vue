@@ -75,6 +75,11 @@ watch(
         <Button data-close variant="secondary" @click="emit('close')">Fermer</Button>
       </header>
 
+      <p class="px-4 pb-2 text-sm text-gray-800">
+        Touchez la photo pour placer une prise. Touchez une prise pour la sélectionner, glissez-la
+        pour la déplacer. Zoomez pour être plus précis.
+      </p>
+
       <div class="flex min-h-0 flex-1 flex-col px-4 pb-3">
         <HoldAnnotator
           v-model="holds"

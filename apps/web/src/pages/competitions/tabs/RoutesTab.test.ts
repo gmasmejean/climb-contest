@@ -389,7 +389,8 @@ describe('RoutesTab — tableau des grands écrans (Lot 18)', () => {
     const cards = await mountTab()
     expect(cards.text()).not.toContain('Gauche')
 
-    stubDesktop(true)
+    // 1280 px : tableau du Lot 18, sans panneau à côté — toutes les colonnes.
+    stubViewport(1280)
     api.routes.list.mockResolvedValue(three)
     const table = await mountTab()
     expect(table.find('table').exists()).toBe(true)
@@ -613,5 +614,47 @@ describe('RoutesTab — seuil du maître–détail (ADR-075)', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Modifier la voie')
     expect(router.currentRoute.value.query.route).toBe('r1')
+  })
+})
+
+describe('RoutesTab — colonnes réduites en maître–détail (ADR-075)', () => {
+  const route = () => aRoute({ id: 'r1', number: 1, name: 'Le grand dièdre', sector: 'Gauche' })
+
+  it('retire secteur, couleur et média : le panneau les montre', async () => {
+    stubViewport(1440)
+    api.routes.list.mockResolvedValue([route()])
+    const wrapper = await mountTab()
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text())
+    expect(headers).toContain('Nom')
+    expect(headers).toContain('Catégories')
+    expect(headers).not.toContain('Secteur')
+    expect(headers).not.toContain('Couleur')
+    expect(headers).not.toContain('Média')
+  })
+
+  it('les garde entre 1024 et 1440 px, où la liste a toute la largeur', async () => {
+    stubViewport(1280)
+    api.routes.list.mockResolvedValue([route()])
+    const wrapper = await mountTab()
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text())
+    expect(headers).toContain('Secteur')
+    expect(headers).toContain('Média')
+  })
+})
+
+describe('RoutesTab — colonnes de confort sous 1280 px', () => {
+  it('retire secteur, couleur et média : sinon « Nom » tombe à zéro pixel', async () => {
+    // Défaut du Lot 18 trouvé en navigateur : à 1024 px, les largeurs fixes
+    // (656 px) dépassaient la colonne et écrasaient les deux colonnes libres.
+    stubViewport(1024)
+    api.routes.list.mockResolvedValue([aRoute({ id: 'r1', number: 1, name: 'Le grand dièdre' })])
+    const wrapper = await mountTab()
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text())
+    expect(headers).toContain('Nom')
+    expect(headers).not.toContain('Secteur')
+    expect(wrapper.text()).toContain('Le grand dièdre')
   })
 })

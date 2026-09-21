@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { FINE_TARGET, noHorizontalScroll, tooSmall } from './support/a11y'
+import { FINE_TARGET, TOUCH_TARGET, noHorizontalScroll, tooSmall } from './support/a11y'
 import { apiJson, loginApi, registerAndVerifyOrganizer } from './support/api'
 
 /**
@@ -201,4 +201,25 @@ test('annotateur : la photo se place en plein écran, avec un zoom', async ({ pa
   await expect(dialog).toHaveCount(0)
   await expect(page.getByTestId('hold-counter')).toContainText('1 prise placée')
   await expect(page.getByTestId('hold-count-from-photo')).toContainText('1')
+
+  // --- Le plein écran vaut aussi sur un téléphone (ADR-077) : c'est l'écart
+  //     assumé à « le rendu mobile ne change pas ». Tout doit y rester
+  //     atteignable, et aux 48 px — aucune dérogation hors tableau (ADR-073).
+  await page.setViewportSize({ width: 360, height: 740 })
+  await page.getByRole('button', { name: 'Agrandir la photo' }).click()
+  await expect(dialog).toBeVisible()
+  const photo = await dialog.getByTestId('photo-frame').boundingBox()
+  // La photo garde sa hauteur : les commandes ne l'écrasent pas à un bandeau.
+  expect(photo?.height ?? 0).toBeGreaterThan(250)
+
+  // Rouvrir remonte l'annotateur : on resélectionne la prise pour retrouver son
+  // panneau, le plus haut des blocs de commandes.
+  await dialog.getByTestId('hold-handle').first().click()
+  const done = dialog.getByRole('button', { name: 'Terminé' })
+  const renumber = dialog.getByRole('button', { name: 'Renuméroter de bas en haut' })
+  for (const control of [done, renumber]) {
+    await control.scrollIntoViewIfNeeded()
+    await expect(control).toBeInViewport()
+  }
+  expect(await tooSmall(page, TOUCH_TARGET, '[data-testid="hold-annotator-dialog"]')).toEqual([])
 })

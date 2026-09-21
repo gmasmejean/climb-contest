@@ -11,7 +11,12 @@ import {
   routesApi,
   type RouteWithCategories,
 } from '../../../api/competitions'
-import { DESKTOP_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
+import {
+  DESKTOP_QUERY,
+  MASTER_DETAIL_QUERY,
+  useMediaQuery,
+  WIDE_QUERY,
+} from '../../../composables/useMediaQuery'
 import RouteEditorPanel from '../RouteEditorPanel.vue'
 
 const props = defineProps<{ competitionId: string }>()
@@ -140,6 +145,8 @@ function categoryLabels(ids: string[]): string {
 const categoryList = computed(() => categories.value ?? [])
 
 const isDesktop = useMediaQuery(DESKTOP_QUERY)
+const isMasterDetail = useMediaQuery(MASTER_DETAIL_QUERY)
+const isWide = useMediaQuery(WIDE_QUERY)
 
 /** Action de ligne compacte sous pointeur fin seulement (ADR-073). */
 const rowActionClass =
@@ -149,6 +156,12 @@ const rowActionClass =
  * Aucune colonne triable (Lot 18) : l'ordre d'une compétition est celui que
  * l'organisateur a posé avec les flèches, pas l'ordre alphabétique. Un tri
  * masquerait ce que les flèches viennent de faire.
+ *
+ * Secteur, couleur et média sont des colonnes de confort (ADR-074 point 7) :
+ * elles n'apparaissent qu'entre 1280 et 1440 px. En dessous, ou en maître–détail
+ * où le panneau prend 24 rem, leurs largeurs fixes mangent toute la place et
+ * « Nom » comme « Catégories » tombent à zéro pixel — vu en navigateur. Le
+ * panneau, lui, montre les trois pour la voie ouverte.
  */
 const columns = computed<DataListColumn<RouteWithCategories>[]>(() => [
   {
@@ -178,11 +191,24 @@ const columns = computed<DataListColumn<RouteWithCategories>[]>(() => [
     label: 'Secteur',
     card: 'hidden',
     cellClass: 'w-28',
+    tableHidden: isMasterDetail.value || !isWide.value,
     value: (row) => row.sector ?? '—',
   },
-  { key: 'color', label: 'Couleur', card: 'hidden', cellClass: 'w-28' },
+  {
+    key: 'color',
+    label: 'Couleur',
+    card: 'hidden',
+    cellClass: 'w-28',
+    tableHidden: isMasterDetail.value || !isWide.value,
+  },
   { key: 'categories', label: 'Catégories', card: 'subtitle' },
-  { key: 'media', label: 'Média', card: 'hidden', cellClass: 'w-28' },
+  {
+    key: 'media',
+    label: 'Média',
+    card: 'hidden',
+    cellClass: 'w-28',
+    tableHidden: isMasterDetail.value || !isWide.value,
+  },
   { key: 'actions', label: 'Actions', card: 'actions', labelHidden: true, cellClass: 'w-44' },
 ])
 </script>
