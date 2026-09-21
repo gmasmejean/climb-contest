@@ -2569,6 +2569,73 @@ conditions réelles.
 
 ---
 
+## ADR-070 — La racine `/` est une page d'accueil publique
+
+**Date :** 2026-09-20
+**Contexte :** depuis le Lot 1, `/` était un écran vide derrière authentification (« Bonjour,
+{nom} » et un bouton « Mes compétitions ») ; un visiteur anonyme était renvoyé sur `/login`.
+L'utilisateur a fourni deux maquettes (mobile et desktop, générées par IA, style aquarelle) :
+en-tête logo + pilule « Espace organisateur », titre en écriture pinceau, champ de recherche et
+bouton « Trouver une compétition », quatre cartes pastel (Organisateurs, Juges, Spectateurs,
+Grimpeurs), mur d'escalade sur les côtés, foule en bas. Le dépôt n'avait ni police, ni logo,
+ni icône, ni jeton de couleur (`style.css` faisait deux lignes ; la couleur de fait est
+`blue-700`).
+
+**Décisions (actées avec l'utilisateur) :**
+
+1. **`/` devient publique et reste la destination après connexion.** La route perd
+   `requiresAuth` mais ne prend PAS `skipOrganizerSession` (ADR-053) : la session
+   organisateur est restaurée au F5 pour afficher l'en-tête connecté ; si l'API est
+   injoignable, la garde avale l'erreur et la page s'affiche en anonyme. L'en-tête a deux
+   états : anonyme → pilule « Espace organisateur / Connexion · Inscription » vers `/login` ;
+   connecté → nom, lien **« Mes compétitions »** et « Se déconnecter ». Le libellé « Mes
+   compétitions » est un contrat : onze tests e2e le cliquent juste après connexion.
+   `Login.vue`, `JudgeHome.vue` et la redirection `guestOnly` continuent de viser `home`.
+2. **Recherche visible mais désactivée.** La recherche publique est le Lot 13, non engagé
+   (préalable RGPD). L'utilisateur a choisi de garder le bloc de la maquette, non
+   fonctionnel. Lecture de « rien de simulé » (CLAUDE.md) : champ et bouton `disabled`,
+   mention « Recherche bientôt disponible. En attendant, ouvrez le lien ou le QR code… »
+   reliée par `aria-describedby`. Jamais un champ qui accepte du texte et ne fait rien.
+3. **Cartes.** Organisateurs → `/login` (ou `/competitions` si déjà connecté, sinon la garde
+   `guestOnly` ramènerait sur `/`). Juges → « Scannez le QR code remis par l'organisateur » ;
+   la carte n'est un lien vers `/j/home` que si un accès juge existe sur l'appareil
+   (`judgeToken`). Spectateurs → non-lien : aucune liste publique n'existe avant le Lot 13,
+   le texte dit la seule vraie façon d'y accéder (lien ou QR code). Grimpeurs →
+   « Inscrivez-vous aux compétitions » avec badge « Bientôt », non cliquable (inscriptions
+   en ligne hors périmètre v1, SPEC.md). La flèche `→` n'apparaît que sur les cartes-liens.
+4. **Visuels recadrés des maquettes.** Mur et foule sont découpés des deux PNG fournis
+   (ImageMagick, WebP, 200 Ko au total, `apps/web/src/assets/landing/`) ; le logo est un SVG
+   dessiné à la main proche du badge. Résolution limitée et statut juridique des images IA
+   flou : **provisoires**, à remplacer par des visuels HD à licence claire (TODO.md).
+5. **Hors précache.** `.webp` et `.woff2` ne sont pas dans `globPatterns` du service worker :
+   les visuels et polices de l'accueil ne s'installent jamais sur le téléphone d'un juge ;
+   ils passent par le `runtimeCaching` à la demande (`image`/`font`).
+6. **Polices auto-hébergées** (`@fontsource/caveat-brush` pour le titre,
+   `@fontsource/source-sans-3` pour le corps, OFL 1.1), importées dans `Home.vue` donc dans
+   le chunk de la page seulement. Pas de CDN : PWA, réseau catastrophique, RGPD.
+7. **Jetons de marque limités à l'accueil.** Un bloc `@theme` (`ink`, `navy`, `paper`,
+   quatre teintes de cartes, `font-display`, `font-body`) apparaît dans `style.css`, utilisé
+   seulement par la landing. Le `Button` partagé, `theme-color`, le manifest et le favicon
+   restent sur `blue-700` : on ne re-teinte pas les écrans juge et organisateur validés.
+   Les pilules navy sont un composant local (`LandingPill`), pas une variante de
+   `packages/ui`.
+8. **Menu hamburger de la maquette mobile omis** : aucune navigation à y mettre.
+
+**Conséquences :** `Home.vue` réécrit ; six composants dans
+`apps/web/src/components/landing/` ; `router.ts` (route `/` sans `requiresAuth`) ;
+`Home.test.ts` et deux tests de plus dans `router.test.ts` ; `e2e/landing.spec.ts` en
+desktop et à 360 px ; `index.html` (meta description). Un organisateur connecté qui perd le
+réseau et recharge `/` verra l'état anonyme — déjà vrai partout ailleurs (redirection vers
+`/login`).
+
+**Alternatives écartées :** rediriger les connectés vers `/competitions` (casse onze specs
+e2e et le parcours « je me connecte, j'arrive sur l'accueil » du Lot 1) ; un champ « code
+de compétition » ouvrant `/c/<slug>` à la place de la recherche (l'utilisateur préfère le
+bloc de la maquette, désactivé) ; engager le Lot 13 maintenant ; rendu CSS seul sans image
+raster ; Google Fonts.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

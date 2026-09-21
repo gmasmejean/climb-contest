@@ -97,7 +97,8 @@ apps/web        Vue 3 + Vite — PWA (auth, espace organisateur : compétitions,
                 `/c/<slug>` et écran de salle `/c/<slug>/salle`, sans
                 authentification, mise à jour en direct — Lot 7 ; onglet
                 Pilotage — vue d'ensemble, tours, correction/secours,
-                conflits, journal — Lot 8)
+                conflits, journal — Lot 8 ; page d'accueil publique `/`,
+                ADR-070)
 packages/db     Schéma Drizzle, migrations, seed
 packages/contracts   Schémas Zod partagés (entités + payloads d'API)
 packages/ui     Composants Vue partagés (bouton, champ, modale…)
@@ -139,6 +140,30 @@ juge laissé en veille toute la matinée) ne se met à jour qu'à son prochain
 rechargement — mesuré : aucune mise à jour en 90 s de page ouverte (`TODO.md`,
 Lot 10). Après un déploiement le jour d'une compétition, faites recharger les
 appareils.
+
+## Page d'accueil publique
+
+`/` s'affiche sans authentification (ADR-070) : en-tête avec le logo et la
+pilule « Espace organisateur » (→ `/login`), titre, recherche, quatre cartes
+(Organisateurs, Juges, Spectateurs, Grimpeurs), mur d'escalade et foule en
+aquarelle. Un organisateur connecté y retrouve son nom, « Mes compétitions »
+et « Se déconnecter » — c'est toujours la page d'arrivée après connexion, et
+la session y est restaurée au rechargement.
+
+- **La recherche est désactivée** et le dit (« Recherche bientôt
+  disponible ») : la recherche publique est le Lot 13, non engagé. Rien n'est
+  simulé.
+- La carte Juges ne devient un lien (vers `/j/home`) que si un accès juge
+  existe déjà sur l'appareil ; Spectateurs et Grimpeurs (« Bientôt ») ne sont
+  pas des liens.
+- Visuels : `apps/web/src/assets/landing/*.webp`, recadrés des maquettes
+  fournies (provisoires, voir `TODO.md`) ; logo SVG dans
+  `components/landing/BrandLogo.vue`. Polices auto-hébergées (`@fontsource`,
+  OFL), importées par `Home.vue` seulement. Images et polices ne sont pas dans
+  le précache du service worker (cache à la demande).
+- Jetons de couleur et de police dans `apps/web/src/style.css` (`@theme`),
+  utilisés par cette page uniquement ; le reste de l'application garde
+  `blue-700`.
 
 ## Page publique et temps réel
 
@@ -302,7 +327,8 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Dix-neuf tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Vingt tests Playwright end-to-end (`e2e/`) : la page d'accueil publique en
+  anonyme et en connecté (aussi à 360 px) ; connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se

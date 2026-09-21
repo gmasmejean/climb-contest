@@ -469,3 +469,21 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   jour du service worker (ADR-061) qui recharge la page en pleine séquence.
 - **`asset.kind` accepte maintenant `route_photo`** ; le message d'erreur de la suppression
   définitive parle encore de « vidéos » quand le stockage manque.
+
+## Depuis la page d'accueil (ADR-070)
+
+- **Brancher la recherche (Lot 13).** Le champ et « Trouver une compétition » sont
+  `disabled` avec la mention « Recherche bientôt disponible » (`LandingSearch.vue`). Le Lot 13
+  retire les deux, ajoute la page de résultats, et peut alors rendre la carte Spectateurs
+  cliquable.
+- **Remplacer les visuels recadrés des maquettes IA** (`apps/web/src/assets/landing/*.webp`,
+  941 px de large pour le mobile, statut juridique flou) par des illustrations HD à licence
+  claire ; le logo SVG de `BrandLogo.vue` est une approximation du badge.
+- **Unifier la charte** une fois la page validée : `Button` partagé, `theme-color`, manifest,
+  favicon et icônes PWA (toujours le « CC » bleu), `title` « ClimbContest » vs « Climb
+  Contest ». Les jetons `@theme` de `style.css` ne servent qu'à l'accueil pour l'instant.
+- **Menu hamburger** de la maquette mobile : omis, il n'y a rien à y mettre.
+- **`prettier-plugin-tailwindcss` ne connaît pas les jetons `@theme`** (il classe `bg-paper`,
+  `text-ink`… en tête) : lui indiquer `tailwindStylesheet: apps/web/src/style.css` dans
+  `.prettierrc.json` stabiliserait l'ordre des classes.
+
