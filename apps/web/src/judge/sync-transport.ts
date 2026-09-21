@@ -2,6 +2,7 @@ import type { JudgeAscentsBatchResponse } from '@climbcontest/contracts'
 import type { BatchResultItem, QueueItem, SyncTransport } from '@climbcontest/sync'
 
 import { judgeFetch } from '../api/judge-client'
+import { markJudgeAccessRevoked } from './access-state'
 import { toAscentSummary } from './conflict-summary'
 import type { QueuePayload } from './queue-payload'
 
@@ -17,6 +18,10 @@ export class HttpSyncTransport implements SyncTransport<QueuePayload> {
       method: 'POST',
       body: JSON.stringify({ items: items.map((item) => item.payload) }),
     })
+    // ADR-078 : accès révoqué. Le serveur a quand même reçu ces éléments (mis
+    // en quarantaine, ils reviennent `accepted`) ; la file continue donc de se
+    // vider, et c'est l'écran « accès révoqué » qui déconnectera le juge ensuite.
+    if (response.accessRevoked === true) markJudgeAccessRevoked()
     // `existing`/`incoming` sont réduits ICI à leur forme affichable
     // (SPEC.md § 6.3 : « l'affiche au juge avec les deux valeurs ») — c'est
     // le dernier endroit du pipeline où leur type précis (`Ascent`) est

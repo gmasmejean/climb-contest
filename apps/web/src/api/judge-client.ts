@@ -4,6 +4,7 @@ import { judgeToken } from './judge-session'
 interface ProblemBody {
   title: string
   detail?: string
+  code?: string
 }
 
 /**
@@ -27,7 +28,7 @@ async function send(path: string, options: RequestInit, withJsonBody: boolean): 
     } catch {
       body = undefined
     }
-    throw new ApiError(response.status, body?.title ?? 'Erreur', body?.detail)
+    throw new ApiError(response.status, body?.title ?? 'Erreur', body?.detail, body?.code)
   }
   return response
 }

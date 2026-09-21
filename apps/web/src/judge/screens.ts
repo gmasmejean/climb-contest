@@ -11,6 +11,9 @@ export const judgeScreens = {
   home: () => import('../pages/judge/JudgeHome.vue'),
   route: () => import('../pages/judge/JudgeRoute.vue'),
   ascentEntry: () => import('../pages/judge/JudgeAscentEntry.vue'),
+  // Lot 21 (ADR-078) : préchargé comme les autres — le juge peut apprendre sa
+  // révocation sur un réseau qui retombe aussitôt.
+  revoked: () => import('../pages/judge/JudgeRevoked.vue'),
 } as const
 
 export async function preloadJudgeScreens(): Promise<void> {

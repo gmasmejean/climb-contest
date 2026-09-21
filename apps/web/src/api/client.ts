@@ -7,6 +7,8 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly title: string,
     public readonly detail?: string,
+    /** Membre d'extension RFC 9457 — ADR-078 : `judge_revoked`. */
+    public readonly code?: string,
   ) {
     super(detail ?? title)
   }
@@ -15,6 +17,7 @@ export class ApiError extends Error {
 interface ProblemBody {
   title: string
   detail?: string
+  code?: string
 }
 
 let refreshPromise: Promise<boolean> | null = null

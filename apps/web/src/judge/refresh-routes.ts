@@ -1,6 +1,14 @@
+import { ApiError } from '../api/client'
+import { markJudgeAccessRevoked } from './access-state'
 import { bootstrapJudge } from './bootstrap'
 
-export type RefreshOutcome = 'refreshed' | 'waiting-for-queue' | 'no-session' | 'failed'
+export type RefreshOutcome =
+  | 'refreshed'
+  | 'waiting-for-queue'
+  | 'no-session'
+  | 'failed'
+  // ADR-078 : le serveur vient de dire que cet accès est révoqué.
+  | 'revoked'
 
 export interface RefreshDeps {
   hasJudgeSession: () => boolean
@@ -17,7 +25,12 @@ export async function refreshRoutesIfQueueIdle(deps: RefreshDeps): Promise<Refre
   try {
     const result = await deps.bootstrap({ onlyIfQueueIdle: true })
     return result === 'written' ? 'refreshed' : 'waiting-for-queue'
-  } catch {
+  } catch (error) {
+    // ADR-078 : seul point de contact d'un juge révoqué dont la file est vide.
+    if (error instanceof ApiError && error.code === 'judge_revoked') {
+      markJudgeAccessRevoked()
+      return 'revoked'
+    }
     return 'failed'
   }
 }

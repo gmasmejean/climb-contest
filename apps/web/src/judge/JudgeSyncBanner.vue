@@ -2,6 +2,7 @@
 import { SyncStatusIndicator } from '@climbcontest/ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
+import { judgeAccessRevoked } from './access-state'
 import { useSyncSnapshot } from './sync-runtime'
 
 /**
@@ -30,7 +31,10 @@ const pendingCount = computed(
   () => items.value.filter((item) => item.state === 'pending' || item.state === 'sending').length,
 )
 
-const status = computed<'offline' | 'syncing' | 'synced'>(() => {
+const status = computed<'offline' | 'syncing' | 'synced' | 'revoked'>(() => {
+  // ADR-078 : passe avant tout le reste — un bandeau honnête ne dit ni
+  // « Synchronisation… » ni « À jour » à un juge dont l'accès est révoqué.
+  if (judgeAccessRevoked.value) return 'revoked'
   if (!online.value) return 'offline'
   if (pendingCount.value > 0) return 'syncing'
   return 'synced'

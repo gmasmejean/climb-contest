@@ -76,7 +76,31 @@ export class JudgeDatabase extends Dexie {
 
 export const judgeDb = new JudgeDatabase()
 
+/**
+ * Une saisie qui n'existe QUE sur cet appareil : pas encore envoyée, ou refusée
+ * par le serveur. (`conflict` : le serveur détient déjà les deux valeurs.)
+ */
+export function existsOnlyOnDevice(item: QueueItem<QueuePayload>): boolean {
+  return item.state === 'pending' || item.state === 'sending' || item.state === 'rejected'
+}
+
+/** Levée quand on s'apprête à vider une base locale qui détient encore des saisies. */
+export class UnsentAscentsError extends Error {
+  constructor(public readonly count: number) {
+    super(
+      `${count} saisie(s) de ce téléphone n'ont pas été envoyées — elles doivent partir ou être effacées explicitement avant de changer de juge.`,
+    )
+  }
+}
+
+/**
+ * ADR-079 (amende ADR-036) : ne vide JAMAIS une file qui détient encore des
+ * saisies présentes seulement ici. L'écran d'accès les fait partir — ou les
+ * fait effacer explicitement — AVANT d'en arriver là ; ceci est le garde-fou.
+ */
 export async function resetJudgeDatabase(): Promise<void> {
+  const unsent = await judgeDb.queue.filter(existsOnlyOnDevice).count()
+  if (unsent > 0) throw new UnsentAscentsError(unsent)
   await judgeDb.routeDetails.clear()
   await judgeDb.queue.clear()
   await judgeDb.meta.clear()

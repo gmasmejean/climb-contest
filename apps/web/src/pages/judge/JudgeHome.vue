@@ -25,6 +25,8 @@ const REFRESH_MESSAGES: Record<RefreshOutcome, { text: string; tone: 'success' |
     tone: 'error',
   },
   'no-session': { text: 'Reconnectez-vous avec votre lien pour actualiser vos voies.', tone: 'error' },
+  // ADR-078 : l'écran « accès révoqué » prend le relais aussitôt.
+  revoked: { text: 'Votre accès a été révoqué par l’organisateur.', tone: 'error' },
 }
 
 // ADR-055 : jamais d'écrasement d'une saisie en attente — le bouton est la

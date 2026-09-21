@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { ApiError } from '../api/client'
+import { clearJudgeAccessRevoked, judgeAccessRevoked } from './access-state'
 
 import {
   MIN_AUTO_REFRESH_INTERVAL_MS,
@@ -34,6 +37,31 @@ describe('refreshRoutesIfQueueIdle', () => {
     expect(await refreshRoutesIfQueueIdle({ hasJudgeSession: () => true, bootstrap })).toBe(
       'failed',
     )
+  })
+})
+
+describe('refreshRoutesIfQueueIdle — accès révoqué (ADR-078)', () => {
+  afterEach(() => {
+    clearJudgeAccessRevoked()
+  })
+
+  it('lève le drapeau « accès révoqué » sur un 401 judge_revoked, et le garde au rechargement', async () => {
+    const bootstrap = vi
+      .fn()
+      .mockRejectedValue(new ApiError(401, 'Accès révoqué', undefined, 'judge_revoked'))
+    expect(await refreshRoutesIfQueueIdle({ hasJudgeSession: () => true, bootstrap })).toBe(
+      'revoked',
+    )
+    expect(judgeAccessRevoked.value).toBe(true)
+    expect(localStorage.getItem('climbcontest.judge.revoked')).toBe('1')
+  })
+
+  it('ne confond pas un jeton expiré (401 sans code) avec une révocation', async () => {
+    const bootstrap = vi.fn().mockRejectedValue(new ApiError(401, 'Authentification requise'))
+    expect(await refreshRoutesIfQueueIdle({ hasJudgeSession: () => true, bootstrap })).toBe(
+      'failed',
+    )
+    expect(judgeAccessRevoked.value).toBe(false)
   })
 })
 

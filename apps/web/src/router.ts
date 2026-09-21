@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import { bootstrapSession } from './api/client'
 import { currentUser } from './api/session'
+import { judgeAccessRevoked } from './judge/access-state'
 import { judgeScreens } from './judge/screens'
 import { isCompetitionTabId } from './lib/competition-tabs'
 
@@ -84,11 +85,19 @@ const router = createRouter({
       meta: { skipOrganizerSession: true },
     },
     {
+      // Lot 21 (ADR-078) : hors de `JudgeLayout` — l'écran dit lui-même où en
+      // est la file, et doit s'afficher même une fois le jeton retiré.
+      path: '/j/revoked',
+      name: 'judge-revoked',
+      component: judgeScreens.revoked,
+      meta: { skipOrganizerSession: true },
+    },
+    {
       // `JudgeLayout` monte le bandeau de synchronisation UNE SEULE FOIS
       // (Lot 6, ROADMAP.md point 6) pour les trois écrans juge authentifiés.
       path: '/j',
       component: judgeScreens.layout,
-      meta: { skipOrganizerSession: true },
+      meta: { skipOrganizerSession: true, judgeEntryScreen: true },
       children: [
         {
           path: 'home',
@@ -135,6 +144,12 @@ router.beforeEach(async (to) => {
       // (SPEC.md § 6.1) — on continue sans session restaurée, jamais un
       // écran blanc.
     }
+  }
+
+  // ADR-078 : un accès révoqué ne revoit plus aucun écran de saisie. Lecture
+  // locale (localStorage) — aucune requête, comme l'exige tout écran juge.
+  if (to.meta.judgeEntryScreen && judgeAccessRevoked.value) {
+    return { name: 'judge-revoked', replace: true }
   }
 
   if (to.meta.requiresAuth && !currentUser.value) {
