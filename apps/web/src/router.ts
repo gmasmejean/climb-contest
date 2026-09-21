@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { bootstrapSession } from './api/client'
 import { currentUser } from './api/session'
 import { judgeScreens } from './judge/screens'
+import { isCompetitionTabId } from './lib/competition-tabs'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -48,10 +49,17 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/competitions/:id',
+      // L'onglet vit dans l'URL (ADR-072) : rechargement, lien profond et
+      // « précédent » du navigateur. Un segment inconnu est retiré ici ; le cas
+      // qui dépend de la compétition (`rounds` hors phases) l'est par la page.
+      path: '/competitions/:id/:tab?',
       name: 'competition-detail',
       component: () => import('./pages/competitions/CompetitionDetail.vue'),
       meta: { requiresAuth: true },
+      beforeEnter: (to) =>
+        to.params.tab === '' || to.params.tab === undefined || isCompetitionTabId(to.params.tab)
+          ? true
+          : { name: 'competition-detail', params: { id: to.params.id }, replace: true },
     },
     {
       // Pas de compte, pas de session organisateur (SPEC.md § 3.2) : ni
