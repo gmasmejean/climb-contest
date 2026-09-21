@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { Competition } from '@climbcontest/contracts'
-import { Button, Modal } from '@climbcontest/ui'
+import { Button, DataList, Modal, type DataListColumn } from '@climbcontest/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { competitionsApi } from '../../api/competitions'
+import { DESKTOP_QUERY, useMediaQuery } from '../../composables/useMediaQuery'
 import {
   DELETE_VERBS,
   RESTORE_VERBS,
@@ -19,6 +20,7 @@ import BrandShell from '../../components/brand/BrandShell.vue'
 
 const queryClient = useQueryClient()
 const now = new Date()
+const isDesktop = useMediaQuery(DESKTOP_QUERY)
 
 const { data, isPending, isError, refetch } = useQuery({
   queryKey: ['competitions', 'trash'],
@@ -35,6 +37,19 @@ const confirmOpen = ref(false)
 const selectedItems = computed(() =>
   (data.value ?? []).filter((c) => selected.value.includes(c.id)),
 )
+
+/**
+ * Aucun tri : la corbeille est courte et se lit dans l'ordre où le serveur la
+ * rend. C'est la liste des compétitions qu'on trie, pas ce qu'on s'apprête à
+ * jeter.
+ */
+const columns = computed<DataListColumn<Competition>[]>(() => [
+  { key: 'name', label: 'Nom', card: 'title', value: (row) => row.name },
+  { key: 'venue', label: 'Lieu', card: 'hidden', value: (row) => row.venue },
+  { key: 'date', label: 'Début', card: 'hidden', cellClass: 'w-32', value: (row) => row.startsOn },
+  { key: 'age', label: 'À la corbeille depuis', card: 'hidden', cellClass: 'w-56' },
+  { key: 'actions', label: 'Actions', card: 'actions', labelHidden: true, cellClass: 'w-40' },
+])
 
 function toggleSelected(id: string): void {
   selected.value = selected.value.includes(id)
@@ -134,40 +149,71 @@ const namesHidden = computed(() => Math.max(0, toDelete.value.length - MAX_NAMES
             >
           </div>
 
-          <ul class="flex flex-col gap-3">
-            <li
-              v-for="competition in data"
-              :key="competition.id"
-              class="flex flex-col gap-3 rounded-lg border p-4"
-              :class="
-                selected.includes(competition.id) ? 'border-blue-700 bg-blue-50' : 'border-gray-200'
-              "
-            >
-              <label class="flex min-h-12 cursor-pointer items-center gap-4">
-                <input
-                  type="checkbox"
-                  class="size-6 shrink-0 accent-blue-700"
-                  :checked="selected.includes(competition.id)"
-                  :disabled="busy"
-                  @change="toggleSelected(competition.id)"
-                />
-                <span class="flex min-w-0 flex-col">
-                  <span class="font-medium text-gray-900">{{ competition.name }}</span>
-                  <span class="text-sm text-gray-600"
-                    >{{ competition.venue }} — {{ competition.startsOn }}</span
-                  >
-                  <span v-if="competition.deletedAt" class="text-sm text-gray-700">
-                    {{ describeTrashAge(competition.deletedAt, now) }}
+          <DataList
+            :rows="data ?? []"
+            :columns="columns"
+            :layout="isDesktop ? 'table' : 'cards'"
+            selectable
+            :selected="selected"
+            :busy="busy"
+            :row-label="(row) => row.name"
+            :row-class="(row) => (selected.includes(row.id) ? 'border-blue-700 bg-blue-50' : '')"
+            label="Compétitions à la corbeille"
+            @update:selected="selected = $event"
+          >
+            <template #cell-age="{ row }">
+              <template v-if="row.deletedAt">{{ describeTrashAge(row.deletedAt, now) }}</template>
+              <template v-else-if="isDesktop">—</template>
+            </template>
+
+            <template #cell-actions="{ row }">
+              <button
+                v-if="isDesktop"
+                type="button"
+                :disabled="busy"
+                class="fine:min-h-10 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                @click="restore([row])"
+              >
+                Restaurer
+              </button>
+              <Button v-else variant="secondary" :disabled="busy" @click="restore([row])">
+                Restaurer
+              </Button>
+            </template>
+
+            <!--
+              La carte de la corbeille enveloppe sa case à cocher dans un
+              `<label>` cliquable sur toute sa surface : on garde son markup au
+              mot près, le rendu à 360 px ne bouge pas.
+            -->
+            <template #card="{ row: competition }">
+              <div class="flex w-full flex-col gap-3">
+                <label class="flex min-h-12 cursor-pointer items-center gap-4">
+                  <input
+                    type="checkbox"
+                    class="size-6 shrink-0 accent-blue-700"
+                    :checked="selected.includes(competition.id)"
+                    :disabled="busy"
+                    @change="toggleSelected(competition.id)"
+                  />
+                  <span class="flex min-w-0 flex-col">
+                    <span class="font-medium text-gray-900">{{ competition.name }}</span>
+                    <span class="text-sm text-gray-600"
+                      >{{ competition.venue }} — {{ competition.startsOn }}</span
+                    >
+                    <span v-if="competition.deletedAt" class="text-sm text-gray-700">
+                      {{ describeTrashAge(competition.deletedAt, now) }}
+                    </span>
                   </span>
-                </span>
-              </label>
-              <div>
-                <Button variant="secondary" :disabled="busy" @click="restore([competition])">
-                  Restaurer
-                </Button>
+                </label>
+                <div>
+                  <Button variant="secondary" :disabled="busy" @click="restore([competition])">
+                    Restaurer
+                  </Button>
+                </div>
               </div>
-            </li>
-          </ul>
+            </template>
+          </DataList>
 
           <div
             class="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-white px-4 py-3"

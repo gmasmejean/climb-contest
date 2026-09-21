@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { retentionStatus } from '@climbcontest/contracts'
-import { Badge, Button, Select, TextField } from '@climbcontest/ui'
+import { retentionStatus, type Competition } from '@climbcontest/contracts'
+import {
+  Badge,
+  Button,
+  DataList,
+  Select,
+  TextField,
+  type DataListColumn,
+  type DataListSort,
+} from '@climbcontest/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { competitionsApi } from '../../api/competitions'
+import { DESKTOP_QUERY, useMediaQuery } from '../../composables/useMediaQuery'
 import { TRASH_VERBS, describeBulk, runBulk } from '../../lib/bulk-action'
 import {
   STATUS_ORDER,
@@ -16,16 +25,17 @@ import {
   toLocalDay,
   type CompetitionStatus,
   type ListView,
-  type SortDir,
-  type SortKey,
+  SORT_KEYS,
   type When,
 } from '../../lib/competition-list-view'
 import { UNREACHABLE_MESSAGE, describeError } from '../../lib/network-errors'
 import ImportBackupModal from './ImportBackupModal.vue'
 import BrandShell from '../../components/brand/BrandShell.vue'
+import ListToolbar from '../../components/ListToolbar.vue'
 
 const route = useRoute()
 const router = useRouter()
+const isDesktop = useMediaQuery(DESKTOP_QUERY)
 const queryClient = useQueryClient()
 
 const importOpen = ref(false)
@@ -117,8 +127,20 @@ const sortOptions = [
 const sortValue = computed(() => `${view.value.sort}:${view.value.dir}`)
 
 function setSort(value: string): void {
-  const [sort, dir] = value.split(':')
-  update({ sort: sort as SortKey, dir: dir as SortDir })
+  const [sortKey, dirKey] = value.split(':')
+  const sort = SORT_KEYS.find((key) => key === sortKey)
+  if (sort) update({ sort, dir: dirKey === 'asc' ? 'asc' : 'desc' })
+}
+
+/**
+ * Les en-têtes du tableau commandent le même tri que le sélecteur, qui
+ * disparaît au-dessus de 1024 px : deux commandes pour une même chose finissent
+ * toujours par se désynchroniser. L'adresse reste la source (ADR-062).
+ */
+const sortState = computed<DataListSort>(() => ({ key: view.value.sort, dir: view.value.dir }))
+
+function onSort(next: DataListSort): void {
+  setSort(`${next.key}:${next.dir}`)
 }
 
 function reset(): void {
@@ -128,6 +150,38 @@ function reset(): void {
 
 const shown = computed(() => applyListView(data.value ?? [], view.value, today))
 const hasFilter = computed(() => !isDefaultListView(view.value))
+
+/**
+ * `compare` est présent sans jamais être appelé : `applyListView` trie déjà la
+ * liste. Sa seule fonction ici est de rendre l'en-tête cliquable et d'annoncer
+ * `aria-sort` — le tri de `DataList` est piloté, il ne réordonne rien.
+ */
+const columns = computed<DataListColumn<Competition>[]>(() => [
+  {
+    key: 'name',
+    label: 'Nom',
+    card: 'title',
+    value: (row) => row.name,
+    compare: () => 0,
+  },
+  { key: 'venue', label: 'Lieu', card: 'hidden', value: (row) => row.venue },
+  {
+    key: 'date',
+    label: 'Début',
+    card: 'hidden',
+    cellClass: 'w-32',
+    value: (row) => row.startsOn,
+    compare: () => 0,
+  },
+  {
+    key: 'status',
+    label: 'Statut',
+    card: 'hidden',
+    cellClass: 'w-44',
+    compare: () => 0,
+  },
+  { key: 'reminder', label: 'Conservation', card: 'hidden', cellClass: 'w-56' },
+])
 
 function chipClass(active: boolean): string {
   return [
@@ -201,7 +255,7 @@ async function trashSelected(): Promise<void> {
 <template>
   <BrandShell width="wide">
     <main class="mx-auto w-full max-w-screen-2xl flex-1 px-4 py-8 lg:px-8">
-      <div class="flex max-w-3xl flex-col gap-6">
+      <div class="flex max-w-3xl flex-col gap-6 lg:max-w-none">
         <header class="flex items-center justify-between gap-4">
           <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
             Mes compétitions
@@ -251,18 +305,25 @@ async function trashSelected(): Promise<void> {
 
         <template v-else>
           <section aria-label="Rechercher, filtrer et trier" class="flex flex-col gap-4">
-            <TextField
-              :model-value="searchText"
-              label="Rechercher (nom ou lieu)"
-              autocomplete="off"
-              @update:model-value="onSearchInput"
-            />
-            <Select
-              :model-value="sortValue"
-              label="Trier par"
-              :options="sortOptions"
-              @update:model-value="setSort"
-            />
+            <ListToolbar>
+              <div class="lg:w-80">
+                <TextField
+                  :model-value="searchText"
+                  label="Rechercher (nom ou lieu)"
+                  autocomplete="off"
+                  @update:model-value="onSearchInput"
+                />
+              </div>
+              <!-- Au-dessus de 1024 px, ce sont les en-têtes du tableau qui trient. -->
+              <div v-if="!isDesktop" class="lg:w-72">
+                <Select
+                  :model-value="sortValue"
+                  label="Trier par"
+                  :options="sortOptions"
+                  @update:model-value="setSort"
+                />
+              </div>
+            </ListToolbar>
             <div class="flex flex-wrap items-center gap-3">
               <Button
                 variant="secondary"
@@ -275,7 +336,11 @@ async function trashSelected(): Promise<void> {
               <Button v-if="hasFilter" variant="secondary" @click="reset">Réinitialiser</Button>
             </div>
 
-            <div v-show="showFilters" id="competition-filters" class="flex flex-col gap-4">
+            <div
+              v-show="showFilters"
+              id="competition-filters"
+              class="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-10"
+            >
               <fieldset class="flex flex-col gap-2">
                 <legend class="text-sm font-medium text-gray-900">Statut</legend>
                 <div class="flex flex-wrap gap-2">
@@ -356,15 +421,51 @@ async function trashSelected(): Promise<void> {
             <Button variant="secondary" @click="reset">Réinitialiser la recherche</Button>
           </div>
 
-          <ul v-else class="flex flex-col gap-3">
-            <li v-for="competition in shown" :key="competition.id">
+          <DataList
+            v-else
+            :rows="shown"
+            :columns="columns"
+            :layout="isDesktop ? 'table' : 'cards'"
+            :sort="sortState"
+            :selectable="selecting"
+            :selected="selected"
+            :busy="busy"
+            :row-selectable="(row) => row.status !== 'running'"
+            :row-label="(row) => row.name"
+            :row-to="(row) => ({ name: 'competition-detail', params: { id: row.id } })"
+            label="Mes compétitions"
+            @update:sort="onSort"
+            @update:selected="selected = $event"
+          >
+            <template #cell-status="{ row }">
+              <div class="flex flex-col items-start gap-1">
+                <Badge :tone="row.status === 'draft' ? 'neutral' : 'success'">
+                  {{ statusLabels[row.status] ?? row.status }}
+                </Badge>
+                <span v-if="selecting && row.status === 'running'" class="text-sm text-gray-700">
+                  En cours : clôturez-la pour pouvoir la supprimer.
+                </span>
+              </div>
+            </template>
+
+            <template #cell-reminder="{ row }">
+              <Badge v-if="row.purgedAt" tone="neutral">Données supprimées</Badge>
+              <Badge v-else-if="reminderOf(row.endsOn)" :tone="reminderOf(row.endsOn)!.tone">
+                {{ reminderOf(row.endsOn)!.label }}
+              </Badge>
+              <template v-else-if="isDesktop">—</template>
+            </template>
+
+            <!--
+              La carte reste celle d'avant, au mot près : elle enveloppe soit un
+              lien, soit une case à cocher, ce qu'une composition par colonnes ne
+              saurait pas reproduire. Le rendu à 360 px ne bouge donc pas.
+            -->
+            <template #card="{ row: competition }">
               <label
                 v-if="selecting"
-                class="flex min-h-12 items-center gap-4 rounded-lg border px-4 py-3"
+                class="flex min-h-12 w-full items-center gap-4 rounded-lg px-1"
                 :class="[
-                  selected.includes(competition.id)
-                    ? 'border-blue-700 bg-blue-50'
-                    : 'border-gray-200',
                   competition.status === 'running'
                     ? 'opacity-70'
                     : 'cursor-pointer hover:bg-gray-50',
@@ -390,7 +491,7 @@ async function trashSelected(): Promise<void> {
               <RouterLink
                 v-else
                 :to="{ name: 'competition-detail', params: { id: competition.id } }"
-                class="flex min-h-12 items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+                class="flex min-h-12 w-full items-center justify-between gap-4 rounded-lg px-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
               >
                 <div class="flex min-w-0 flex-col">
                   <span class="font-medium text-gray-900">{{ competition.name }}</span>
@@ -411,8 +512,8 @@ async function trashSelected(): Promise<void> {
                   </Badge>
                 </div>
               </RouterLink>
-            </li>
-          </ul>
+            </template>
+          </DataList>
 
           <div
             v-if="selecting"

@@ -36,6 +36,8 @@ const props = withDefaults(
     rowSelectable?: ((row: Row) => boolean) | undefined
     /** Lien porté par la première cellule (jamais par la ligne entière). */
     rowTo?: ((row: Row) => RouteLocationRaw) | undefined
+    /** Classes posées sur la ligne, tableau comme carte (état, mise en garde…). */
+    rowClass?: ((row: Row) => string) | undefined
     busy?: boolean
     emptyText?: string | undefined
   }>(),
@@ -166,7 +168,7 @@ function cellText(column: DataListColumn<Row>, row: Row): string {
         :key="row.id"
         data-testid="data-list-row"
         class="border-b border-gray-200 hover:bg-gray-50"
-        :class="selectable && isSelected(row) ? 'bg-blue-50' : ''"
+        :class="[selectable && isSelected(row) ? 'bg-blue-50' : '', rowClass ? rowClass(row) : '']"
       >
         <td v-if="selectable" class="fine:py-1.5 px-3 py-3">
           <input
@@ -214,6 +216,7 @@ function cellText(column: DataListColumn<Row>, row: Row): string {
       :key="row.id"
       data-testid="data-list-row"
       class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+      :class="rowClass ? rowClass(row) : ''"
     >
       <slot name="card" :row="row" :index="index">
         <div class="min-w-0">

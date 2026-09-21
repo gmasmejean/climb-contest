@@ -19,6 +19,7 @@ import { ApiError } from '../../../api/client'
 import { categoriesApi, competitorsApi } from '../../../api/competitions'
 import { DESKTOP_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
 import { compareNumber, compareText, sortRows } from '../../../lib/table-sort'
+import ListToolbar from '../../../components/ListToolbar.vue'
 import CompetitorImportWizard from '../CompetitorImportWizard.vue'
 
 const props = defineProps<{ competitionId: string }>()
@@ -368,20 +369,25 @@ const { mutate: removeCompetitor, isPending: isDeleting } = useMutation({
       <Button type="submit" :disabled="isCreating">{{ isCreating ? 'Ajout…' : 'Ajouter' }}</Button>
     </form>
 
-    <Button variant="secondary" :disabled="isAssigning" @click="assignBibs()">
-      {{ isAssigning ? 'Attribution…' : 'Assigner les dossards automatiquement' }}
-    </Button>
-
     <CompetitorImportWizard :competition-id="competitionId" @imported="refresh" />
 
-    <div class="grid grid-cols-2 gap-4">
-      <TextField v-model="search" label="Rechercher (nom ou dossard)" />
-      <Select
-        v-model="categoryFilter"
-        label="Filtrer par catégorie"
-        :options="[{ value: '', label: 'Toutes' }, ...categoryOptions]"
-      />
-    </div>
+    <ListToolbar>
+      <div class="lg:w-72">
+        <TextField v-model="search" label="Rechercher (nom ou dossard)" />
+      </div>
+      <div class="lg:w-56">
+        <Select
+          v-model="categoryFilter"
+          label="Filtrer par catégorie"
+          :options="[{ value: '', label: 'Toutes' }, ...categoryOptions]"
+        />
+      </div>
+      <template #actions>
+        <Button variant="secondary" :disabled="isAssigning" @click="assignBibs()">
+          {{ isAssigning ? 'Attribution…' : 'Assigner les dossards automatiquement' }}
+        </Button>
+      </template>
+    </ListToolbar>
 
     <p v-if="isPending" class="text-gray-600">Chargement…</p>
     <DataList

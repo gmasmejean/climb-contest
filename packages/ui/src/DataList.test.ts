@@ -257,6 +257,20 @@ describe('DataList — liste vide', () => {
   })
 })
 
+describe('DataList — classes de ligne', () => {
+  const rowClass = (row: Climber) => (row.bib === null ? 'sans-dossard' : '')
+
+  it('les pose sur la ligne du tableau', () => {
+    const rows = table({ rowClass }).findAll('tbody tr')
+    expect(rows[1]?.classes()).toContain('sans-dossard')
+    expect(rows[0]?.classes()).not.toContain('sans-dossard')
+  })
+
+  it('les pose aussi sur la carte', () => {
+    expect(cards({ rowClass }).findAll('li')[1]?.classes()).toContain('sans-dossard')
+  })
+})
+
 describe('DataList — densité (ADR-073)', () => {
   it('compacte les cellules du tableau à la souris seulement', () => {
     const wrapper = table({ selectable: true })
