@@ -1,9 +1,10 @@
 import type { Competition } from '@climbcontest/contracts'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createRouter, createWebHistory, type Router } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { JudgeWithRoutes } from '../../../api/judges'
+import { revealedJudgeTokens, type JudgeWithRoutes } from '../../../api/judges'
 import { stubDesktop } from '../../../test-utils/media-query'
 
 const api = vi.hoisted(() => ({
@@ -30,6 +31,15 @@ vi.mock('../../../api/competitions', async (importOriginal) => ({
 const { default: JudgesTab } = await import('./JudgesTab.vue')
 
 const mounted: VueWrapper[] = []
+let router: Router
+
+/** Le juge ouvert vit dans `?judge=` (ADR-075) : l'écran a besoin d'un routeur. */
+function makeRouter(): Router {
+  return createRouter({
+    history: createWebHistory(),
+    routes: [{ path: '/competitions/:id/:tab?', component: { template: '<div />' } }],
+  })
+}
 
 function aJudge(overrides: Partial<JudgeWithRoutes> = {}): JudgeWithRoutes {
   return {
@@ -57,17 +67,17 @@ const competition = {
   judgeCredentialsStored: false,
 } as Competition
 
-async function mountTab() {
+async function mountTab(
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  query = '',
+) {
+  await router.push(`/competitions/comp-1/judges${query}`)
+  await router.isReady()
   const wrapper = mount(JudgesTab, {
     attachTo: document.body,
     props: { competition },
     global: {
-      plugins: [
-        [
-          VueQueryPlugin,
-          { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
-        ],
-      ],
+      plugins: [router, [VueQueryPlugin, { queryClient }]],
       stubs: { RouterLink: { template: '<a><slot /></a>' } },
     },
   })
@@ -86,6 +96,9 @@ const rowTexts = (wrapper: VueWrapper) =>
   wrapper.findAll('[data-testid="data-list-row"]').map((row) => row.text())
 
 beforeEach(() => {
+  router = makeRouter()
+  // État au niveau du module (ADR-026) : il survivrait d'un test à l'autre.
+  revealedJudgeTokens.value = []
   for (const group of Object.values(api)) for (const fn of Object.values(group)) fn.mockReset()
   api.judges.list.mockResolvedValue([])
   api.routes.list.mockResolvedValue([])
@@ -206,13 +219,142 @@ describe('JudgesTab — actions de ligne', () => {
     expect(buttonNamed(wrapper, 'Révoquer')).toBeUndefined()
   })
 
-  it('révoque depuis le tableau', async () => {
-    stubDesktop(true)
-    api.judges.list.mockResolvedValue([aJudge()])
-    api.judges.revoke.mockResolvedValue(undefined)
+  it('garde les actions sur la carte, sur petit écran', async () => {
+    api.judges.list.mockResolvedValue([aJudge({ accessUrl: 'https://exemple/j/abc' })])
     const wrapper = await mountTab()
+
+    expect(buttonNamed(wrapper, "Voir l'accès")).toBeDefined()
+    expect(buttonNamed(wrapper, 'Régénérer le PIN')).toBeDefined()
+    expect(buttonNamed(wrapper, 'Révoquer')).toBeDefined()
+    expect(buttonNamed(wrapper, 'Fiche')).toBeUndefined()
+    expect(wrapper.find('[data-testid="judge-card"]').exists()).toBe(false)
+  })
+
+  it('n’a qu’une action de ligne en tableau : ouvrir la fiche', async () => {
+    stubDesktop(true)
+    api.judges.list.mockResolvedValue([aJudge({ accessUrl: 'https://exemple/j/abc' })])
+    const wrapper = await mountTab()
+
+    // Les actions ne doivent jamais être aux deux endroits (ADR-074 point 2).
+    const row = wrapper.get('[data-testid="data-list-row"]')
+    expect(row.text()).not.toContain('Révoquer')
+    expect(row.text()).not.toContain('Régénérer le PIN')
+    expect(buttonNamed(wrapper, 'Fiche')).toBeDefined()
+  })
+})
+
+describe('JudgesTab — fiche du juge (Lot 19)', () => {
+  beforeEach(() => stubDesktop(true))
+
+  async function openCard(judge: JudgeWithRoutes) {
+    api.judges.list.mockResolvedValue([judge])
+    api.routes.list.mockResolvedValue([{ id: 'r1', number: 3, name: 'Le dièdre' }])
+    const wrapper = await mountTab()
+    await buttonNamed(wrapper, 'Fiche')?.trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('montre le nom, le statut, les voies et le dernier accès', async () => {
+    const wrapper = await openCard(
+      aJudge({ routeIds: ['r1'], lastSeenAt: new Date('2026-02-01T10:00:00Z') }),
+    )
+
+    const card = wrapper.get('[data-testid="judge-card"]')
+    expect(card.text()).toContain('Bruno')
+    expect(card.text()).toContain('Actif')
+    expect(card.text()).toContain('Voie 3')
+    expect(router.currentRoute.value.query.judge).toBe('judge-1')
+  })
+
+  it('montre le lien et son QR quand l’accès est conservé', async () => {
+    const wrapper = await openCard(aJudge({ accessUrl: 'https://exemple.test/j/abc' }))
+
+    const card = wrapper.get('[data-testid="judge-card"]')
+    expect(card.get('input[readonly]').attributes('value')).toBe('https://exemple.test/j/abc')
+    expect(card.find('[data-testid="judge-qr-code"]').exists()).toBe(true)
+  })
+
+  it('reconstruit le QR d’un juge créé dans cette session, sans accès stocké', async () => {
+    revealedJudgeTokens.value = [
+      { competitionId: 'comp-1', judgeId: 'judge-1', accessToken: 'jeton-session' },
+    ]
+    const wrapper = await openCard(aJudge())
+
+    const card = wrapper.get('[data-testid="judge-card"]')
+    expect(card.get('input[readonly]').attributes('value')).toContain('/j/jeton-session')
+    expect(card.find('[data-testid="judge-qr-code"]').exists()).toBe(true)
+  })
+
+  it('ne montre aucun QR sans accès disponible, et dit quoi faire', async () => {
+    const wrapper = await openCard(aJudge())
+
+    const card = wrapper.get('[data-testid="judge-card"]')
+    expect(card.find('[data-testid="judge-qr-code"]').exists()).toBe(false)
+    expect(card.text()).toContain('n’a été montré qu’une fois')
+  })
+
+  it('ne montre aucun QR pour un juge révoqué, même avec son jeton en mémoire', async () => {
+    revealedJudgeTokens.value = [
+      { competitionId: 'comp-1', judgeId: 'judge-1', accessToken: 'jeton-session' },
+    ]
+    const wrapper = await openCard(aJudge({ revokedAt: new Date('2026-01-02T00:00:00Z') }))
+
+    const card = wrapper.get('[data-testid="judge-card"]')
+    expect(card.find('[data-testid="judge-qr-code"]').exists()).toBe(false)
+    expect(card.text()).toContain('son lien ne donne plus accès')
+    expect(buttonNamed(wrapper, 'Révoquer')).toBeUndefined()
+  })
+
+  it('révoque depuis la fiche', async () => {
+    api.judges.revoke.mockResolvedValue(undefined)
+    const wrapper = await openCard(aJudge())
+
     await buttonNamed(wrapper, 'Révoquer')?.trigger('click')
     await flushPromises()
     expect(api.judges.revoke).toHaveBeenCalledWith('comp-1', 'judge-1')
+  })
+
+  it('perd l’accès de la fiche dès que le serveur cesse de le conserver', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    api.judges.list.mockResolvedValue([aJudge({ accessUrl: 'https://exemple.test/j/abc' })])
+    const wrapper = await mountTab(queryClient)
+    await buttonNamed(wrapper, 'Fiche')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="judge-qr-code"]').exists()).toBe(true)
+
+    // ADR-027 : désactiver la conservation efface le clair côté serveur.
+    api.judges.list.mockResolvedValue([aJudge()])
+    await queryClient.invalidateQueries({ queryKey: ['competitions', 'comp-1', 'judges'] })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="judge-qr-code"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="judge-card"]').text()).toContain('n’a été montré qu’une fois')
+  })
+
+  it('ouvre la fiche désignée par l’adresse, et ignore un identifiant inconnu', async () => {
+    api.judges.list.mockResolvedValue([aJudge()])
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const known = await mountTab(queryClient, '?judge=judge-1')
+    expect(known.find('[data-testid="judge-card"]').exists()).toBe(true)
+
+    api.judges.list.mockResolvedValue([aJudge()])
+    const unknown = await mountTab(
+      new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+      '?judge=parti',
+    )
+    expect(unknown.find('[data-testid="judge-card"]').exists()).toBe(false)
+    expect(unknown.text()).toContain('Ajouter un juge')
+  })
+
+  it('ne rend aucune fiche sur petit écran : la modale reste', async () => {
+    vi.unstubAllGlobals()
+    api.judges.list.mockResolvedValue([aJudge({ accessUrl: 'https://exemple.test/j/abc' })])
+    const wrapper = await mountTab()
+
+    await buttonNamed(wrapper, "Voir l'accès")?.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="judge-card"]').exists()).toBe(false)
+    expect(document.body.textContent).toContain('Accès du juge')
   })
 })

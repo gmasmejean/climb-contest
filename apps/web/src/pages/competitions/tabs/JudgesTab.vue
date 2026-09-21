@@ -14,13 +14,16 @@ import {
   type DataListSort,
 } from '@climbcontest/ui'
 import { computed, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 
 import { ApiError } from '../../../api/client'
 import { competitionsApi, routesApi } from '../../../api/competitions'
 import { judgesApi, revealedJudgeTokens, type JudgeWithRoutes } from '../../../api/judges'
 import { DESKTOP_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
+import { judgeAccessUrl } from '../../../lib/judge-access'
 import { compareText, sortRows } from '../../../lib/table-sort'
+import JudgeCard from '../JudgeCard.vue'
 
 const props = defineProps<{ competition: Competition }>()
 
@@ -28,6 +31,7 @@ const isDesktop = useMediaQuery(DESKTOP_QUERY)
 
 const queryClient = useQueryClient()
 const toast = useToast()
+
 const judgesKey = ['competitions', props.competition.id, 'judges']
 const routesKey = ['competitions', props.competition.id, 'routes']
 
@@ -43,6 +47,24 @@ const { data: routes } = useQuery({
 async function refresh(): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: judgesKey })
 }
+
+// Le juge ouvert vit dans l'adresse (ADR-075 point 4), comme la voie ouverte.
+const urlRoute = useRoute()
+const router = useRouter()
+const selectedJudgeId = computed<string | null>({
+  get: () => {
+    const requested = urlRoute.query.judge
+    if (typeof requested !== 'string' || requested === '') return null
+    if (judges.value && !judges.value.some((j) => j.id === requested)) return null
+    return requested
+  },
+  set: (id) => {
+    const query = { ...urlRoute.query }
+    delete query.judge
+    void router.replace({ query: id === null ? query : { ...query, judge: id } })
+  },
+})
+const selectedJudge = computed(() => judges.value?.find((j) => j.id === selectedJudgeId.value))
 
 function updateCompetitionSetting(field: 'judgePinRequired' | 'judgeCredentialsStored') {
   return useMutation({
@@ -162,18 +184,14 @@ function closeRegenerated(): void {
   regeneratedPin.value = null
 }
 
-// Un juge manque à la planche seulement s'il n'a ni accès stocké en clair
-// (ADR-027) ni jeton encore tenu en mémoire pour cette session (ADR-026).
+/** Le lien affichable d'un juge : clair stocké (ADR-027) ou jeton de session (ADR-026). */
+function accessUrlOf(j: JudgeWithRoutes): string | null {
+  return judgeAccessUrl(j, revealedJudgeTokens.value, props.competition.id, window.location.origin)
+}
+
+// Un juge manque à la planche exactement quand il n'a aucun lien affichable.
 const missingFromSheet = computed(
-  () =>
-    judges.value?.filter(
-      (j) =>
-        !j.revokedAt &&
-        !j.accessUrl &&
-        !revealedJudgeTokens.value.some(
-          (t) => t.competitionId === props.competition.id && t.judgeId === j.id,
-        ),
-    ) ?? [],
+  () => judges.value?.filter((j) => !j.revokedAt && accessUrlOf(j) === null) ?? [],
 )
 const isDownloading = ref(false)
 async function downloadQrSheet(): Promise<void> {
@@ -258,19 +276,26 @@ const columns = computed<DataListColumn<JudgeWithRoutes>[]>(() => [
       new Date(a.lastSeenAt ?? 0).getTime() - new Date(b.lastSeenAt ?? 0).getTime(),
     missing: (row) => row.lastSeenAt === null,
   },
-  { key: 'actions', label: 'Actions', card: 'actions', labelHidden: true, cellClass: 'w-72' },
+  {
+    key: 'actions',
+    label: 'Actions',
+    card: 'actions',
+    labelHidden: true,
+    // En tableau, la ligne n'ouvre que la fiche ; les actions y vivent (ADR-075 point 6).
+    cellClass: isDesktop.value ? 'w-24' : 'w-72',
+  },
 ])
 
 const shown = computed(() => sortRows(judges.value ?? [], sort.value, columns.value))
 
 /**
  * Action de ligne du tableau : compacte sous pointeur fin seulement (ADR-073).
- * `Button` reste la pilule de 48 px de la charte, y compris en cartes.
+ * `Button` reste la pilule de 48 px de la charte, y compris en cartes. Depuis le
+ * Lot 19, la seule action de ligne est l'ouverture de la fiche : plus de
+ * variante « danger » ici, « Révoquer » vit dans la fiche.
  */
 const rowActionClass =
   'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
-const dangerRowActionClass =
-  'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-50'
 </script>
 
 <template>
@@ -310,134 +335,142 @@ const dangerRowActionClass =
     </div>
 
     <p v-if="isPending" class="text-gray-600">Chargement…</p>
-    <DataList
+    <!-- Maître–détail à partir de `lg` (ADR-075) ; `minmax(0,1fr)` garde le
+         tableau dans sa colonne. -->
+    <div
       v-else
-      :rows="shown"
-      :columns="columns"
-      :layout="isDesktop ? 'table' : 'cards'"
-      :sort="sort"
-      label="Juges"
-      empty-text="Aucun juge."
-      @update:sort="sort = $event"
+      class="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-8"
     >
-      <template #cell-status="{ row }">
-        <Badge :tone="judgeStatus(row).tone">{{ judgeStatus(row).label }}</Badge>
-      </template>
+      <div class="flex min-w-0 flex-col gap-6">
+        <DataList
+          :rows="shown"
+          :columns="columns"
+          :layout="isDesktop ? 'table' : 'cards'"
+          :sort="sort"
+          label="Juges"
+          empty-text="Aucun juge."
+          @update:sort="sort = $event"
+        >
+          <template #cell-status="{ row }">
+            <Badge :tone="judgeStatus(row).tone">{{ judgeStatus(row).label }}</Badge>
+          </template>
 
-      <!-- En tableau, une colonne se lit mieux pleine que vide : « Oui » plutôt
+          <!-- En tableau, une colonne se lit mieux pleine que vide : « Oui » plutôt
            qu'une pastille qui n'apparaît qu'en creux. -->
-      <template #cell-pin="{ row }">
-        <template v-if="isDesktop">{{ row.hasPin ? 'Oui' : 'Accès direct' }}</template>
-        <Badge v-else-if="!row.hasPin" tone="neutral">Accès direct — pas de PIN</Badge>
-      </template>
-
-      <template #cell-actions="{ row }">
-        <div class="flex flex-wrap items-center gap-2">
-          <template v-if="isDesktop">
-            <button
-              v-if="row.accessUrl"
-              type="button"
-              :class="rowActionClass"
-              @click="viewAccess(row)"
-            >
-              Voir l'accès
-            </button>
-            <button
-              v-if="row.hasPin && !row.revokedAt"
-              type="button"
-              :class="rowActionClass"
-              :disabled="regenerateMutation.isPending.value"
-              @click="regenerateMutation.mutate(row.id)"
-            >
-              Régénérer le PIN
-            </button>
-            <button
-              v-if="!row.revokedAt"
-              type="button"
-              :class="dangerRowActionClass"
-              :disabled="revokeMutation.isPending.value"
-              @click="revokeMutation.mutate(row.id)"
-            >
-              Révoquer
-            </button>
+          <template #cell-pin="{ row }">
+            <template v-if="isDesktop">{{ row.hasPin ? 'Oui' : 'Accès direct' }}</template>
+            <Badge v-else-if="!row.hasPin" tone="neutral">Accès direct — pas de PIN</Badge>
           </template>
-          <template v-else>
-            <Button v-if="row.accessUrl" variant="secondary" @click="viewAccess(row)">
-              Voir l'accès
-            </Button>
-            <Button
-              v-if="row.hasPin && !row.revokedAt"
-              variant="secondary"
-              :disabled="regenerateMutation.isPending.value"
-              @click="regenerateMutation.mutate(row.id)"
-            >
-              Régénérer le PIN
-            </Button>
-            <Button
-              v-if="!row.revokedAt"
-              variant="danger"
-              :disabled="revokeMutation.isPending.value"
-              @click="revokeMutation.mutate(row.id)"
-            >
-              Révoquer
-            </Button>
+
+          <template #cell-actions="{ row }">
+            <div class="flex flex-wrap items-center gap-2">
+              <!-- En tableau, la ligne n'ouvre que la fiche : les actions y vivent,
+               jamais aux deux endroits (ADR-074 point 2, ADR-075 point 6). -->
+              <button
+                v-if="isDesktop"
+                type="button"
+                :class="rowActionClass"
+                :aria-current="row.id === selectedJudgeId ? 'true' : undefined"
+                @click="selectedJudgeId = row.id"
+              >
+                Fiche
+              </button>
+              <template v-else>
+                <Button v-if="row.accessUrl" variant="secondary" @click="viewAccess(row)">
+                  Voir l'accès
+                </Button>
+                <Button
+                  v-if="row.hasPin && !row.revokedAt"
+                  variant="secondary"
+                  :disabled="regenerateMutation.isPending.value"
+                  @click="regenerateMutation.mutate(row.id)"
+                >
+                  Régénérer le PIN
+                </Button>
+                <Button
+                  v-if="!row.revokedAt"
+                  variant="danger"
+                  :disabled="revokeMutation.isPending.value"
+                  @click="revokeMutation.mutate(row.id)"
+                >
+                  Révoquer
+                </Button>
+              </template>
+            </div>
           </template>
-        </div>
-      </template>
-    </DataList>
+        </DataList>
 
-    <Button variant="secondary" :disabled="isDownloading" @click="downloadQrSheet">
-      {{ isDownloading ? 'Génération…' : 'Planche de QR codes (PDF)' }}
-    </Button>
-    <p v-if="missingFromSheet.length > 0" class="text-xs text-gray-500">
-      {{ missingFromSheet.length }} juge(s) sans accès en clair conservé n'apparaîtront pas en
-      encart individuel sur la planche (seulement sur sa page QR publique), sauf à avoir été créés
-      lors de cette session.
-    </p>
-
-    <form
-      class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
-      @submit.prevent="onSubmit"
-    >
-      <h2 class="font-medium text-gray-900">Ajouter un juge</h2>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm font-medium text-gray-900">Nom affiché</span>
-        <input
-          v-model="form.displayName"
-          type="text"
-          class="min-h-12 rounded-lg border border-gray-400 bg-white px-3 text-base"
-          required
-        />
-      </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm font-medium text-gray-900">E-mail (optionnel)</span>
-        <input
-          v-model="form.email"
-          type="email"
-          placeholder="pour envoyer le lien d'accès directement"
-          class="min-h-12 rounded-lg border border-gray-400 bg-white px-3 text-base"
-        />
-      </label>
-      <fieldset class="flex flex-col gap-2">
-        <legend class="text-sm font-medium text-gray-900">Voies assignées</legend>
-        <label v-for="r in routes ?? []" :key="r.id" class="flex min-h-12 items-center gap-2">
-          <input
-            v-model="form.routeIds"
-            type="checkbox"
-            :value="r.id"
-            class="h-5 w-5 rounded border-gray-400"
-          />
-          Voie {{ r.number }}<span v-if="r.name"> — {{ r.name }}</span>
-        </label>
-        <p v-if="routes && routes.length === 0" class="text-sm text-gray-600">
-          Créez d'abord une voie dans l'onglet « Voies ».
+        <Button variant="secondary" :disabled="isDownloading" @click="downloadQrSheet">
+          {{ isDownloading ? 'Génération…' : 'Planche de QR codes (PDF)' }}
+        </Button>
+        <p v-if="missingFromSheet.length > 0" class="text-xs text-gray-500">
+          {{ missingFromSheet.length }} juge(s) sans accès en clair conservé n'apparaîtront pas en
+          encart individuel sur la planche (seulement sur sa page QR publique), sauf à avoir été
+          créés lors de cette session.
         </p>
-      </fieldset>
-      <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
-      <Button type="submit" :disabled="createMutation.isPending.value">
-        {{ createMutation.isPending.value ? 'Création…' : 'Créer le juge' }}
-      </Button>
-    </form>
+      </div>
+
+      <div class="lg:sticky lg:top-24">
+        <JudgeCard
+          v-if="isDesktop && selectedJudge"
+          :judge="selectedJudge"
+          :status="judgeStatus(selectedJudge)"
+          :route-labels="routeLabels(selectedJudge.routeIds)"
+          :last-seen-label="lastSeenLabel(selectedJudge)"
+          :access-url="accessUrlOf(selectedJudge)"
+          :revoking="revokeMutation.isPending.value"
+          :regenerating="regenerateMutation.isPending.value"
+          @copy="copy"
+          @revoke="revokeMutation.mutate(selectedJudge.id)"
+          @regenerate-pin="regenerateMutation.mutate(selectedJudge.id)"
+          @close="selectedJudgeId = null"
+        />
+        <form
+          v-else
+          class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
+          @submit.prevent="onSubmit"
+        >
+          <h2 class="font-medium text-gray-900">Ajouter un juge</h2>
+          <label class="flex flex-col gap-1">
+            <span class="text-sm font-medium text-gray-900">Nom affiché</span>
+            <input
+              v-model="form.displayName"
+              type="text"
+              class="min-h-12 rounded-lg border border-gray-400 bg-white px-3 text-base"
+              required
+            />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-sm font-medium text-gray-900">E-mail (optionnel)</span>
+            <input
+              v-model="form.email"
+              type="email"
+              placeholder="pour envoyer le lien d'accès directement"
+              class="min-h-12 rounded-lg border border-gray-400 bg-white px-3 text-base"
+            />
+          </label>
+          <fieldset class="flex flex-col gap-2">
+            <legend class="text-sm font-medium text-gray-900">Voies assignées</legend>
+            <label v-for="r in routes ?? []" :key="r.id" class="flex min-h-12 items-center gap-2">
+              <input
+                v-model="form.routeIds"
+                type="checkbox"
+                :value="r.id"
+                class="h-5 w-5 rounded border-gray-400"
+              />
+              Voie {{ r.number }}<span v-if="r.name"> — {{ r.name }}</span>
+            </label>
+            <p v-if="routes && routes.length === 0" class="text-sm text-gray-600">
+              Créez d'abord une voie dans l'onglet « Voies ».
+            </p>
+          </fieldset>
+          <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
+          <Button type="submit" :disabled="createMutation.isPending.value">
+            {{ createMutation.isPending.value ? 'Création…' : 'Créer le juge' }}
+          </Button>
+        </form>
+      </div>
+    </div>
 
     <Modal
       :open="revealedJudge !== null"
@@ -487,7 +520,7 @@ const dangerRowActionClass =
       </div>
     </Modal>
 
-    <Modal :open="viewedJudge !== null" title="Accès du juge" @close="closeViewed">
+    <Modal :open="!isDesktop && viewedJudge !== null" title="Accès du juge" @close="closeViewed">
       <div v-if="viewedJudge" class="flex flex-col gap-4">
         <p class="text-sm text-gray-600">Accès de {{ viewedJudge.displayName }}.</p>
         <div class="flex flex-col gap-1">
