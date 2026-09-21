@@ -645,13 +645,39 @@ compétiteurs (année, club, licence) attendent 1280 px, et le tri ne concerne q
 compétiteurs, juges, liste et corbeille — voies et catégories gardent l'ordre
 posé aux flèches.
 
-### Lot 19 — Maître–détail (D3, à cadrer)
+### Lot 19 — Maître–détail des voies et des juges (D3, livré)
+
+> Livré le 2026-09-21. Décisions : ADR-075 (maître–détail et sélection dans
+> l'adresse), ADR-076 (QR dessiné dans le navigateur), ADR-077 (annotateur en
+> grand, qui amende ADR-068).
 
 ```
 Lot 19 : voies en liste + éditeur côte à côte, annotateur de photo en grand
-(zoom, plein écran) ; juges en liste + fiche (QR, PIN, voies) ; assistant
-d'import en deux colonnes ; formulaires Infos / création en grille avec barre
-d'enregistrement collante.
+(zoom, plein écran) ; juges en liste + fiche (QR, PIN, voies).
+```
+
+Écarts au cadrage initial, tous vus en navigateur :
+
+- **Le seuil n'est pas 1024 px mais 1440 px**, et il est mesuré : les largeurs fixes du
+  tableau des voies totalisent 656 px (528 px pour les juges) ; en dessous, le tableau
+  passait sous le panneau collant et avalait les clics. Entre 1024 et 1440 px, les deux
+  onglets gardent le rendu du Lot 18.
+- **Le zoom de l'annotateur vaut à toutes les largeurs**, téléphone compris (ADR-077) : ce
+  n'est pas de la mise en page, c'est la levée d'une limite écrite dans ADR-068.
+- **Défaut préexistant corrigé en passant** : à 1024 px, les tableaux des voies et des juges
+  écrasaient leurs colonnes libres à zéro pixel — les noms disparaissaient. La règle des
+  colonnes de confort d'ADR-074 point 7 leur est maintenant appliquée.
+- **L'assistant d'import et les formulaires en grille sont reportés au Lot 19b** : de la
+  mise en page pure, sans décision d'architecture, détachable sans dette.
+
+### Lot 19b — Import et formulaires en grille (à faire)
+
+```
+Lot 19b : assistant d'import CSV en deux colonnes (le choix du fichier reste à
+gauche, l'aperçu prend la hauteur à droite) ; formulaires Infos et création de
+compétition en grille, avec barre d'enregistrement collante à partir de `lg`.
+Attention, dans Infos : le bloc « statut » a sa propre mutation et ne doit pas
+tomber sous la barre d'enregistrement du formulaire principal.
 ```
 
 ### Lot 20 — Pilotage jour J sur portable (D4, à cadrer)

@@ -553,3 +553,33 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   voies et dépôt de fichier ; sélecteur rapide de compétition ; feuille d'impression ; lien
   vers l'écran de salle depuis le pilotage ; exports en grille ; « Prêt à démarrer ? » en
   deux colonnes.
+
+## Depuis le maître–détail (Lot 19, ADR-075 à ADR-077)
+
+- **`RoutePhotoPanel` (écran juge) garde sa propre copie du zoom.** `useZoomableFrame`
+  factorise le cadre zoomable du recadrage et de l'annotation, mais l'écran juge n'a pas été
+  converti : le gain est cosmétique et `CLAUDE.md` déclare ces écrans non négociables. À faire
+  si on y touche pour une autre raison.
+- **`Modal` de `packages/ui` n'a ni piège de focus ni restitution du focus.** `PhotoCropDialog`
+  et `HoldAnnotatorDialog` le font à la main, chacun de son côté : troisième implémentation du
+  même besoin. Un `useDialog` (ou une `Modal` qui s'en charge) s'impose, hors lot.
+- **Les modifications non enregistrées d'une voie ne survivent pas au rechargement.** `?route=`
+  rouvre bien la voie, mais ses valeurs sont relues du serveur : `RouteEditorPanel` n'a pas de
+  `useFormDraft` (seuls `InfosTab` et `CompetitionCreate` en ont un). À brancher si un
+  organisateur perd une saisie longue.
+- **Un portable de 1366 px n'a pas le maître–détail.** C'est le prix des colonnes à largeur
+  fixe (`table-fixed`, ADR-074) : il faudrait des colonnes élastiques ou redimensionnables pour
+  descendre plus bas. Même dette que « `table-fixed` tronque sans autre indice que l'infobulle ».
+- **Les en-têtes de colonne ne s'alignent pas entre eux** quand certaines colonnes sont
+  triables et d'autres non : le `<th>` sans bouton retombe plus bas. Visible sur les juges
+  (« Voies » sous « Juge » et « Statut »). Antérieur au Lot 19, dans `DataList` — donc sur les
+  six listes à la fois, ce qui vaut un lot à soi.
+- **Le tri peut rester posé sur une colonne devenue invisible** (le PIN chez les juges, quand on
+  passe sous 1280 px ou en maître–détail) : l'ordre reste celui de cette colonne sans que rien
+  ne l'indique. Sans conséquence sur les données, déroutant à l'œil.
+- **Le QR est dessiné deux fois dans le dépôt** : `qrcode` côté serveur pour la planche PDF,
+  côté navigateur pour la fiche (ADR-076). Assumé — ni le même support ni les mêmes contraintes —
+  mais deux versions à garder en phase.
+- **Le panneau de détail n'est pas atteignable au clavier depuis la liste** autrement qu'en
+  tabulant : pas de raccourci, pas de déplacement du focus vers le panneau à l'ouverture. À voir
+  avec la « navigation clavier dans les tableaux » déjà écartée des Lots 17–20.

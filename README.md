@@ -290,7 +290,10 @@ ré-encodée en JPEG **dans le navigateur** (côté long 1600 px, environ 300 Ko
 orientation appliquée, GPS retiré) ; le serveur n'accepte que du JPEG, reconnu à
 ses octets. Toucher la photo pose une prise, la glisser la déplace, « Renuméroter
 de bas en haut » classe les prises d'après leur hauteur (à vérifier sur une
-traversée ou un dévers). Les modifications ne partent qu'à « Enregistrer les
+traversée ou un dévers). **« Agrandir la photo »** ouvre le placement en plein
+écran, avec zoom ×1 / ×2 / ×3 — à toutes les largeurs, téléphone compris, parce
+que c'est devant le mur qu'on en a le plus besoin (ADR-077). L'aperçu sur lequel
+on annote à la création fait 1280 px de côté long, et non plus 640. Les modifications ne partent qu'à « Enregistrer les
 prises ». Une prise ne peut pas porter un numéro supérieur au nombre de prises de
 la voie. Remplacer la photo **efface** les prises. **Dès qu'un passage existe sur
 la voie, la photo et les prises sont figées**, comme le nombre de prises
@@ -342,6 +345,21 @@ ADR-066.
   écrans juge et public ne sont jamais concernés.
 - Le tableau des compétiteurs ne montre l'année de naissance, le club et le numéro de
   licence qu'à partir de 1280 px : en dessous, neuf colonnes rendraient les noms illisibles.
+  Même règle pour le secteur, la couleur et le média d'une voie, et pour le PIN et le
+  dernier accès d'un juge.
+- **Voies et juges s'éditent à côté de leur liste à partir de 1440 px** (ADR-075) : la liste
+  à gauche, l'éditeur de la voie ou la fiche du juge à droite, collés en haut. Le seuil est
+  mesuré, pas choisi : en dessous, les colonnes du tableau n'ont plus la place et passeraient
+  sous le panneau. Entre 1024 et 1440 px, c'est le tableau seul, l'éditeur en dessous.
+  - **La sélection est dans l'adresse** (`?route=…`, `?judge=…`) : recharger la page en
+    pleine annotation ne referme pas la voie ouverte. Un identifiant inconnu est ignoré
+    sans bruit. Changer de voie est refusé tant qu'une création en cours n'a pas fini
+    d'envoyer sa photo ou ses prises.
+  - **La fiche d'un juge** montre son statut, ses voies, son PIN, son lien d'accès et son
+    **QR code**, dessiné dans le navigateur (ADR-076) — c'est le seul endroit qui puisse le
+    faire quand la compétition ne conserve pas les accès en clair. Aucun QR pour un juge
+    révoqué. « Voir l'accès », « Régénérer le PIN » et « Révoquer » vivent alors dans la
+    fiche, plus sur la ligne.
 
 ## Liste des compétitions et corbeille
 
@@ -395,5 +413,5 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   depuis l'onglet Pilotage ; une compétition en phases jouée de bout en bout
   (qualification à deux voies, demi-finale, finale, classement final avec
   contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
-  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise ; la photo annotée d'une voie, de l'organisateur au juge hors ligne (aussi à 360 px) ; le choix, le recadrage et l'annotation de la photo à la création de la voie, avec le nombre de prises déduit (aussi à 360 px) —
+  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise ; la photo annotée d'une voie, de l'organisateur au juge hors ligne (aussi à 360 px) ; le choix, le recadrage et l'annotation de la photo à la création de la voie, avec le nombre de prises déduit (aussi à 360 px) ; le maître–détail des voies et des juges à 1440 px, la sélection dans l'adresse et l'annotateur en plein écran (aussi à 360 px) —
   la purge des données personnelles ; le mode dégradé quand le serveur est injoignable ; la recherche dans la liste, la corbeille, la restauration et la suppression définitive d'une compétition (aussi à 360 px) ; voir `e2e/README.md` pour les lancer.
