@@ -499,18 +499,44 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   Juges) : lisibles et ≥ 48 px, mais massives. Libellés plus courts ou pile verticale à voir.
 - **Écran de salle** (`PublicRoomScreen`) : fond sombre conservé, seulement re-teinté par les
   échelles. Une version « charte » (logo, Caveat pour le nom de catégorie) reste à décider.
-- **Test instable** `JudgeAscentEntry.test.ts` › « Voir la voie ouvre le panneau… sans
-  réseau » : a échoué 2 fois sur ~6 exécutions de la suite complète (`vi.fn()` réseau appelé
-  1 fois), passe seul. Vu avant tout changement sur les écrans juge.
-  **Cause vue au Lot 17 :** l'appel parasite est un `POST /api/v1/judge/ascents/batch` — une
-  synchronisation mise en file par un test précédent du même fichier, qui part pendant
-  celui-ci. C'est un défaut d'isolation des tests, pas de l'écran.
+- ~~**Test instable** `JudgeAscentEntry.test.ts` › « Voir la voie ouvre le panneau… sans
+  réseau »~~ **Corrigé au Lot 18** : `syncEngine` est un singleton de module, vider
+  `judgeDb.queue` ne vidait pas sa file EN MÉMOIRE, et son minuteur de repli envoyait les
+  saisies d'un test précédent au milieu de celui-ci. Les deux `afterEach` du fichier
+  appellent maintenant `syncEngine.hydrate()`. **Reste ouvert :** aucun autre fichier de
+  test ne le fait ; un nettoyage global serait plus sûr qu'une discipline par fichier.
+
+## Depuis les tableaux denses (Lot 18, ADR-074)
+
+- **La ligne d'ajout rapide n'est pas collante** sous l'en-tête du tableau : au-delà d'une
+  vingtaine de compétiteurs, il faut remonter pour saisir le suivant. Deux éléments collants
+  imbriqués dans un `<tbody>` sont un nid à bugs de rendu ; à reprendre si la gêne est
+  réelle à l'usage.
+- **`table-fixed` tronque sans autre indice que l'infobulle `title`.** Un nom long est coupé
+  vers 90 px à 1280 px. Une colonne redimensionnable, ou un choix de colonnes par
+  l'organisateur, serait la vraie réponse — hors lot.
+- **La colonne d'actions garde une largeur fixe** (`w-60` chez les compétiteurs) calée sur
+  ses trois libellés : un libellé plus long la ferait passer sur deux lignes et gonflerait
+  la ligne de 41 à 81 px. Fragile, faute de mesure automatique.
+- **Aucune virtualisation** : 150 compétiteurs × 9 colonnes tiennent, 600 restent à mesurer.
+  Si ça rame, la première réponse n'est pas la virtualisation (Lot 20 au mieux) mais moins
+  de composants par cellule.
+- **Recherche et filtre des onglets ne sont pas dans l'adresse**, contrairement à la liste
+  des compétitions (ADR-062). Cohabiter avec `:tab?` et `?section=` pour un bénéfice faible ;
+  à revoir si quelqu'un demande à partager « les juges triés par dernier accès ».
+- **`prettier-plugin-tailwindcss` ne connaît pas la variante `fine:`** (ni les jetons
+  `@theme`, déjà noté) : les classes `fine:` sont triées arbitrairement mais de façon
+  stable, `format:check` ne casse pas. À régler avec la dette `tailwindStylesheet` du
+  `.prettierrc`.
+- **Le lien retour « ← Mes compétitions » fait 20 px de haut à partir de `lg`** (décision du
+  Lot 17, `lg:min-h-0`). La garde e2e des 48 px est donc bornée au tableau sur les parcours
+  de bureau ; à trancher si on veut une règle uniforme.
 
 ## Depuis le socle desktop (Lot 17, ADR-072)
 
-- **Liste, corbeille et création restent une colonne étroite** (`max-w-3xl` / `max-w-2xl`),
-  désormais alignée à gauche du conteneur large : la moitié droite est vide à 1440 px. La
-  grille de cartes et les tableaux sont le Lot 18.
+- ~~**Liste, corbeille et création restent une colonne étroite**~~ Levé au Lot 18 pour la
+  liste et la corbeille (`lg:max-w-none`). **`CompetitionCreate` garde son `max-w-2xl`** :
+  c'est un formulaire, sa mise en grille est le Lot 19.
 - **`Tabs` n'a pas de pastille** (`badge`) : prévue au plan, non écrite tant que rien ne
   l'alimente (compteurs de conflits / alertes / points bloquants → Lot 20).
 - **Identifiants DOM en double** : les onglets de la page et les sous-onglets du pilotage

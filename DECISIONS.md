@@ -2772,6 +2772,82 @@ le Lot 17 ne réduit aucune cible.
 **Alternative écartée :** 48 px partout — règle plus simple, mais un tiers de lignes en
 moins sur l'écran où l'organisateur passe le plus de temps.
 
+**Amendé au Lot 18 :** la requête retenue est
+`(pointer: fine) and (not (any-pointer: coarse))`. Un portable à écran tactile rapporte
+`pointer: fine` pour son pavé tactile alors que le doigt y reste possible ; `pointer: fine`
+seul l'aurait compacté, contre la lettre même de cette décision. Voir ADR-074.
+
+---
+
+## ADR-074 — `DataList` : une définition de colonnes, deux rendus
+
+**Date :** 2026-09-21
+**Contexte :** Lot 18. Les six listes de l'espace organisateur (compétiteurs, voies, juges,
+catégories, liste des compétitions, corbeille) étaient des `<ul>` de cartes plafonnées à
+768 px, alors que le Lot 17 venait de leur donner toute la largeur de l'écran (ADR-072).
+
+**Décisions :**
+
+1. **Une colonne se décrit une seule fois** (`DataListColumn<Row>` : clé, libellé, valeur,
+   comparateur, rôle en carte) et sert aux deux rendus. Un slot scopé `cell-<clé>` prend la
+   main dès qu'il faut autre chose que du texte. C'est le premier composant générique du
+   projet (`<script setup generic="Row">`) ; le monter en test exige l'expression
+   d'instanciation TS 4.7 (`mount(DataList<Row>, …)`), sans quoi le générique retombe sur
+   sa contrainte.
+
+2. **Un seul arbre dans le DOM.** C'est l'appelant qui choisit `layout` à partir de
+   `useMediaQuery`, jamais un `hidden lg:table`. Même raison que le `tablist` unique
+   d'ADR-072 : deux rendus dont un masqué en CSS, ce sont deux arbres d'accessibilité et
+   des boutons d'action en double, que les sélecteurs e2e atteignent au hasard.
+
+3. **Le tri est piloté.** `DataList` ne réordonne jamais ses lignes : il émet `update:sort`
+   et l'appelant trie. La liste des compétitions garde ainsi son tri dans l'adresse
+   (ADR-062) et les en-têtes remplacent son sélecteur « Trier par » au-dessus de 1024 px —
+   deux commandes pour une même chose finissent par diverger. Dans les quatre onglets, le
+   tri vit dans un `ref` local : on ne partage pas un lien vers « les juges triés par
+   dernier accès ».
+
+4. **Voies et catégories ne sont pas triables.** Leur ordre est celui que l'organisateur a
+   posé aux flèches ; un tri masquerait ce que les flèches viennent de faire.
+
+5. **Deux façons de faire une carte, assumées.** Les quatre onglets composent la leur à
+   partir des rôles (`title`, `subtitle`, `aside`, `actions`). La liste et la corbeille
+   passent par un slot `card` d'échappement qui reprend leur markup au mot près : leur
+   carte enveloppe un lien ou une case à cocher, ce qu'une composition ne sait pas
+   reproduire, et le rendu à 360 px ne doit pas bouger.
+
+6. **Densité.** La variante Tailwind `fine:` (ADR-073 amendé) ne compacte que le tableau :
+   cellules, cases à cocher et actions de ligne. `Button.vue` ne reçoit **aucune** variante
+   de taille — la lui donner rendrait compacte la pilule de 48 px jusque sur les écrans
+   juge. Les actions de ligne sont donc des `<button>` nus, pas des `Button`.
+
+7. **Colonnes facultatives à 1280 px.** Le tableau des compétiteurs ne sort l'année de
+   naissance, le club et le numéro de licence qu'au-delà de `xl`. Vérifié en navigateur :
+   ses neuf colonnes à 1024 px réduisent chaque nom à une vingtaine de pixels.
+
+8. **Le numéro de licence est affiché** (décision de l'utilisateur, prise en connaissance
+   de cause). C'est la donnée la plus sensible du modèle, bannie de la vue publique ;
+   l'écran est derrière l'authentification organisateur, mais un tableau se projette et se
+   photographie.
+
+9. **En-tête collant, trois pièges.** Le `sticky` porte sur chaque `<th>` et non sur
+   `<thead>` (support plus large), sa bordure est une ombre interne (sous
+   `border-collapse`, la bordure d'une cellule collée disparaît), et il ne doit jamais
+   exister de conteneur `overflow-x-auto` autour du tableau — il deviendrait un conteneur
+   de défilement et l'en-tête ne collerait plus jamais. Le décalage vient de
+   `--datalist-top`, posée une seule fois par `CompetitionDetail`.
+
+10. **Nom accessible des champs d'ajout rapide.** Ils désignent le libellé de la colonne et
+    non son `<th>` : le glyphe de tri vit dans le même bouton et entrait dans le nom
+    (« Catégorie↕ »). Défaut vu en navigateur, verrouillé par un test.
+
+**Alternatives écartées :** un rendu carte entièrement généré à partir des colonnes (il
+réécrirait le mobile de la corbeille et de la liste pour un gain invisible) ; deux slots
+séparés carte/tableau (le contenu diverge fatalement) ; `hidden lg:table` (point 2) ;
+rendre la ligne entière cliquable (ni rôle, ni focus, ni clavier, et la sélection de texte
+cassée — le lien vit dans l'en-tête de ligne) ; une case « tout cocher » en en-tête (les
+deux écrans concernés ont déjà un bouton « Tout sélectionner »).
+
 ---
 
 ## Points encore ouverts (non tranchés dans ce Lot 0)

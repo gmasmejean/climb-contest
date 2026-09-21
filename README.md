@@ -323,8 +323,25 @@ ADR-066.
   dans `apps/web/src/lib/competition-tabs.ts`). Rechargement, lien profond et bouton
   « précédent » fonctionnent ; un segment inconnu, ou `rounds` hors format à phases, ramène
   à Infos.
-- La densité compacte à la souris (`pointer: fine`, ADR-073) n'est pas encore appliquée :
-  elle arrive avec les tableaux du Lot 18.
+- **Les listes sont des tableaux** : compétiteurs, voies, juges, catégories, liste des
+  compétitions et corbeille passent par le composant `DataList` de `packages/ui` — cartes
+  en dessous de 1024 px, tableau à en-tête collant au-dessus (ADR-074). Une colonne s'y
+  décrit une seule fois et sert aux deux rendus ; c'est l'écran qui choisit sa disposition,
+  il n'y a jamais deux rendus dans le DOM.
+- **Les en-têtes trient** (compétiteurs, juges, liste, corbeille), avec `aria-sort`. Sur la
+  liste des compétitions ils commandent le tri qui vit déjà dans l'adresse, et le sélecteur
+  « Trier par » s'efface. Voies et catégories ne se trient pas : leur ordre est celui que
+  vous posez avec les flèches.
+- **Une ligne d'ajout rapide** en tête du tableau des compétiteurs : `Entrée` ajoute et rend
+  le focus au prénom, `Échap` abandonne la ligne. La catégorie et le club sont conservés
+  d'une saisie à l'autre — on entre une catégorie entière sans toucher la souris. En dessous
+  de 1024 px, c'est le formulaire en carte d'avant.
+- **Densité compacte à la souris** (ADR-073) : les lignes de tableau descendent à ~40 px
+  sous `@media (pointer: fine) and (not (any-pointer: coarse))`. Dès qu'un doigt est
+  possible — téléphone, tablette, portable à écran tactile — tout revient à 48 px, et les
+  écrans juge et public ne sont jamais concernés.
+- Le tableau des compétiteurs ne montre l'année de naissance, le club et le numéro de
+  licence qu'à partir de 1280 px : en dessous, neuf colonnes rendraient les noms illisibles.
 
 ## Liste des compétitions et corbeille
 

@@ -627,7 +627,10 @@ pilotage) ; en-tête de compétition collant avec fil d'Ariane. Aucune
 fonctionnalité métier, aucune migration.
 ```
 
-### Lot 18 — Listes en tableaux denses (D2, à cadrer)
+### Lot 18 — Listes en tableaux denses (D2, livré)
+
+> Livré le 2026-09-21. Décisions : ADR-074, et amendement d'ADR-073 (la requête
+> de densité exclut désormais les portables à écran tactile).
 
 ```
 Lot 18 : composant `DataList` dans `packages/ui` (cartes sous `lg`, tableau
@@ -636,6 +639,11 @@ catégories, liste des compétitions et corbeille ; barre d'outils sur une ligne
 ligne d'ajout rapide des compétiteurs ; densité compacte sous `pointer: fine`
 (ADR-073).
 ```
+
+Écarts au cadrage initial, vus en navigateur : les colonnes de confort des
+compétiteurs (année, club, licence) attendent 1280 px, et le tri ne concerne que
+compétiteurs, juges, liste et corbeille — voies et catégories gardent l'ordre
+posé aux flèches.
 
 ### Lot 19 — Maître–détail (D3, à cadrer)
 
