@@ -73,7 +73,11 @@ const section = computed({
       :competition-id="competition.id"
       :format="competition.format"
     />
-    <PilotageAscents v-else-if="section === 'ascents'" :competition-id="competition.id" />
+    <PilotageAscents
+      v-else-if="section === 'ascents'"
+      :competition-id="competition.id"
+      @open="section = $event"
+    />
     <PilotageConflicts v-else-if="section === 'conflicts'" :competition-id="competition.id" />
     <PilotageActivityLog v-else-if="section === 'activity-log'" :competition-id="competition.id" />
   </div>
