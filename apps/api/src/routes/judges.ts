@@ -1,6 +1,8 @@
 import {
   createJudgeInputSchema,
   judgeSummarySchema,
+  updateJudgeInputSchema,
+  type JudgeAccessResent,
   type JudgeCreated,
   type JudgePinRegenerated,
 } from '@climbcontest/contracts'
@@ -47,6 +49,35 @@ async function routeIdsByJudge(db: Database, judgeIds: string[]): Promise<Map<st
   return map
 }
 
+async function findJudge(
+  db: Database,
+  competitionId: string,
+  jid: string,
+): Promise<typeof judge.$inferSelect> {
+  const existing = await db.query.judge.findFirst({
+    where: and(eq(judge.id, jid), eq(judge.competitionId, competitionId), isNull(judge.deletedAt)),
+  })
+  if (!existing) throw new ApiError(404, 'Juge introuvable', "Ce juge n'existe pas.")
+  return existing
+}
+
+async function assertOwnRoutes(db: Database, competitionId: string, routeIds: string[]) {
+  const ownRoutes = await db.query.route.findMany({
+    where: and(
+      inArray(route.id, routeIds),
+      eq(route.competitionId, competitionId),
+      isNull(route.deletedAt),
+    ),
+  })
+  if (ownRoutes.length !== new Set(routeIds).size) {
+    throw new ApiError(
+      400,
+      'Voie invalide',
+      "Une des voies assignées n'appartient pas à cette compétition.",
+    )
+  }
+}
+
 /**
  * `accessUrl`/`pin` ne sont présents que si `competition.judgeCredentialsStored`
  * était actif au moment de l'action qui les a produits (création, ou
@@ -91,20 +122,7 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
       const currentCompetition = c.get('competition')
       const input = c.req.valid('json')
 
-      const ownRoutes = await db.query.route.findMany({
-        where: and(
-          inArray(route.id, input.routeIds),
-          eq(route.competitionId, currentCompetition.id),
-          isNull(route.deletedAt),
-        ),
-      })
-      if (ownRoutes.length !== new Set(input.routeIds).size) {
-        throw new ApiError(
-          400,
-          'Voie invalide',
-          "Une des voies assignées n'appartient pas à cette compétition.",
-        )
-      }
+      await assertOwnRoutes(db, currentCompetition.id, input.routeIds)
 
       const accessToken = randomToken(32)
       // Le PIN suit le réglage de la compétition AU MOMENT de la création —
@@ -120,6 +138,9 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
           .values({
             competitionId: currentCompetition.id,
             displayName: input.displayName,
+            // Conservé (ADR-081) pour permettre un renvoi ultérieur sans
+            // ressaisie — distinct de l'envoi ponctuel ci-dessous.
+            email: input.email ?? null,
             accessTokenHash: hashToken(accessToken),
             accessTokenPrefix: accessToken.slice(0, 8),
             accessTokenPlain: storeCredentials ? accessToken : null,
@@ -164,18 +185,122 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
     },
   )
 
+  app.patch(
+    '/:jid',
+    zValidator('json', updateJudgeInputSchema, (result, c) => {
+      if (!result.success)
+        return problem(c, 400, 'Requête invalide', result.error.issues[0]?.message)
+    }),
+    async (c) => {
+      const currentCompetition = c.get('competition')
+      const jid = c.req.param('jid')
+      const input = c.req.valid('json')
+
+      const existing = await findJudge(db, currentCompetition.id, jid)
+
+      if (input.routeIds !== undefined) {
+        await assertOwnRoutes(db, currentCompetition.id, input.routeIds)
+      }
+
+      const updated = await db.transaction(async (tx) => {
+        const { routeIds, ...fields } = input
+        const [row] =
+          Object.keys(fields).length > 0
+            ? await tx
+                .update(judge)
+                .set({ ...fields, updatedAt: new Date() })
+                .where(eq(judge.id, jid))
+                .returning()
+            : [existing]
+
+        if (routeIds !== undefined) {
+          const currentLinks = await tx.query.judgeRoute.findMany({
+            where: eq(judgeRoute.judgeId, jid),
+          })
+          const currentIds = new Set(currentLinks.map((link) => link.routeId))
+          const nextIds = new Set(routeIds)
+          const toAdd = routeIds.filter((id) => !currentIds.has(id))
+          const toRemove = [...currentIds].filter((id) => !nextIds.has(id))
+
+          if (toAdd.length > 0) {
+            await tx.insert(judgeRoute).values(toAdd.map((routeId) => ({ judgeId: jid, routeId })))
+          }
+          for (const routeId of toRemove) {
+            await tx
+              .delete(judgeRoute)
+              .where(and(eq(judgeRoute.judgeId, jid), eq(judgeRoute.routeId, routeId)))
+          }
+        }
+
+        return row
+      })
+      if (!updated) throw new ApiError(500, 'Erreur interne', 'Impossible de modifier le juge.')
+
+      const routeIds = await routeIdsByJudge(db, [jid])
+      return c.json({ ...toDetail(updated, env), routeIds: routeIds.get(jid) ?? [] })
+    },
+  )
+
+  app.post('/:jid/resend-access', async (c) => {
+    const currentCompetition = c.get('competition')
+    const jid = c.req.param('jid')
+
+    const existing = await findJudge(db, currentCompetition.id, jid)
+    if (existing.revokedAt) {
+      throw new ApiError(409, 'Juge révoqué', "Ce juge est révoqué — son accès n'existe plus.")
+    }
+    if (!existing.email) {
+      throw new ApiError(400, 'Aucun e-mail', "Aucun e-mail n'est renseigné pour ce juge.")
+    }
+
+    // Réutilise le lien déjà stocké en clair s'il existe (ADR-027) ; sinon,
+    // il n'y a plus rien à renvoyer — on en génère un nouveau, comme
+    // `regenerate-pin` le fait pour le PIN. L'ancien lien cesse alors de
+    // fonctionner (ADR-081).
+    let accessUrl: string
+    let regenerated: boolean
+    if (existing.accessTokenPlain) {
+      accessUrl = `${env.PUBLIC_APP_URL}/j/${existing.accessTokenPlain}`
+      regenerated = false
+    } else {
+      const accessToken = randomToken(32)
+      accessUrl = `${env.PUBLIC_APP_URL}/j/${accessToken}`
+      regenerated = true
+      await db
+        .update(judge)
+        .set({
+          accessTokenHash: hashToken(accessToken),
+          accessTokenPrefix: accessToken.slice(0, 8),
+          accessTokenPlain: currentCompetition.judgeCredentialsStored ? accessToken : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(judge.id, jid))
+    }
+
+    // Contrairement à la création, c'est le seul but de cet appel : l'échec
+    // n'est pas avalé en silence, `emailSent` le rapporte à l'écran.
+    let emailSent: boolean
+    try {
+      const { subject, html } = judgeAccessEmail(
+        existing.displayName,
+        currentCompetition.name,
+        accessUrl,
+      )
+      await mailer.send(existing.email, subject, html)
+      emailSent = true
+    } catch {
+      emailSent = false
+    }
+
+    const response: JudgeAccessResent = { id: jid, accessUrl, regenerated, emailSent }
+    return c.json(response)
+  })
+
   app.post('/:jid/revoke', async (c) => {
     const currentCompetition = c.get('competition')
     const jid = c.req.param('jid')
 
-    const existing = await db.query.judge.findFirst({
-      where: and(
-        eq(judge.id, jid),
-        eq(judge.competitionId, currentCompetition.id),
-        isNull(judge.deletedAt),
-      ),
-    })
-    if (!existing) throw new ApiError(404, 'Juge introuvable', "Ce juge n'existe pas.")
+    await findJudge(db, currentCompetition.id, jid)
 
     const [updated] = await db
       .update(judge)
@@ -200,14 +325,7 @@ export function createJudgeRoutes(deps: JudgeRouteDeps): Hono {
     const currentCompetition = c.get('competition')
     const jid = c.req.param('jid')
 
-    const existing = await db.query.judge.findFirst({
-      where: and(
-        eq(judge.id, jid),
-        eq(judge.competitionId, currentCompetition.id),
-        isNull(judge.deletedAt),
-      ),
-    })
-    if (!existing) throw new ApiError(404, 'Juge introuvable', "Ce juge n'existe pas.")
+    const existing = await findJudge(db, currentCompetition.id, jid)
     if (!existing.pinHash) {
       throw new ApiError(
         409,

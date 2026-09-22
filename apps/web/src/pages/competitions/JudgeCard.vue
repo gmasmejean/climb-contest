@@ -20,11 +20,14 @@ const props = defineProps<{
   accessUrl: string | null
   revoking: boolean
   regenerating: boolean
+  resending: boolean
 }>()
 const emit = defineEmits<{
   copy: [text: string]
   revoke: []
   'regenerate-pin': []
+  edit: []
+  'resend-access': []
   close: []
 }>()
 </script>
@@ -89,6 +92,15 @@ const emit = defineEmits<{
     </p>
 
     <div v-if="!props.judge.revokedAt" class="flex flex-wrap gap-3">
+      <Button variant="secondary" @click="emit('edit')">Modifier</Button>
+      <Button
+        v-if="props.judge.email"
+        variant="secondary"
+        :disabled="props.resending"
+        @click="emit('resend-access')"
+      >
+        Renvoyer les accès par e-mail
+      </Button>
       <Button
         v-if="props.judge.hasPin"
         variant="secondary"

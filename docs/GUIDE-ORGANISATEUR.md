@@ -33,7 +33,7 @@ Onglet **Voies** : numéro, nom, nombre de prises, secteur, couleur, et les **ca
 Onglet **Tours** : créez qualification, demi-finale, finale ; indiquez **combien de qualifiés** passent au tour suivant, et quelles voies servent à quelle catégorie.
 
 ### Juges
-Onglet **Juges** : **Créer le juge** (son nom et ses voies). Vous obtenez un **lien** et un **QR code** — et un code à 6 chiffres si vous avez activé le code d'accès. **Planche de QR codes (PDF)** imprime un encart par juge et une page pour le public, à afficher dans la salle.
+Onglet **Juges** : **Créer le juge** (son nom, ses voies, et un e-mail optionnel). Vous obtenez un **lien** et un **QR code** — et un code à 6 chiffres si vous avez activé le code d'accès. **Planche de QR codes (PDF)** imprime un encart par juge et une page pour le public, à afficher dans la salle. **Modifier** permet de corriger le nom, l'e-mail ou de réassigner les voies à tout moment. **Renvoyer les accès par e-mail** (visible seulement si un e-mail est renseigné) redonne l'accès sans passer par une révocation.
 
 ### La veille au soir : « Prêt à démarrer ? »
 Cet onglet liste ce qui manque : catégorie sans voie, voie sans catégorie, compétiteur sans dossard, voie sans juge, tour sans voie. **Regardez-le la veille.**
@@ -109,7 +109,7 @@ Les compétiteurs sont souvent mineurs. Seul le **propriétaire du club** peut, 
 | **Un juge dit « en attente » longtemps** | Vérifiez sa dernière activité dans la Vue d'ensemble : c'est presque toujours le réseau. Ses saisies restent sur son téléphone et partiront seules. |
 | **Vous avez révoqué un juge qui avait encore des saisies sur son téléphone** | Rien n'est perdu. Dès que son téléphone retrouve du réseau, elles arrivent dans **Pilotage → Conflits**, sous « Saisie d'un accès révoqué — à valider ». Pour chacune : **Accepter** (elle compte au classement), **Refuser** (avec un motif) ou **Saisir une autre valeur**. Tant qu'il en reste, la catégorie ne peut pas être publiée. Son téléphone lui affiche « Votre accès a été révoqué ». |
 | **Un juge reprend le téléphone d'un autre** | En ouvrant son lien, le téléphone prévient s'il reste des saisies du juge précédent et les envoie d'abord. Ne touchez à « Effacer ces saisies » que si vous les avez déjà ressaisies vous-même. |
-| **Un juge a perdu son lien** | Onglet **Juges**, bouton **Voir l'accès**. Si le juge a un code, **Régénérer le PIN** ; sinon, **Révoquer** son accès et recréez-le pour obtenir un nouveau lien. |
+| **Un juge a perdu son lien** | Onglet **Juges** : s'il a un e-mail renseigné, **Renvoyer les accès par e-mail** suffit. Sinon, bouton **Voir l'accès** ; si le juge a un code, **Régénérer le PIN** ; en dernier recours, **Révoquer** son accès et recréez-le. |
 | **Un classement public semble bloqué** | Le public voit « Reconnexion… » : la page se remet à jour toute seule. Un classement « provisoire » n'est pas une panne. |
 | **Erreur de saisie découverte tard** | **Corriger** avec un motif (Pilotage → Voies). En phases, si un tour suivant est ouvert, la liste des qualifiés ne change plus. |
 | **J'ai supprimé une compétition par erreur** | **Mes compétitions → Corbeille → Restaurer**. Tant que vous n'avez pas choisi « Supprimer définitivement », rien n'est perdu. |

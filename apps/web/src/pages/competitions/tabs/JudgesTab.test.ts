@@ -1,4 +1,5 @@
 import type { Competition } from '@climbcontest/contracts'
+import { useToast } from '@climbcontest/ui'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createWebHistory, type Router } from 'vue-router'
@@ -11,8 +12,10 @@ const api = vi.hoisted(() => ({
   judges: {
     list: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
     revoke: vi.fn(),
     regeneratePin: vi.fn(),
+    resendAccess: vi.fn(),
     downloadQrSheet: vi.fn(),
   },
   routes: { list: vi.fn() },
@@ -46,6 +49,7 @@ function aJudge(overrides: Partial<JudgeWithRoutes> = {}): JudgeWithRoutes {
     id: 'judge-1',
     competitionId: 'comp-1',
     displayName: 'Bruno',
+    email: null,
     accessTokenPrefix: 'abc12345',
     hasPin: true,
     pinAttempts: 0,
@@ -243,6 +247,22 @@ describe('JudgesTab — actions de ligne', () => {
     expect(row.text()).not.toContain('Régénérer le PIN')
     expect(buttonNamed(wrapper, 'Fiche')).toBeDefined()
   })
+
+  it('propose Modifier, sauf pour un juge révoqué', async () => {
+    api.judges.list.mockResolvedValue([aJudge()])
+    expect(buttonNamed(await mountTab(), 'Modifier')).toBeDefined()
+
+    api.judges.list.mockResolvedValue([aJudge({ revokedAt: new Date('2026-01-02T00:00:00Z') })])
+    expect(buttonNamed(await mountTab(), 'Modifier')).toBeUndefined()
+  })
+
+  it('ne propose de renvoyer les accès que si un e-mail est renseigné', async () => {
+    api.judges.list.mockResolvedValue([aJudge()])
+    expect(buttonNamed(await mountTab(), 'Renvoyer les accès par e-mail')).toBeUndefined()
+
+    api.judges.list.mockResolvedValue([aJudge({ email: 'juge@club-demo.test' })])
+    expect(buttonNamed(await mountTab(), 'Renvoyer les accès par e-mail')).toBeDefined()
+  })
 })
 
 describe('JudgesTab — fiche du juge (Lot 19)', () => {
@@ -358,6 +378,92 @@ describe('JudgesTab — fiche du juge (Lot 19)', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="judge-card"]').exists()).toBe(false)
     expect(document.body.textContent).toContain('Accès du juge')
+  })
+})
+
+describe('JudgesTab — édition d’un juge', () => {
+  const routeId = '11111111-1111-4111-8111-111111111111'
+
+  it('pré-remplit le panneau et enregistre les modifications', async () => {
+    api.judges.list.mockResolvedValue([
+      aJudge({ email: 'avant@club-demo.test', routeIds: [routeId] }),
+    ])
+    api.routes.list.mockResolvedValue([{ id: routeId, number: 3, name: 'Le dièdre' }])
+    api.judges.update.mockResolvedValue(aJudge())
+    const wrapper = await mountTab()
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Modifier le juge')
+    expect((wrapper.get('input[type="text"]').element as HTMLInputElement).value).toBe('Bruno')
+    expect((wrapper.get('input[type="email"]').element as HTMLInputElement).value).toBe(
+      'avant@club-demo.test',
+    )
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.judges.update).toHaveBeenCalledWith('comp-1', 'judge-1', {
+      displayName: 'Bruno',
+      routeIds: [routeId],
+      email: 'avant@club-demo.test',
+    })
+  })
+
+  it('modifie depuis la fiche, en maître–détail : l’édition remplace la fiche', async () => {
+    stubDesktop(true)
+    api.judges.list.mockResolvedValue([aJudge()])
+    api.judges.update.mockResolvedValue(aJudge())
+    const wrapper = await mountTab()
+    await buttonNamed(wrapper, 'Fiche')?.trigger('click')
+    await flushPromises()
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier le juge')
+    expect(wrapper.find('[data-testid="judge-card"]').exists()).toBe(false)
+  })
+})
+
+describe('JudgesTab — renvoi des accès par e-mail', () => {
+  it('affiche un toast de succès quand le lien existant a été réutilisé', async () => {
+    api.judges.list.mockResolvedValue([aJudge({ email: 'juge@club-demo.test' })])
+    api.judges.resendAccess.mockResolvedValue({
+      id: 'judge-1',
+      accessUrl: 'https://exemple.test/j/abc',
+      regenerated: false,
+      emailSent: true,
+    })
+    const wrapper = await mountTab()
+    const { toasts } = useToast()
+    toasts.splice(0, toasts.length)
+
+    await buttonNamed(wrapper, 'Renvoyer les accès par e-mail')?.trigger('click')
+    await flushPromises()
+
+    expect(api.judges.resendAccess).toHaveBeenCalledWith('comp-1', 'judge-1')
+    expect(toasts.map((t) => t.text)).toContain('Accès renvoyé par e-mail.')
+    expect(document.body.textContent).not.toContain('Nouvel accès envoyé')
+  })
+
+  it('ouvre la modale « à noter maintenant » quand l’accès a dû être régénéré', async () => {
+    api.judges.list.mockResolvedValue([aJudge({ email: 'juge@club-demo.test' })])
+    api.judges.resendAccess.mockResolvedValue({
+      id: 'judge-1',
+      accessUrl: 'https://exemple.test/j/nouveau',
+      regenerated: true,
+      emailSent: true,
+    })
+    const wrapper = await mountTab()
+
+    await buttonNamed(wrapper, 'Renvoyer les accès par e-mail')?.trigger('click')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('Nouvel accès envoyé')
+    const input = [...document.body.querySelectorAll('input[readonly]')].find(
+      (el) => (el as HTMLInputElement).value === 'https://exemple.test/j/nouveau',
+    )
+    expect(input).toBeDefined()
   })
 })
 

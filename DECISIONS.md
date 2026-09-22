@@ -3117,6 +3117,69 @@ dédié (moins extensible : ce menu est le point d'accroche naturel pour de futu
 
 ---
 
+## ADR-081 — Édition d'un juge et renvoi des accès par e-mail
+
+**Date :** 2026-09-22
+**Contexte :** l'utilisateur demande deux ajouts à l'onglet Juges : éditer un juge existant
+(notamment réassigner ses voies) et renvoyer son accès par e-mail. Aucun des deux n'existait :
+seules la création, la révocation (irréversible) et la régénération du PIN existaient. L'e-mail
+d'un juge n'était par ailleurs jamais conservé — il ne servait qu'à un envoi ponctuel à la
+création (ADR-028), puis était oublié.
+
+**Décision (actée avec l'utilisateur) :**
+
+1. **L'e-mail du juge est désormais persisté** (`judge.email`, nullable, migration 0013). Il
+   devient éditable au même titre que le nom et les voies assignées, et conditionne l'affichage
+   du bouton « Renvoyer les accès par e-mail ». Raison : sans ce stockage, impossible d'offrir un
+   renvoi sans redemander l'adresse à chaque fois.
+2. **`PATCH .../judges/:jid`** modifie nom, e-mail et voies assignées. Les voies sont remplacées
+   en bloc (comme `categoryIds` sur une voie, ADR pré-existant) : diff add/remove sur
+   `judge_route`, dans une transaction. Aucune garde particulière contre le retrait d'une voie —
+   `assertJudgeAssignedToRoute` revérifie l'assignation en base à chaque requête du juge
+   (ADR-026 point 4), donc retirer une voie n'affecte aucun passage déjà saisi, l'effet est
+   immédiat et sans perte.
+3. **`POST .../judges/:jid/resend-access`** réutilise le lien déjà stocké en clair s'il existe
+   (ADR-027). S'il n'existe pas (réglage « conserver en clair » désactivé au moment de la
+   création, ou après une régénération sans conservation), il n'y a plus rien à renvoyer : un
+   nouvel accès est généré, comme `regenerate-pin` le fait pour le PIN — l'ancien lien cesse
+   alors de fonctionner. Jamais le PIN dans cet e-mail (même séparation des facteurs qu'ADR-027).
+4. **`emailSent` n'est jamais avalé en silence sur cette route**, contrairement à la création :
+   c'est le seul but de l'appel, donc l'écran affiche l'échec s'il survient (toast d'erreur, ou
+   — quand l'accès a dû être régénéré — une modale « à noter maintenant » qui dit explicitement
+   que l'envoi a échoué et qu'il faut communiquer le lien autrement).
+5. **Pas de limiteur de débit** sur le renvoi : action organisateur authentifiée et scoped à sa
+   compétition (`requireOrganizer` + `requireCompetitionAccess`), à la différence de
+   `POST /auth/resend-verification` qui est un point d'entrée public nécessitant une défense
+   anti-énumération.
+6. **UI** : le formulaire de création de l'onglet Juges devient `JudgeEditorPanel.vue`,
+   réutilisé pour l'édition (prop `judge: JudgeWithRoutes | null`, `null` = ajouter), sur le
+   modèle exact de `RouteEditorPanel.vue`. Un bouton « Modifier » rejoint « Voir l'accès »,
+   « Régénérer le PIN » et « Révoquer » dans les trois gabarits (fiche maître-détail, tableau
+   1024-1440 px, cartes mobiles) ; « Renvoyer les accès par e-mail » n'apparaît que si
+   `judge.email` est renseigné et le juge non révoqué.
+
+**Conséquences :** `packages/db/src/schema.ts` (colonne `judge.email`), migration
+`0013_judge_email` (réversible, testée dans les deux sens) ; `packages/contracts/src/judge.ts`
+(`updateJudgeInputSchema`, `judgeAccessResentSchema`) ; `apps/api/src/routes/judges.ts` (PATCH et
+resend-access, helpers `findJudge`/`assertOwnRoutes` factorisés) ; `apps/web/src/api/judges.ts` ;
+nouveau `apps/web/src/pages/competitions/JudgeEditorPanel.vue` ; `JudgesTab.vue` et
+`JudgeCard.vue` mis à jour. `packages/db/src/db.test.ts` : le test de réversibilité en chaîne
+(migration 0010) portait un compte de crans codé en dur (« 3 » avec un commentaire « à réviser si
+une migration est ajoutée après 0012 ») — corrigé à 4 pour inclure 0013 ; un oubli aurait laissé
+la base dans un état partiellement annulé pour tous les tests suivants (constaté : c'est
+exactement ce qui s'est produit avant la correction). Vérifié dans un vrai navigateur (Chromium
+via Playwright, bureau 1440 px et 360 px) sur une pile jetable : édition du nom et des voies,
+renvoi avec réutilisation du lien existant (e-mail reçu dans Mailpit) et renvoi avec régénération
+(modale « à noter maintenant », pas de défilement horizontal à 360 px).
+
+**Alternatives écartées :** redemander l'e-mail à chaque renvoi sans le stocker (rejeté —
+ressaisie inutile à chaque fois) ; désactiver le bouton de renvoi sans régénérer quand le lien
+n'est pas conservé (rejeté — l'utilisateur préfère une régénération automatique à un cul-de-sac) ;
+permettre depuis ce formulaire d'ajouter un PIN à un juge qui n'en a pas (hors sujet, explicitement
+écarté par TODO.md/ADR-026 point 2 — non revisité ici).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
