@@ -376,6 +376,16 @@ describe('JudgesTab — entre 1024 et 1440 px (ADR-075)', () => {
     expect(buttonNamed(wrapper, "Voir l'accès")).toBeDefined()
   })
 
+  it('ouvre la modale d’accès au clic, sans fiche à côté', async () => {
+    stubViewport(1280)
+    api.judges.list.mockResolvedValue([aJudge({ accessUrl: 'https://exemple.test/j/abc' })])
+    const wrapper = await mountTab()
+
+    await buttonNamed(wrapper, "Voir l'accès")?.trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('Accès du juge')
+  })
+
   it('bascule sur la fiche à 1440 px', async () => {
     stubViewport(1440)
     api.judges.list.mockResolvedValue([aJudge({ accessUrl: 'https://exemple.test/j/abc' })])

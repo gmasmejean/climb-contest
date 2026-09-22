@@ -572,7 +572,7 @@ const dangerRowActionClass =
       </div>
     </Modal>
 
-    <Modal :open="!isDesktop && viewedJudge !== null" title="Accès du juge" @close="closeViewed">
+    <Modal :open="!isMasterDetail && viewedJudge !== null" title="Accès du juge" @close="closeViewed">
       <div v-if="viewedJudge" class="flex flex-col gap-4">
         <p class="text-sm text-gray-600">Accès de {{ viewedJudge.displayName }}.</p>
         <div class="flex flex-col gap-1">
