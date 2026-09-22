@@ -86,4 +86,60 @@ describe('Tabs', () => {
     expect(document.activeElement?.id).toBe('tab-categories')
     wrapper.unmount()
   })
+
+  describe('pastilles (Lot 20)', () => {
+    const withBadge = [
+      {
+        id: 'pilotage',
+        label: 'Pilotage',
+        badge: { count: 2, label: '2 conflits', tone: 'danger' as const },
+      },
+      { id: 'exports', label: 'Exports' },
+    ]
+
+    it('n’en affiche aucune par défaut', () => {
+      const wrapper = mount(Tabs, { props: { modelValue: 'infos', tabs } })
+      expect(wrapper.find('[role="tab"] span[aria-hidden="true"]').exists()).toBe(false)
+      expect(wrapper.find('[role="tab"]').attributes('aria-label')).toBeUndefined()
+    })
+
+    it('affiche le compte, mais le tient hors du nom accessible', () => {
+      const wrapper = mount(Tabs, { props: { modelValue: 'pilotage', tabs: withBadge } })
+      const tab = wrapper.findAll('[role="tab"]')[0]
+      expect(tab?.find('span[aria-hidden="true"]').text()).toBe('2')
+      // Le sens passe par le nom accessible : « Pilotage 2 » ne veut rien dire.
+      expect(tab?.attributes('aria-label')).toBe('Pilotage, 2 conflits')
+    })
+
+    it('garde le libellé en sous-chaîne du nom accessible', () => {
+      // Les parcours e2e ciblent tous `getByRole('tab', { name: 'Pilotage' })`.
+      const wrapper = mount(Tabs, { props: { modelValue: 'pilotage', tabs: withBadge } })
+      expect(wrapper.findAll('[role="tab"]')[0]?.attributes('aria-label')).toContain('Pilotage')
+    })
+
+    it('teinte la pastille selon la gravité', () => {
+      const wrapper = mount(Tabs, {
+        props: {
+          modelValue: 'pilotage',
+          tabs: [
+            {
+              id: 'a',
+              label: 'A',
+              badge: { count: 1, label: '1 conflit', tone: 'danger' as const },
+            },
+            {
+              id: 'b',
+              label: 'B',
+              badge: { count: 3, label: '3 alertes', tone: 'warning' as const },
+            },
+            { id: 'c', label: 'C', badge: { count: 4, label: '4 points' } },
+          ],
+        },
+      })
+      const pills = wrapper.findAll('[role="tab"] span[aria-hidden="true"]')
+      expect(pills[0]?.classes()).toContain('bg-red-700')
+      expect(pills[1]?.classes()).toContain('bg-amber-700')
+      expect(pills[2]?.classes()).toContain('bg-gray-100')
+    })
+  })
 })

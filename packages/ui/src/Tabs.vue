@@ -1,12 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 
-interface Tab {
-  id: string
-  label: string
-  /** Intertitre sous lequel ranger l'onglet ; affiché en orientation verticale seulement. */
-  group?: string
-}
+import type { TabBadge, TabItem as Tab } from './tabs'
 
 const props = withDefaults(
   defineProps<{
@@ -42,6 +37,21 @@ function select(id: string): void {
 // Les deux axes répondent dans les deux orientations : à 1023 px la barre
 // latérale redevient une rangée, l'habitude du clavier ne doit pas changer.
 const STEPS: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
+
+const BADGE_TONES: Record<NonNullable<TabBadge['tone']>, string> = {
+  neutral: 'bg-gray-100 text-gray-900',
+  warning: 'bg-amber-700 text-white',
+  danger: 'bg-red-700 text-white',
+}
+
+/**
+ * La pastille est `aria-hidden` et son sens passe par le nom accessible du
+ * bouton. Sans ça, « 2 » entrerait dans le nom (« Pilotage 2 ») : illisible au
+ * lecteur d'écran, et les parcours e2e ciblent tous `getByRole('tab', { name })`.
+ */
+function tabLabel(tab: Tab): string | undefined {
+  return tab.badge ? `${tab.label}, ${tab.badge.label}` : undefined
+}
 
 async function onKeydown(event: KeyboardEvent): Promise<void> {
   const delta = STEPS[event.key]
@@ -85,9 +95,12 @@ async function onKeydown(event: KeyboardEvent): Promise<void> {
         :aria-selected="tab.id === modelValue"
         :aria-controls="`panel-${tab.id}`"
         :tabindex="tab.id === modelValue ? 0 : -1"
-        class="min-h-12 shrink-0 px-4 text-base font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+        :aria-label="tabLabel(tab)"
+        class="inline-flex min-h-12 shrink-0 items-center gap-2 px-4 text-base font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
         :class="[
-          orientation === 'vertical' ? 'w-full rounded-lg text-left' : 'border-b-2',
+          orientation === 'vertical'
+            ? 'w-full justify-between rounded-lg text-left'
+            : 'justify-center border-b-2',
           tab.id === modelValue
             ? orientation === 'vertical'
               ? 'bg-blue-50 text-blue-700'
@@ -98,7 +111,15 @@ async function onKeydown(event: KeyboardEvent): Promise<void> {
         ]"
         @click="select(tab.id)"
       >
-        {{ tab.label }}
+        <span class="min-w-0 truncate">{{ tab.label }}</span>
+        <span
+          v-if="tab.badge"
+          aria-hidden="true"
+          class="inline-flex min-w-6 shrink-0 items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums"
+          :class="BADGE_TONES[tab.badge.tone ?? 'neutral']"
+        >
+          {{ tab.badge.count }}
+        </span>
       </button>
     </template>
   </div>
