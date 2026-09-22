@@ -7,6 +7,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { competitionsApi } from '../../api/competitions'
 import BrandShell from '../../components/brand/BrandShell.vue'
 import OrganizerMenu from '../../components/brand/OrganizerMenu.vue'
+import { useCompetitionPulse } from '../../composables/useCompetitionPulse'
 import { DESKTOP_QUERY, useMediaQuery } from '../../composables/useMediaQuery'
 import {
   competitionTabs,
@@ -58,6 +59,16 @@ watchEffect(() => {
 })
 
 const isDesktop = useMediaQuery(DESKTOP_QUERY)
+
+/*
+ * Un seul sondage pour toute la page (Lot 20). Il tourne quand la compétition
+ * est en cours — les pastilles n'ont de sens que ce jour-là — ou quand
+ * l'onglet Pilotage est ouvert, ce qui reproduit exactement le comportement
+ * d'avant ce lot pour qui prépare sa compétition la veille.
+ */
+const pulse = useCompetitionPulse(competitionId, {
+  live: () => competition.value?.status === 'running' || activeTab.value === 'pilotage',
+})
 
 const startsOn = computed(() =>
   competition.value
@@ -133,7 +144,11 @@ const startsOn = computed(() =>
           <RoundsTab v-else-if="activeTab === 'rounds'" :competition-id="competitionId" />
           <JudgesTab v-else-if="activeTab === 'judges'" :competition="competition" />
           <ReadinessTab v-else-if="activeTab === 'readiness'" :competition-id="competitionId" />
-          <PilotageTab v-else-if="activeTab === 'pilotage'" :competition="competition" />
+          <PilotageTab
+            v-else-if="activeTab === 'pilotage'"
+            :competition="competition"
+            :pulse="pulse"
+          />
           <ExportsTab v-else-if="activeTab === 'exports'" :competition="competition" />
         </div>
       </div>
