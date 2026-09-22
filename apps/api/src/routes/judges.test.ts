@@ -268,6 +268,26 @@ describe('e-mail à la création', () => {
     expect(sentEmail?.html).not.toContain(created.pin)
   })
 
+  it("conserve l'e-mail (ADR-081), consultable ensuite depuis la liste", async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        displayName: 'Juge Conservé',
+        routeIds: [route.id],
+        email: 'juge-conserve@club-demo.test',
+      }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+
+    const listResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      headers: authHeaders(accessToken),
+    })
+    const list = (await listResponse.json()) as Array<{ id: string; email?: string | null }>
+    expect(list.find((j) => j.id === created.id)?.email).toBe('juge-conserve@club-demo.test')
+  })
+
   it("n'envoie rien quand aucun e-mail n'est fourni", async () => {
     const { accessToken, competition, route } = await setupCompetitionWithRoute()
     // `setupCompetitionWithRoute` enregistre l'organisateur, ce qui envoie déjà
@@ -283,6 +303,311 @@ describe('e-mail à la création', () => {
     const created = (await response.json()) as { emailSent?: boolean }
     expect(created.emailSent).toBeUndefined()
     expect(mailer.sent).toHaveLength(sentBefore)
+  })
+})
+
+describe('PATCH /competitions/:id/judges/:jid', () => {
+  it('modifie le nom seul, sans toucher aux voies assignées', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Avant', routeIds: [route.id] }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ displayName: 'Juge Après' }),
+      },
+    )
+    expect(response.status).toBe(200)
+    const updated = (await response.json()) as { displayName: string; routeIds: string[] }
+    expect(updated.displayName).toBe('Juge Après')
+    expect(updated.routeIds).toEqual([route.id])
+  })
+
+  it('change les voies assignées : ajout et retrait', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const otherRouteResponse = await app.request(`/api/v1/competitions/${competition.id}/routes`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ number: 2, holdCount: 30 }),
+    })
+    const otherRoute = (await otherRouteResponse.json()) as { id: string }
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Voies', routeIds: [route.id] }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ routeIds: [otherRoute.id] }),
+      },
+    )
+    expect(response.status).toBe(200)
+    const updated = (await response.json()) as { routeIds: string[] }
+    expect(updated.routeIds).toEqual([otherRoute.id])
+  })
+
+  it('retirer une voie coupe aussitôt l’accès du juge à sa notation (ADR-026)', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Retiré', routeIds: [route.id] }),
+    })
+    const created = (await createResponse.json()) as { id: string; accessToken: string }
+    const judgeAuth = await app.request('/api/v1/judge/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: created.accessToken }),
+    })
+    const { token: judgeJwt } = (await judgeAuth.json()) as { token: string }
+
+    await app.request(`/api/v1/competitions/${competition.id}/judges/${created.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ routeIds: [] }),
+    })
+
+    const attempt = await app.request(`/api/v1/judge/routes/${route.id}`, {
+      headers: { authorization: `Bearer ${judgeJwt}` },
+    })
+    expect(attempt.status).not.toBe(200)
+  })
+
+  it("refuse une voie qui n'appartient pas à cette compétition", async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const otherCompetition = await createTestCompetition(app, accessToken, { format: 'contest' })
+    const otherRouteResponse = await app.request(
+      `/api/v1/competitions/${otherCompetition.id}/routes`,
+      {
+        method: 'POST',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ number: 1, holdCount: 40 }),
+      },
+    )
+    const otherRoute = (await otherRouteResponse.json()) as { id: string }
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Étranger', routeIds: [route.id] }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ routeIds: [otherRoute.id] }),
+      },
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('modifie et efface l’e-mail', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        displayName: 'Juge Mail Éditable',
+        routeIds: [route.id],
+        email: 'avant@club-demo.test',
+      }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+
+    const changed = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ email: 'apres@club-demo.test' }),
+      },
+    )
+    expect(((await changed.json()) as { email?: string | null }).email).toBe(
+      'apres@club-demo.test',
+    )
+
+    const cleared = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ email: null }),
+      },
+    )
+    expect(((await cleared.json()) as { email?: string | null }).email).toBeNull()
+  })
+
+  it('404 sur un juge inconnu', async () => {
+    const { accessToken, competition } = await setupCompetitionWithRoute()
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/00000000-0000-0000-0000-000000000000`,
+      {
+        method: 'PATCH',
+        headers: authHeaders(accessToken),
+        body: JSON.stringify({ displayName: 'Fantôme' }),
+      },
+    )
+    expect(response.status).toBe(404)
+  })
+})
+
+describe('POST /competitions/:id/judges/:jid/resend-access', () => {
+  it('réutilise le lien déjà stocké en clair (ADR-027) sans le changer', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        displayName: 'Juge Renvoi',
+        routeIds: [route.id],
+        email: 'renvoi@club-demo.test',
+      }),
+    })
+    const created = (await createResponse.json()) as { id: string; accessUrl: string }
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}/resend-access`,
+      { method: 'POST', headers: authHeaders(accessToken) },
+    )
+    expect(response.status).toBe(200)
+    const resent = (await response.json()) as {
+      accessUrl: string
+      regenerated: boolean
+      emailSent: boolean
+    }
+    expect(resent.regenerated).toBe(false)
+    expect(resent.accessUrl).toBe(created.accessUrl)
+    expect(resent.emailSent).toBe(true)
+
+    const sentEmail = mailer.sent.findLast((email) => email.to === 'renvoi@club-demo.test')
+    expect(sentEmail?.html).toContain(resent.accessUrl)
+  })
+
+  it("régénère un nouvel accès quand l'ancien n'était pas conservé en clair — l'ancien lien ne fonctionne plus", async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgeCredentialsStored: false,
+    })
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        displayName: 'Juge Sans Trace',
+        routeIds: [route.id],
+        email: 'sans-trace@club-demo.test',
+      }),
+    })
+    const created = (await createResponse.json()) as { id: string; accessToken: string }
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}/resend-access`,
+      { method: 'POST', headers: authHeaders(accessToken) },
+    )
+    expect(response.status).toBe(200)
+    const resent = (await response.json()) as { accessUrl: string; regenerated: boolean }
+    expect(resent.regenerated).toBe(true)
+    expect(resent.accessUrl).not.toContain(created.accessToken)
+
+    const oldTokenAuth = await app.request('/api/v1/judge/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: created.accessToken }),
+    })
+    expect(oldTokenAuth.status).toBe(404)
+
+    const newToken = resent.accessUrl.split('/').pop()
+    const newTokenAuth = await app.request('/api/v1/judge/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: newToken }),
+    })
+    expect(newTokenAuth.status).toBe(200)
+  })
+
+  it("refuse quand aucun e-mail n'est renseigné (400)", async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ displayName: 'Juge Sans Mail', routeIds: [route.id] }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}/resend-access`,
+      { method: 'POST', headers: authHeaders(accessToken) },
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('refuse pour un juge révoqué (409)', async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute()
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        displayName: 'Juge Révoqué',
+        routeIds: [route.id],
+        email: 'revoque@club-demo.test',
+      }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+    await app.request(`/api/v1/competitions/${competition.id}/judges/${created.id}/revoke`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+    })
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}/resend-access`,
+      { method: 'POST', headers: authHeaders(accessToken) },
+    )
+    expect(response.status).toBe(409)
+  })
+
+  it("l'accès reste utilisable même si l'envoi de l'e-mail échoue (emailSent: false)", async () => {
+    const { accessToken, competition, route } = await setupCompetitionWithRoute({
+      judgeCredentialsStored: false,
+    })
+    const createResponse = await app.request(`/api/v1/competitions/${competition.id}/judges`, {
+      method: 'POST',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        displayName: 'Juge SMTP KO',
+        routeIds: [route.id],
+        email: 'smtp-ko@club-demo.test',
+      }),
+    })
+    const created = (await createResponse.json()) as { id: string }
+    mailer.failNext()
+
+    const response = await app.request(
+      `/api/v1/competitions/${competition.id}/judges/${created.id}/resend-access`,
+      { method: 'POST', headers: authHeaders(accessToken) },
+    )
+    expect(response.status).toBe(200)
+    const resent = (await response.json()) as { accessUrl: string; emailSent: boolean }
+    expect(resent.emailSent).toBe(false)
+
+    const newToken = resent.accessUrl.split('/').pop()
+    const newTokenAuth = await app.request('/api/v1/judge/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: newToken }),
+    })
+    expect(newTokenAuth.status).toBe(200)
   })
 })
 

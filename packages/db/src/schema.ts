@@ -398,6 +398,9 @@ export const judge = pgTable('judge', {
     .notNull()
     .references(() => competition.id),
   displayName: text('display_name').notNull(),
+  // Optionnel — sert à l'envoi (et au renvoi) du lien d'accès par e-mail.
+  // Jamais utilisée pour l'authentification.
+  email: text('email'),
   accessTokenHash: text('access_token_hash').notNull(),
   accessTokenPrefix: text('access_token_prefix').notNull(),
   // Nullable depuis le Lot 4 (DECISIONS.md ADR-026) : le PIN est une option

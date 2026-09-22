@@ -430,6 +430,9 @@ round_route                             -- quelles voies dans quel tour, pour qu
 judge
   id, competition_id → competition
   display_name
+  email (nullable)                      -- pour l'envoi et le renvoi du lien
+                                         -- d'accès (ADR-028, ADR-081) ; jamais
+                                         -- utilisé pour authentifier
   access_token_hash                     -- authentification : source de vérité
   access_token_prefix                   -- 8 car. pour retrouver la ligne
   access_token_plain (nullable)         -- réaffichage organisateur seulement,
@@ -763,6 +766,16 @@ POST   /competitions/:id/judges                { displayName, routeIds,
                                                   l'exige) ; email envoie le
                                                   lien seul, jamais le PIN
                                                   (ADR-028)
+PATCH  /competitions/:id/judges/:jid            { displayName?, email?,
+                                                   routeIds? } (ADR-081) ;
+                                                  routeIds remplace l'ensemble
+                                                  des voies assignées
+POST   /competitions/:id/judges/:jid/resend-access    réutilise le lien
+                                                        stocké en clair s'il
+                                                        existe, sinon en
+                                                        régénère un nouveau
+                                                        (ADR-081) ; 400 sans
+                                                        e-mail, 409 si révoqué
 POST   /competitions/:id/judges/:jid/revoke
 POST   /competitions/:id/judges/:jid/regenerate-pin   409 si le juge n'a pas
                                                         de PIN (ADR-026)

@@ -1,8 +1,10 @@
 import type {
   CreateJudgeInput,
+  JudgeAccessResent,
   JudgeCreated,
   JudgePinRegenerated,
   JudgeSummary,
+  UpdateJudgeInput,
 } from '@climbcontest/contracts'
 import { ref } from 'vue'
 
@@ -38,6 +40,15 @@ export const judgesApi = {
     apiFetch<JudgeCreated>(`/competitions/${competitionId}/judges`, {
       method: 'POST',
       body: json(input),
+    }),
+  update: (competitionId: string, judgeId: string, input: UpdateJudgeInput) =>
+    apiFetch<JudgeWithRoutes>(`/competitions/${competitionId}/judges/${judgeId}`, {
+      method: 'PATCH',
+      body: json(input),
+    }),
+  resendAccess: (competitionId: string, judgeId: string) =>
+    apiFetch<JudgeAccessResent>(`/competitions/${competitionId}/judges/${judgeId}/resend-access`, {
+      method: 'POST',
     }),
   revoke: (competitionId: string, judgeId: string) =>
     apiFetch<JudgeWithRoutes>(`/competitions/${competitionId}/judges/${judgeId}/revoke`, {

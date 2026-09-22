@@ -362,9 +362,11 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
 
   it('le up réplique l’ancien statut sur chaque catégorie du tour, le down garde `open` en priorité', async () => {
     await withRawClient(async (client) => {
-      // 0011 (Lot 15) et 0012 (Lot 21) ont été posées par-dessus 0010 : trois
-      // crans. À réviser si une migration est ajoutée après 0012.
-      expect(await revertLastMigrations(client, 3)).toEqual([
+      // 0011 (Lot 15), 0012 (Lot 21) et 0013 (juge, ADR-081) ont été posées
+      // par-dessus 0010 : quatre crans. À réviser si une migration est ajoutée
+      // après 0013.
+      expect(await revertLastMigrations(client, 4)).toEqual([
+        '0013_judge_email.sql',
         '0012_lot21_ascent_voided_at.sql',
         '0011_lot15_route_photo.sql',
         '0010_lot12_round_category.sql',
@@ -398,7 +400,7 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
         [openId, u16.id],
       )
-      await revertLastMigrations(client, 3)
+      await revertLastMigrations(client, 4)
       const back = await client.query<{ id: string; status: string }>(
         'select id, status from round where id = any($1)',
         [[openId, closedId, draftId]],
@@ -580,6 +582,34 @@ describe('migration 0012_lot21_ascent_voided_at (ADR-078)', () => {
         "select is_nullable, column_default from information_schema.columns where table_name = 'ascent' and column_name = 'voided_at'",
       )
       expect(nullable.rows[0]).toMatchObject({ is_nullable: 'YES', column_default: null })
+    })
+  })
+})
+
+describe('migration 0013_judge_email (ADR-081)', () => {
+  it('est réversible : le down retire judge.email, le up la rétablit, nulle', async () => {
+    await withRawClient(async (client) => {
+      const hasColumn = async () => {
+        const result = await client.query(
+          "select 1 from information_schema.columns where table_name = 'judge' and column_name = 'email'",
+        )
+        return result.rows.length === 1
+      }
+      expect(await hasColumn()).toBe(true)
+
+      let guard = 0
+      while (await hasColumn()) {
+        expect((await revertLastMigrations(client, 1)).length).toBe(1)
+        guard += 1
+        expect(guard).toBeLessThan(20)
+      }
+
+      await applyPendingMigrations(client)
+      expect(await hasColumn()).toBe(true)
+      const nullable = await client.query(
+        "select is_nullable from information_schema.columns where table_name = 'judge' and column_name = 'email'",
+      )
+      expect(nullable.rows[0]).toMatchObject({ is_nullable: 'YES' })
     })
   })
 })

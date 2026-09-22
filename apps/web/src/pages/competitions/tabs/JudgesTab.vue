@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import {
-  createJudgeInputSchema,
-  type Competition,
-  type JudgeCreated,
-} from '@climbcontest/contracts'
+import { type Competition, type JudgeCreated } from '@climbcontest/contracts'
 import {
   Badge,
   Button,
@@ -13,7 +9,7 @@ import {
   type DataListColumn,
   type DataListSort,
 } from '@climbcontest/ui'
-import { computed, reactive, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 
@@ -28,6 +24,7 @@ import {
 } from '../../../composables/useMediaQuery'
 import { judgeAccessUrl } from '../../../lib/judge-access'
 import { compareText, sortRows } from '../../../lib/table-sort'
+import JudgeEditorPanel from '../JudgeEditorPanel.vue'
 import JudgeCard from '../JudgeCard.vue'
 
 const props = defineProps<{ competition: Competition }>()
@@ -97,17 +94,16 @@ function toggleCredentialsStored(event: Event): void {
   credentialsStoredMutation.mutate((event.target as HTMLInputElement).checked)
 }
 
-function emptyForm() {
-  return { displayName: '', routeIds: [] as string[], email: '' }
-}
-const form = reactive(emptyForm())
-const formError = ref('')
+// Juge en cours de modification dans le panneau (`null` = panneau en mode
+// ajout, ou fiche si un juge est sélectionné en maître–détail). Local plutôt
+// que dans l'adresse : contrairement à la voie ouverte, l'édition d'un juge
+// est une action ponctuelle, pas un lien profond à préserver au rechargement.
+const editingJudgeId = ref<string | null>(null)
+const editingJudge = computed(() => judges.value?.find((j) => j.id === editingJudgeId.value))
 
-const createMutation = useMutation({
-  mutationFn: () =>
-    judgesApi.create(props.competition.id, { ...form, email: form.email || undefined }),
-  onSuccess: async (created) => {
-    Object.assign(form, emptyForm())
+async function onJudgeSaved(created?: JudgeCreated): Promise<void> {
+  editingJudgeId.value = null
+  if (created) {
     revealedJudge.value = created
     // Gardé en mémoire même quand le serveur stocke déjà le clair : c'est ce
     // qui permet d'inclure ce juge dans une planche téléchargée plus tard
@@ -117,24 +113,8 @@ const createMutation = useMutation({
       judgeId: created.id,
       accessToken: created.accessToken,
     })
-    await refresh()
-  },
-  onError: (error) => {
-    formError.value =
-      error instanceof ApiError
-        ? (error.detail ?? error.title)
-        : 'Une erreur inattendue est survenue.'
-  },
-})
-
-function onSubmit(): void {
-  formError.value = ''
-  const result = createJudgeInputSchema.safeParse({ ...form, email: form.email || undefined })
-  if (!result.success) {
-    formError.value = result.error.issues[0]?.message ?? 'Formulaire invalide.'
-    return
   }
-  createMutation.mutate()
+  await refresh()
 }
 
 const revealedJudge = ref<JudgeCreated | null>(null)
@@ -191,6 +171,45 @@ const regenerateMutation = useMutation({
 })
 function closeRegenerated(): void {
   regeneratedPin.value = null
+}
+
+// Affichée seulement quand le renvoi a dû régénérer l'accès (ADR-081) : sinon
+// le lien existait déjà et reste consultable via « Voir l'accès »/la fiche —
+// un simple toast suffit.
+const resentAccess = ref<{ displayName: string; accessUrl: string; emailFailed: boolean } | null>(
+  null,
+)
+const resendMutation = useMutation({
+  mutationFn: (judgeId: string) => judgesApi.resendAccess(props.competition.id, judgeId),
+  onSuccess: async (result, judgeId) => {
+    const target = judges.value?.find((j) => j.id === judgeId)
+    if (result.regenerated) {
+      resentAccess.value = {
+        displayName: target?.displayName ?? '',
+        accessUrl: result.accessUrl,
+        emailFailed: !result.emailSent,
+      }
+    } else {
+      toast.show(
+        result.emailSent
+          ? 'Accès renvoyé par e-mail.'
+          : "L'envoi a échoué — l'accès n'a pas changé, réessayez ou communiquez-le autrement.",
+        result.emailSent ? 'success' : 'error',
+      )
+    }
+    await refresh()
+  },
+  onError: (error) => {
+    toast.show(
+      error instanceof ApiError
+        ? (error.detail ?? error.title)
+        : 'Une erreur inattendue est survenue.',
+      'error',
+    )
+  },
+})
+function closeResentAccess(): void {
+  resentAccess.value = null
 }
 
 /** Le lien affichable d'un juge : clair stocké (ADR-027) ou jeton de session (ADR-026). */
@@ -401,12 +420,29 @@ const dangerRowActionClass =
                    fiche à côté — les actions du Lot 18 restent sur la ligne. -->
               <template v-else-if="isDesktop">
                 <button
+                  v-if="!row.revokedAt"
+                  type="button"
+                  :class="rowActionClass"
+                  @click="editingJudgeId = row.id"
+                >
+                  Modifier
+                </button>
+                <button
                   v-if="row.accessUrl"
                   type="button"
                   :class="rowActionClass"
                   @click="viewAccess(row)"
                 >
                   Voir l'accès
+                </button>
+                <button
+                  v-if="row.email && !row.revokedAt"
+                  type="button"
+                  :class="rowActionClass"
+                  :disabled="resendMutation.isPending.value"
+                  @click="resendMutation.mutate(row.id)"
+                >
+                  Renvoyer les accès par e-mail
                 </button>
                 <button
                   v-if="row.hasPin && !row.revokedAt"
@@ -428,8 +464,19 @@ const dangerRowActionClass =
                 </button>
               </template>
               <template v-else>
+                <Button v-if="!row.revokedAt" variant="secondary" @click="editingJudgeId = row.id">
+                  Modifier
+                </Button>
                 <Button v-if="row.accessUrl" variant="secondary" @click="viewAccess(row)">
                   Voir l'accès
+                </Button>
+                <Button
+                  v-if="row.email && !row.revokedAt"
+                  variant="secondary"
+                  :disabled="resendMutation.isPending.value"
+                  @click="resendMutation.mutate(row.id)"
+                >
+                  Renvoyer les accès par e-mail
                 </Button>
                 <Button
                   v-if="row.hasPin && !row.revokedAt"
@@ -463,8 +510,10 @@ const dangerRowActionClass =
       </div>
 
       <div class="min-[1440px]:sticky min-[1440px]:top-24">
+        <!-- L'édition prend le pas sur la fiche (comme sur les voies, ADR-075
+             point 8) : jamais les deux affichées à la fois. -->
         <JudgeCard
-          v-if="isMasterDetail && selectedJudge"
+          v-if="editingJudgeId === null && isMasterDetail && selectedJudge"
           :judge="selectedJudge"
           :status="judgeStatus(selectedJudge)"
           :route-labels="routeLabels(selectedJudge.routeIds)"
@@ -472,55 +521,22 @@ const dangerRowActionClass =
           :access-url="accessUrlOf(selectedJudge)"
           :revoking="revokeMutation.isPending.value"
           :regenerating="regenerateMutation.isPending.value"
+          :resending="resendMutation.isPending.value"
           @copy="copy"
           @revoke="revokeMutation.mutate(selectedJudge.id)"
           @regenerate-pin="regenerateMutation.mutate(selectedJudge.id)"
+          @edit="editingJudgeId = selectedJudge.id"
+          @resend-access="resendMutation.mutate(selectedJudge.id)"
           @close="selectedJudgeId = null"
         />
-        <form
+        <JudgeEditorPanel
           v-else
-          class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
-          @submit.prevent="onSubmit"
-        >
-          <h2 class="font-medium text-gray-900">Ajouter un juge</h2>
-          <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium text-gray-900">Nom affiché</span>
-            <input
-              v-model="form.displayName"
-              type="text"
-              class="min-h-12 rounded-lg border border-gray-400 bg-white px-3 text-base"
-              required
-            />
-          </label>
-          <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium text-gray-900">E-mail (optionnel)</span>
-            <input
-              v-model="form.email"
-              type="email"
-              placeholder="pour envoyer le lien d'accès directement"
-              class="min-h-12 rounded-lg border border-gray-400 bg-white px-3 text-base"
-            />
-          </label>
-          <fieldset class="flex flex-col gap-2">
-            <legend class="text-sm font-medium text-gray-900">Voies assignées</legend>
-            <label v-for="r in routes ?? []" :key="r.id" class="flex min-h-12 items-center gap-2">
-              <input
-                v-model="form.routeIds"
-                type="checkbox"
-                :value="r.id"
-                class="h-5 w-5 rounded border-gray-400"
-              />
-              Voie {{ r.number }}<span v-if="r.name"> — {{ r.name }}</span>
-            </label>
-            <p v-if="routes && routes.length === 0" class="text-sm text-gray-600">
-              Créez d'abord une voie dans l'onglet « Voies ».
-            </p>
-          </fieldset>
-          <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
-          <Button type="submit" :disabled="createMutation.isPending.value">
-            {{ createMutation.isPending.value ? 'Création…' : 'Créer le juge' }}
-          </Button>
-        </form>
+          :competition-id="competition.id"
+          :judge="editingJudgeId !== null ? (editingJudge ?? null) : null"
+          :routes="routes ?? []"
+          @saved="onJudgeSaved"
+          @cancel="editingJudgeId = null"
+        />
       </div>
     </div>
 
@@ -626,6 +642,32 @@ const dangerRowActionClass =
           <Button variant="secondary" @click="copy(regeneratedPin.pin)">Copier</Button>
         </div>
         <Button @click="closeRegenerated">J'ai noté le PIN</Button>
+      </div>
+    </Modal>
+
+    <Modal
+      :open="resentAccess !== null"
+      title="Nouvel accès envoyé — à noter maintenant"
+      @close="closeResentAccess"
+    >
+      <div v-if="resentAccess" class="flex flex-col gap-4">
+        <p class="text-sm text-red-700">
+          L'ancien lien de {{ resentAccess.displayName }} ne fonctionne plus. Ce nouveau lien ne
+          sera peut-être plus jamais affiché — notez-le maintenant.
+        </p>
+        <p v-if="resentAccess.emailFailed" class="text-sm text-amber-700">
+          L'envoi de l'e-mail a échoué — communiquez ce lien autrement.
+        </p>
+        <p v-else class="text-sm text-green-700">Le lien a aussi été envoyé par e-mail.</p>
+        <div class="flex gap-2">
+          <input
+            readonly
+            :value="resentAccess.accessUrl"
+            class="min-h-12 flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 text-sm"
+          />
+          <Button variant="secondary" @click="copy(resentAccess.accessUrl)">Copier</Button>
+        </div>
+        <Button @click="closeResentAccess">J'ai noté l'accès</Button>
       </div>
     </Modal>
   </div>

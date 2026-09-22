@@ -1,0 +1,1 @@
+ALTER TABLE "judge" ADD COLUMN "email" text;

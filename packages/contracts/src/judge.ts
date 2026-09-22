@@ -4,11 +4,24 @@ export const createJudgeInputSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
   routeIds: z.array(z.uuid()).min(1),
   // Optionnel : si renseigné, le lien d'accès est envoyé par e-mail à la
-  // création (ADR-027). Jamais le PIN dans cet e-mail — séparation des deux
-  // facteurs, décidée avec l'utilisateur.
+  // création (ADR-027) et l'adresse est conservée (ADR-081) pour permettre un
+  // renvoi ultérieur sans ressaisie. Jamais le PIN dans cet e-mail —
+  // séparation des deux facteurs, décidée avec l'utilisateur.
   email: z.email().optional(),
 })
 export type CreateJudgeInput = z.infer<typeof createJudgeInputSchema>
+
+/**
+ * `PATCH .../judges/:jid` — tous les champs sont optionnels (absent =
+ * inchangé). `email: null` efface l'adresse. `routeIds`, quand fourni,
+ * remplace l'ensemble des voies assignées (comme `categoryIds` sur une voie).
+ */
+export const updateJudgeInputSchema = z.object({
+  displayName: z.string().trim().min(1).max(120).optional(),
+  email: z.email().nullable().optional(),
+  routeIds: z.array(z.uuid()).min(1).optional(),
+})
+export type UpdateJudgeInput = z.infer<typeof updateJudgeInputSchema>
 
 /**
  * Réponse à `POST .../judges` — token et PIN en clair. `pin` est absent si la
@@ -39,6 +52,21 @@ export const judgePinRegeneratedSchema = z.object({
   pin: z.string().regex(/^\d{6}$/),
 })
 export type JudgePinRegenerated = z.infer<typeof judgePinRegeneratedSchema>
+
+/**
+ * Réponse à `POST .../judges/:jid/resend-access` (ADR-081). `regenerated` est
+ * vrai quand le lien plaintext n'existait plus côté serveur (ADR-027) et
+ * qu'un nouveau a dû être émis — l'ancien lien cesse alors de fonctionner.
+ * `emailSent` reflète l'envoi réel : contrairement à la création, c'est le
+ * seul but de cet appel, donc jamais avalé en silence côté écran.
+ */
+export const judgeAccessResentSchema = z.object({
+  id: z.uuid(),
+  accessUrl: z.string(),
+  regenerated: z.boolean(),
+  emailSent: z.boolean(),
+})
+export type JudgeAccessResent = z.infer<typeof judgeAccessResentSchema>
 
 /**
  * `POST .../qrcodes.pdf` — pour un juge dont le jeton n'est pas stocké en
