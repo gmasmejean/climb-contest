@@ -1,5 +1,5 @@
 import { SyncEngine, type QueueItem } from '@climbcontest/sync'
-import { onUnmounted, shallowRef, type Ref } from 'vue'
+import { onUnmounted, ref, shallowRef, type Ref } from 'vue'
 
 import { judgeToken } from '../api/judge-session'
 import { bootstrapJudge } from './bootstrap'
@@ -68,4 +68,18 @@ export function useSyncSnapshot(): Ref<QueueItem<QueuePayload>[]> {
   })
   onUnmounted(unsubscribe)
   return snapshot
+}
+
+/**
+ * Vrai une fois la file persistée relue depuis IndexedDB. Avant, un instantané
+ * vide ne prouve rien (ADR-078 : ne jamais déconnecter un juge révoqué sur la
+ * foi d'une file pas encore chargée).
+ */
+export function useSyncHydrated(): Ref<boolean> {
+  const hydrated = ref(syncEngine.isHydrated)
+  const unsubscribe = syncEngine.subscribe(() => {
+    hydrated.value = syncEngine.isHydrated
+  })
+  onUnmounted(unsubscribe)
+  return hydrated
 }

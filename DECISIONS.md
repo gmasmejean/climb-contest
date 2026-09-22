@@ -2522,8 +2522,10 @@ le champ « Nombre de prises » s'il est déjà renseigné**.
 
 - Trois requêtes : si l'onglet est fermé entre deux, la voie existe sans photo ou sans prises ;
   l'éditeur (Modifier) permet de terminer.
-- Les prises se placent sur un aperçu de 640 px de côté long, sans zoom : à vérifier sur un mur
-  chargé (le zoom existe dans le recadrage, pas dans le placement, comme dans l'éditeur).
+- ~~Les prises se placent sur un aperçu de 640 px de côté long, sans zoom : à vérifier sur un
+  mur chargé (le zoom existe dans le recadrage, pas dans le placement, comme dans l'éditeur).~~
+  **Levé au Lot 19, ADR-077 :** le placement a un zoom ×1/×2/×3 et un mode plein écran, à
+  toutes les largeurs, et l'aperçu de création est passé à 1280 px.
 - Vérifié en émulation mobile 360 px, **pas sur un vrai téléphone devant un mur**.
 
 **Alternatives écartées :** créer la voie dès le choix de la photo (voies orphelines) ; recaler
@@ -2566,6 +2568,511 @@ historiques.
 annotées à la main ; segmentation par modèle d'apprentissage (poids du modèle et dépendance
 disproportionnés). On pourra rouvrir la question si le placement manuel s'avère trop lent en
 conditions réelles.
+
+---
+
+## ADR-070 — La racine `/` est une page d'accueil publique
+
+**Date :** 2026-09-20
+**Contexte :** depuis le Lot 1, `/` était un écran vide derrière authentification (« Bonjour,
+{nom} » et un bouton « Mes compétitions ») ; un visiteur anonyme était renvoyé sur `/login`.
+L'utilisateur a fourni deux maquettes (mobile et desktop, générées par IA, style aquarelle) :
+en-tête logo + pilule « Espace organisateur », titre en écriture pinceau, champ de recherche et
+bouton « Trouver une compétition », quatre cartes pastel (Organisateurs, Juges, Spectateurs,
+Grimpeurs), mur d'escalade sur les côtés, foule en bas. Le dépôt n'avait ni police, ni logo,
+ni icône, ni jeton de couleur (`style.css` faisait deux lignes ; la couleur de fait est
+`blue-700`).
+
+**Décisions (actées avec l'utilisateur) :**
+
+1. **`/` devient publique et reste la destination après connexion.** La route perd
+   `requiresAuth` mais ne prend PAS `skipOrganizerSession` (ADR-053) : la session
+   organisateur est restaurée au F5 pour afficher l'en-tête connecté ; si l'API est
+   injoignable, la garde avale l'erreur et la page s'affiche en anonyme. L'en-tête a deux
+   états : anonyme → pilule « Espace organisateur / Connexion · Inscription » vers `/login` ;
+   connecté → nom, lien **« Mes compétitions »** et « Se déconnecter ». Le libellé « Mes
+   compétitions » est un contrat : onze tests e2e le cliquent juste après connexion.
+   `Login.vue`, `JudgeHome.vue` et la redirection `guestOnly` continuent de viser `home`.
+2. **Recherche visible mais désactivée.** La recherche publique est le Lot 13, non engagé
+   (préalable RGPD). L'utilisateur a choisi de garder le bloc de la maquette, non
+   fonctionnel. Lecture de « rien de simulé » (CLAUDE.md) : champ et bouton `disabled`,
+   mention « Recherche bientôt disponible. En attendant, ouvrez le lien ou le QR code… »
+   reliée par `aria-describedby`. Jamais un champ qui accepte du texte et ne fait rien.
+3. **Cartes.** Organisateurs → `/login` (ou `/competitions` si déjà connecté, sinon la garde
+   `guestOnly` ramènerait sur `/`). Juges → « Scannez le QR code remis par l'organisateur » ;
+   la carte n'est un lien vers `/j/home` que si un accès juge existe sur l'appareil
+   (`judgeToken`). Spectateurs → non-lien : aucune liste publique n'existe avant le Lot 13,
+   le texte dit la seule vraie façon d'y accéder (lien ou QR code). Grimpeurs →
+   « Inscrivez-vous aux compétitions » avec badge « Bientôt », non cliquable (inscriptions
+   en ligne hors périmètre v1, SPEC.md). La flèche `→` n'apparaît que sur les cartes-liens.
+4. **Visuels recadrés des maquettes.** Mur et foule sont découpés des deux PNG fournis
+   (ImageMagick, WebP, 200 Ko au total, `apps/web/src/assets/landing/`) ; le logo est un SVG
+   dessiné à la main proche du badge. Résolution limitée et statut juridique des images IA
+   flou : **provisoires**, à remplacer par des visuels HD à licence claire (TODO.md).
+5. **Hors précache.** `.webp` et `.woff2` ne sont pas dans `globPatterns` du service worker :
+   les visuels et polices de l'accueil ne s'installent jamais sur le téléphone d'un juge ;
+   ils passent par le `runtimeCaching` à la demande (`image`/`font`).
+6. **Polices auto-hébergées** (`@fontsource/caveat`, graisse 700 bold, pour le titre et le logo,
+   `@fontsource/source-sans-3` pour le corps, OFL 1.1), importées dans `Home.vue` donc dans
+   le chunk de la page seulement. Pas de CDN : PWA, réseau catastrophique, RGPD.
+7. **Jetons de marque limités à l'accueil.** Un bloc `@theme` (`ink`, `navy`, `paper`,
+   quatre teintes de cartes, `font-display`, `font-body`) apparaît dans `style.css`, utilisé
+   seulement par la landing. Le `Button` partagé, `theme-color`, le manifest et le favicon
+   restent sur `blue-700` : on ne re-teinte pas les écrans juge et organisateur validés.
+   Les pilules navy sont un composant local (`LandingPill`), pas une variante de
+   `packages/ui`.
+8. **Menu hamburger de la maquette mobile omis** : aucune navigation à y mettre.
+9. **Fonds de cartes en textures aquarelle** (fournies par l'utilisateur : jaune, vert, bleu,
+   corail ; WebP 640 px, ~180 Ko au total, `apps/web/src/assets/landing/card-*.webp`).
+   La teinte « violet » des maquettes devient « corail » (`tone="coral"`, `--color-card-coral`).
+   Un voile blanc de 25 % s'ajoute sous le texte : mesuré sur les cartes recadrées, les coins
+   foncés du vert, du bleu et du corail tombaient à 2–3:1 avec l'encre `#0f3241` (AA = 4,5:1) ;
+   avec le voile, le bleu et le corail restent ≥ 4,4:1 ; il reste 0,1 % de pixels de coin du
+   vert entre 3,3 et 4,1:1 (pas de mesure sous les glyphes eux-mêmes). Comme les autres visuels : hors précache, couleur unie en repli pendant le chargement.
+
+**Conséquences :** `Home.vue` réécrit ; six composants dans
+`apps/web/src/components/landing/` ; `router.ts` (route `/` sans `requiresAuth`) ;
+`Home.test.ts` et deux tests de plus dans `router.test.ts` ; `e2e/landing.spec.ts` en
+desktop et à 360 px ; `index.html` (meta description). Un organisateur connecté qui perd le
+réseau et recharge `/` verra l'état anonyme — déjà vrai partout ailleurs (redirection vers
+`/login`).
+
+**Alternatives écartées :** rediriger les connectés vers `/competitions` (casse onze specs
+e2e et le parcours « je me connecte, j'arrive sur l'accueil » du Lot 1) ; un champ « code
+de compétition » ouvrant `/c/<slug>` à la place de la recherche (l'utilisateur préfère le
+bloc de la maquette, désactivé) ; engager le Lot 13 maintenant ; rendu CSS seul sans image
+raster ; Google Fonts.
+
+---
+
+## ADR-071 — La charte aquarelle de l'accueil s'étend à toute l'application
+
+**Date :** 2026-09-21
+**Contexte :** l'ADR-070 (point 7) limitait les jetons de marque à la page d'accueil, le temps
+de la valider. L'utilisateur l'a validée et demande que « l'ensemble des pages colle au style
+de la landing ». Cinquante fichiers `.vue` portent des utilitaires Tailwind de couleur
+(345 `gray-*`, 67 `red-*`, 50 `blue-*`, 32 `amber-*`, 24 `green-*`) ; aucune mise en page
+commune n'existe (chaque page a son `<main>`).
+
+**Décisions (actées avec l'utilisateur, 2026-09-21) :**
+
+1. **Écrans juge : couleurs seulement**, sauf la **page d'accès** (`/j/:token`, affichée avec
+   du réseau par construction) qui est refaite en profondeur. Aucune image, aucune police
+   supplémentaire sur les écrans de notation : rien de plus à précacher, l'ADR-070 points 5
+   et 6 restent vrais pour eux.
+2. **Organisateur, public, connexion : charte + touches déco.** Source Sans 3, titres de page
+   en Caveat, fond papier, en-tête commun avec le logo. Décor aquarelle (mur) seulement sur
+   connexion, inscription, accès juge et page publique de compétition ; les écrans de travail
+   denses (pilotage, tableaux) restent sobres.
+3. **`Button` partagé en pilule partout** (navy plein / contour navy / danger), y compris
+   chez les juges : c'est une forme, pas une image, et la cible tactile ≥ 48 px ne change pas.
+   `LandingPill` fusionne dans `Button` (prop `to`, variante `glass`).
+4. **Couleurs sémantiques harmonisées aussi** (erreur, avertissement, confirmé — statuts de
+   synchro compris).
+
+**Mise en œuvre de la couleur :** plutôt que de réécrire 500 classes, les échelles Tailwind
+`gray`, `blue`, `red`, `amber` et `green` sont **redéfinies dans `@theme`** (`style.css`) :
+neutres teintés encre (teinte 232°), `blue` → navy (`blue-700` = `#184e67`, `blue-800` =
+navy-deep, `blue-900` = encre), `red` → corail (30°), `amber` → ocre (78°), `green` → sauge
+(148°). Chaque cran garde la clarté OKLCH du cran Tailwind d'origine, donc les contrastes
+validés bougent peu ; ils sont néanmoins **mesurés** : `brand-contrast.test.ts` lit
+`style.css` et exige AA (4,5:1) pour chaque couple texte/fond réellement utilisé, et 3:1
+pour les grands textes et pastilles (bouton TOP du juge : blanc sur `green-600` = 3,8:1,
+contre 3,2:1 avec le vert Tailwind d'origine). Trois crans ont été assombris pour passer :
+`gray-500`, `green-600`, et toute la moitié sombre de `blue`.
+
+**Conséquences :** `style.css` (échelles + fond papier sur `body`) ;
+`brand-contrast.test.ts` ; `packages/ui` : `Button` en pilule avec `to` et `glass`
+(`vue-router` devient dépendance pair), champs et cartes en fond blanc sur le papier ;
+`LandingPill` supprimé ; `components/brand/` (`BrandShell`, `BrandLogo` déplacé,
+`watercolor.ts` partagé avec `RoleCard`) ; `brand-fonts.ts` ; huit pages enveloppées dans
+`BrandShell`, titres en Caveat (`text-3xl`, `md:text-4xl`) ; `JudgeAccess.vue` refaite
+(panneau aquarelle vert, icône juge, rappel « vous pourrez noter sans réseau », lien
+invalide en corail) ; favicon, icônes PWA, `theme-color` `#0e3b4e`, `background_color`
+papier, nom « Climb Contest ». Sur mobile le décor de `BrandShell` est un bandeau à hauteur
+de l'en-tête : en pleine hauteur, le titre de la page publique passait sur le grimpeur.
+L'ADR-070 point 7 est remplacé par cet ADR ; ses points 5 et 6 (hors précache) tiennent
+toujours. L'écran de salle reste sombre.
+
+**Régression trouvée et corrigée en route :** le décor de la page d'accès juge (polices +
+images) ralentissait le précache du service worker ; `e2e/judge-conflict` (deux appareils
+qui passent hors ligne juste après s'être connectés) échouait de façon déterministe —
+`Failed to fetch dynamically imported module …/JudgeAscentEntry.js`. La course existait
+avant, le décor l'a rendue visible. Correctif : `judge/screens.ts` partage les chargeurs des
+écrans juge entre le routeur et `JudgeAccess`, qui les **précharge tous** (en parallèle de
+`bootstrapJudge`) avant d'ouvrir `/j/home`. Un juge peut donc perdre le réseau dès la
+seconde où il voit ses voies.
+
+**Alternatives écartées :** jetons sémantiques (`brand`, `danger`…) et remplacement classe
+par classe — plus propre à la lecture, mais 500 modifications dans des écrans validés pour un
+rendu identique (« tu ne réécris pas ce qui marche ») ; Source Sans 3 chez les juges
+(~60 Ko de `.woff2` à précacher) ; décor aquarelle dans les écrans organisateur.
+
+---
+
+## ADR-072 — Espace organisateur sur grand écran : seuil `lg`, barre latérale, onglet dans l'URL
+
+**Date :** 2026-09-21
+**Contexte :** les pages organisateur sont plafonnées à `max-w-lg` (512 px) ou `max-w-3xl`
+(768 px) et n'ont aucun breakpoint `lg:` ; sur un écran de 1440 px plus de la moitié de la
+largeur est vide. L'utilisateur précise que la préparation **et le pilotage jour J se font
+sur un portable à la table de l'organisation**, le téléphone ne servant que d'appoint.
+
+**Décisions (actées avec l'utilisateur, 2026-09-21) :**
+
+1. **Tout est additif à partir de `lg` (1024 px).** Sous ce seuil le rendu ne change pas ;
+   les 360 px restent vérifiés. Écrans juge et public non concernés.
+2. **Quatre lots** (ROADMAP Lots 17–20) : socle, tableaux denses, maître–détail, pilotage.
+   Un à la fois.
+3. **Conteneur unique** : `BrandShell` reçoit `width: 'narrow' | 'wide'`. `wide`
+   (`max-w-screen-2xl`) sert aux pages organisateur ; `narrow`, valeur par défaut, garde
+   l'en-tête `max-w-6xl` des pages d'entrée et publiques.
+4. **Barre latérale groupée** sur la page compétition à partir de `lg` : *Préparer* (Infos,
+   Catégories, Compétiteurs, Voies, Tours, Juges), *Vérifier* (Prêt à démarrer ?), *Jour J*
+   (Pilotage, Exports). C'est le même composant `Tabs`, en `orientation="vertical"` : on
+   garde `role="tab"` et les mêmes libellés, donc la sémantique, la navigation au clavier et
+   les 28 sélecteurs `getByRole('tab')` des e2e.
+5. **L'onglet vit dans l'URL** : `/competitions/:id/:tab?`, et `?section=` pour les
+   sous-sections du pilotage. Rechargement, lien profond, « précédent » du navigateur et
+   plusieurs fenêtres côte à côte fonctionnent. Un onglet inconnu, ou `rounds` sur une
+   compétition sans phases, retombe sur `infos`.
+6. **Le pilotage sur portable devient la cible d'optimisation** (Lot 20) ; son rendu mobile
+   reste fonctionnel.
+
+**Mise en œuvre (Lot 17) :** `BrandShell` en `wide` coupe le débordement avec
+`overflow-x-clip` et non `overflow-x-hidden` — `hidden` fait de la coque un conteneur de
+défilement, et ni l'en-tête ni la barre latérale n'y seraient collants. L'en-tête de
+compétition n'est collant qu'à partir de `lg` (sur un téléphone il mangerait la hauteur
+utile). Le lien retour garde son libellé « ← Mes compétitions » à toutes les largeurs : un fil
+d'Ariane à deux niveaux n'apporte rien de plus, et deux parcours e2e le ciblent par ce nom.
+L'orientation de `Tabs` suit `useMediaQuery('(min-width: 1024px)')` : un seul `tablist` dans
+le DOM, jamais deux dont un masqué en CSS. La liste des onglets et la résolution du segment
+d'URL sont des fonctions pures (`lib/competition-tabs.ts`).
+
+**Alternatives écartées :** onglets horizontaux simplement élargis (neuf libellés à plat,
+sans hiérarchie, et toujours pas de place pour des pastilles d'alerte) ; une barre latérale
+en `<nav>` de liens (sémantique défendable, mais réécriture de 28 sélecteurs e2e pour un
+gain nul à l'usage) ; routes enfants une par onglet (refonte de `CompetitionDetail` sans
+bénéfice par rapport à un paramètre).
+
+---
+
+## ADR-073 — Densité compacte à la souris seulement
+
+**Date :** 2026-09-21
+**Contexte :** `CLAUDE.md` impose des cibles tactiles ≥ 48 px. Dans un tableau de 150
+compétiteurs sur un écran 1080p, cela donne une douzaine de lignes visibles contre dix-huit
+à 40 px.
+
+**Décision (actée avec l'utilisateur) :** les lignes de tableau et actions compactes
+(~40 px) sont autorisées **uniquement sous `@media (pointer: fine)`**, dans l'espace
+organisateur. Tout appareil tactile — tablette comprise, quelle que soit sa largeur —
+garde 48 px. C'est une dérogation explicite à `CLAUDE.md` § « Conséquences non
+négociables », point 4 ; elle ne s'applique à aucun écran juge. Mise en œuvre au Lot 18 ;
+le Lot 17 ne réduit aucune cible.
+
+**Alternative écartée :** 48 px partout — règle plus simple, mais un tiers de lignes en
+moins sur l'écran où l'organisateur passe le plus de temps.
+
+**Amendé au Lot 18 :** la requête retenue est
+`(pointer: fine) and (not (any-pointer: coarse))`. Un portable à écran tactile rapporte
+`pointer: fine` pour son pavé tactile alors que le doigt y reste possible ; `pointer: fine`
+seul l'aurait compacté, contre la lettre même de cette décision. Voir ADR-074.
+
+---
+
+## ADR-074 — `DataList` : une définition de colonnes, deux rendus
+
+**Date :** 2026-09-21
+**Contexte :** Lot 18. Les six listes de l'espace organisateur (compétiteurs, voies, juges,
+catégories, liste des compétitions, corbeille) étaient des `<ul>` de cartes plafonnées à
+768 px, alors que le Lot 17 venait de leur donner toute la largeur de l'écran (ADR-072).
+
+**Décisions :**
+
+1. **Une colonne se décrit une seule fois** (`DataListColumn<Row>` : clé, libellé, valeur,
+   comparateur, rôle en carte) et sert aux deux rendus. Un slot scopé `cell-<clé>` prend la
+   main dès qu'il faut autre chose que du texte. C'est le premier composant générique du
+   projet (`<script setup generic="Row">`) ; le monter en test exige l'expression
+   d'instanciation TS 4.7 (`mount(DataList<Row>, …)`), sans quoi le générique retombe sur
+   sa contrainte.
+
+2. **Un seul arbre dans le DOM.** C'est l'appelant qui choisit `layout` à partir de
+   `useMediaQuery`, jamais un `hidden lg:table`. Même raison que le `tablist` unique
+   d'ADR-072 : deux rendus dont un masqué en CSS, ce sont deux arbres d'accessibilité et
+   des boutons d'action en double, que les sélecteurs e2e atteignent au hasard.
+
+3. **Le tri est piloté.** `DataList` ne réordonne jamais ses lignes : il émet `update:sort`
+   et l'appelant trie. La liste des compétitions garde ainsi son tri dans l'adresse
+   (ADR-062) et les en-têtes remplacent son sélecteur « Trier par » au-dessus de 1024 px —
+   deux commandes pour une même chose finissent par diverger. Dans les quatre onglets, le
+   tri vit dans un `ref` local : on ne partage pas un lien vers « les juges triés par
+   dernier accès ».
+
+4. **Voies et catégories ne sont pas triables.** Leur ordre est celui que l'organisateur a
+   posé aux flèches ; un tri masquerait ce que les flèches viennent de faire.
+
+5. **Deux façons de faire une carte, assumées.** Les quatre onglets composent la leur à
+   partir des rôles (`title`, `subtitle`, `aside`, `actions`). La liste et la corbeille
+   passent par un slot `card` d'échappement qui reprend leur markup au mot près : leur
+   carte enveloppe un lien ou une case à cocher, ce qu'une composition ne sait pas
+   reproduire, et le rendu à 360 px ne doit pas bouger.
+
+6. **Densité.** La variante Tailwind `fine:` (ADR-073 amendé) ne compacte que le tableau :
+   cellules, cases à cocher et actions de ligne. `Button.vue` ne reçoit **aucune** variante
+   de taille — la lui donner rendrait compacte la pilule de 48 px jusque sur les écrans
+   juge. Les actions de ligne sont donc des `<button>` nus, pas des `Button`.
+
+7. **Colonnes facultatives à 1280 px.** Le tableau des compétiteurs ne sort l'année de
+   naissance, le club et le numéro de licence qu'au-delà de `xl`. Vérifié en navigateur :
+   ses neuf colonnes à 1024 px réduisent chaque nom à une vingtaine de pixels.
+
+8. **Le numéro de licence est affiché** (décision de l'utilisateur, prise en connaissance
+   de cause). C'est la donnée la plus sensible du modèle, bannie de la vue publique ;
+   l'écran est derrière l'authentification organisateur, mais un tableau se projette et se
+   photographie.
+
+9. **En-tête collant, trois pièges.** Le `sticky` porte sur chaque `<th>` et non sur
+   `<thead>` (support plus large), sa bordure est une ombre interne (sous
+   `border-collapse`, la bordure d'une cellule collée disparaît), et il ne doit jamais
+   exister de conteneur `overflow-x-auto` autour du tableau — il deviendrait un conteneur
+   de défilement et l'en-tête ne collerait plus jamais. Le décalage vient de
+   `--datalist-top`, posée une seule fois par `CompetitionDetail`.
+
+10. **Nom accessible des champs d'ajout rapide.** Ils désignent le libellé de la colonne et
+    non son `<th>` : le glyphe de tri vit dans le même bouton et entrait dans le nom
+    (« Catégorie↕ »). Défaut vu en navigateur, verrouillé par un test.
+
+**Alternatives écartées :** un rendu carte entièrement généré à partir des colonnes (il
+réécrirait le mobile de la corbeille et de la liste pour un gain invisible) ; deux slots
+séparés carte/tableau (le contenu diverge fatalement) ; `hidden lg:table` (point 2) ;
+rendre la ligne entière cliquable (ni rôle, ni focus, ni clavier, et la sélection de texte
+cassée — le lien vit dans l'en-tête de ligne) ; une case « tout cocher » en en-tête (les
+deux écrans concernés ont déjà un bouton « Tout sélectionner »).
+
+---
+
+## ADR-075 — Maître–détail des voies et des juges : la sélection vit dans l'adresse
+
+**Date :** 2026-09-21
+**Contexte :** Lot 19 (D3 de la série desktop). Après le Lot 18, `RoutesTab` et `JudgesTab`
+empilent un tableau pleine largeur puis un formulaire **en dessous**. Sur un portable de
+1440 px, modifier la voie 7 veut dire perdre la liste des yeux, et la moitié droite de l'écran
+reste vide pendant toute la préparation.
+
+**Décisions :**
+
+1. **Grille à deux colonnes à partir de 1440 px, et non de `lg`.** Le cadrage disait 1024 px ;
+   la mesure en navigateur dit non. Les largeurs fixes du tableau des voies totalisent **656 px**
+   (528 px pour celui des juges) ; avec la barre latérale de 15 rem et un panneau de 24 rem, la
+   liste ne retrouve ces 656 px qu'à **1440 px**. En dessous, le tableau déborde sa colonne et
+   passe **sous** le panneau collant, qui intercepte alors les clics — défaut trouvé par le test
+   e2e, invisible autrement puisque `BrandShell` coupe le débordement (`overflow-x-clip`) et
+   qu'aucun défilement horizontal n'apparaît. Le seuil est donc `min-[1440px]:`, apparié à
+   `MASTER_DETAIL_QUERY`. Entre 1024 et 1440 px, les deux onglets gardent exactement le rendu du
+   Lot 18 : tableau, actions sur la ligne, éditeur en dessous.
+   La grille elle-même est en classes responsives pures sur un seul arbre. Ce n'est pas une
+   entorse à ADR-074 point 2 : celui-ci interdit **deux copies du même contenu** dont une
+   masquée, pas les classes responsives — la page compétition en pose déjà (`hidden lg:inline`
+   sur la date et le lien public). `useMediaQuery` reste requis là où le **comportement**
+   diffère, pas la mise en page.
+2. **`minmax(0,1fr)` sur la colonne de gauche, pas `1fr`.** Sans lui, le `table-fixed` de
+   `DataList` élargit la piste de grille au lieu de tenir dedans.
+3. **Pas de conteneur de défilement autour du panneau.** La colonne de droite est
+   `lg:sticky lg:top-24` sans `overflow-y-auto` : un conteneur de défilement décrocherait
+   l'en-tête collant du tableau (ADR-074 point 9), et le panneau contient une photo dont on veut
+   la hauteur naturelle. Un panneau plus haut que l'écran défile avec la page ; c'est
+   l'annotateur plein écran (ADR-077) qui règle le cas de la grande photo.
+4. **La sélection vit dans l'adresse** : `?route=<id>`, `?judge=<id>`, sur le patron `?section=`
+   du pilotage (ADR-072 point 5) — dans l'onglet, pas dans le routeur. Recharger la page en
+   pleine annotation ne referme pas la voie. Écriture par `router.replace` et non `push` : une
+   entrée d'historique par ligne cliquée ferait du bouton « précédent » un désélecteur au lieu
+   d'un retour. Un id inconnu retombe silencieusement sur « aucune sélection », le reste de la
+   query préservé. C'est un écart assumé à la note du Lot 18 (« recherche et filtre des onglets
+   ne sont pas dans l'adresse ») : une sélection ouvre un panneau d'édition, un filtre non.
+5. **Changer de sélection est refusé tant qu'une création est en reprise** (`created !== null`,
+   ADR-067 point 5 / ADR-068 point 4 : une voie créée dont la photo ou les prises ne sont pas
+   parties). Auparavant, « Modifier » écrasait cet état sans rien dire ; avec une liste cliquable
+   en permanence à côté du panneau, ce clic devient facile et fait perdre la reprise.
+6. **Chez les juges, les trois actions quittent la ligne dès qu'une fiche existe** (« Voir l'accès »,
+   « Régénérer le PIN », « Révoquer ») et vivent dans la fiche ; la ligne ne garde que
+   l'ouverture. Les laisser aux deux endroits, ce sont exactement « des boutons d'action en
+   double, que les sélecteurs e2e atteignent au hasard » qu'ADR-074 point 2 interdit. En dessous
+   de 1440 px — donc aussi dans la bande où il y a un tableau mais pas de fiche — rien ne bouge.
+7. **Les modales qui avertissent restent des modales, à toutes les largeurs** : l'accès révélé après
+   création et le PIN régénéré sont des « à noter maintenant » (ADR-026), ils doivent bloquer.
+   Seule « Voir l'accès », qui est de la consultation, est remplacée par la fiche au-dessus de
+   1440 px.
+8. **Le panneau garde un mode unique création/édition.** Afficher « Ajouter une voie » et
+   l'édition en même temps donnerait deux formulaires côte à côte, alors que la séquence
+   reprenable d'ADR-068 point 4 suppose un seul brouillon vivant.
+
+**Limites connues :** les modifications non enregistrées ne survivent pas au rechargement — la
+voie se rouvre, ses valeurs sont relues du serveur (`RouteEditorPanel` n'a pas de
+`useFormDraft`, contrairement à `InfosTab` et `CompetitionCreate`). Un portable de 1366 px de
+large n'a donc pas le maître–détail : c'est le prix de colonnes de tableau à largeur fixe
+(`table-fixed`, ADR-074), pas une limite de principe.
+
+**Alternatives écartées :** un composant `MasterDetail` dans `packages/ui` (deux usages et six
+classes ; `ListToolbar` a déjà tranché que le seuil de 1024 px est une décision de
+l'application, pas du composant) ; la sélection en état local (plus simple, mais un rechargement
+accidentel referme le panneau, ce que `CLAUDE.md` proscrit) ; rendre la ligne entière cliquable
+(écarté par ADR-074) ; un panneau latéral glissant comme chez le juge (la liste doit rester
+visible, c'est tout l'intérêt).
+
+---
+
+## ADR-076 — Le QR code du juge est généré dans le navigateur
+
+**Date :** 2026-09-21
+**Contexte :** Lot 19, fiche juge. Jusqu'ici le QR n'existe que côté serveur, dans la planche
+PDF (`apps/api/src/lib/qrcode-pdf.ts`) ; la dépendance `qrcode` n'est déclarée que par
+`apps/api` et aucun écran web n'affiche de QR. L'organisateur qui veut faire scanner un juge
+doit imprimer la planche.
+
+**Décision (actée avec l'utilisateur) :** `qrcode` devient aussi une dépendance de `apps/web`
+(même version épinglée, `1.5.4`), et la fiche rend un **SVG** produit dans le navigateur à
+partir du lien d'accès.
+
+**La raison décisive n'est pas le confort, c'est un cas que le serveur ne sait pas traiter.**
+Quand `judgeCredentialsStored` est désactivé (ADR-027), le serveur ne conserve **aucun** clair :
+le jeton n'existe qu'une seule fois, dans la réponse de création, et vit ensuite dans la mémoire
+du navigateur (`revealedJudgeTokens`). Un point d'API `.../qrcode.svg` serait donc incapable de
+dessiner le QR précisément du juge qu'on vient de créer — le moment où on en a le plus besoin.
+
+**Conséquences :**
+
+- Le jeton d'accès ne transite jamais dans une URL d'image : ni journal d'accès, ni `Referer`,
+  ni cache de proxy.
+- Le SVG est injecté en `v-html`. C'est acceptable **parce que la chaîne vient de la
+  bibliothèque**, pas d'une saisie ; le commentaire du composant le dit, sans quoi c'est une
+  alerte de revue de sécurité légitime.
+- Aucun QR n'est rendu pour un juge révoqué, ni quand ni le clair stocké ni un jeton de session
+  ne sont disponibles : la fiche dit quoi faire à la place.
+- Deux implémentations de QR coexistent dans le dépôt (le PDF garde la sienne). Assumé : elles
+  ne partagent ni le support ni les contraintes.
+- Le PIN ne s'affiche jamais **dans** le QR, comme il ne s'imprime pas sur la planche (ADR-026).
+
+**Alternatives écartées :** un point d'API image (ne couvre pas le cas ci-dessus, ajoute une
+route, un contrat et des tests de sécurité pour un secret qui transiterait en image) ; pas de QR
+à l'écran (la planche PDF reste le seul support, mais le libellé du lot demande la fiche).
+
+---
+
+## ADR-077 — Zoom et plein écran dans l'annotateur, à toutes les largeurs
+
+**Date :** 2026-09-21
+**Contexte :** ADR-068 listait en limite connue que « les prises se placent sur un aperçu de
+640 px de côté long, sans zoom : à vérifier sur un mur chargé ». Sur une voie de quarante prises
+serrées, le placement est approximatif. La série des Lots 17–20 pose par ailleurs que tout est
+**additif à partir de `lg`** et que le rendu mobile ne change pas (ADR-072 point 1).
+
+**Décision (actée avec l'utilisateur) :** le zoom ×1/×2/×3 et le mode plein écran de
+l'annotateur sont disponibles **à toutes les largeurs, mobile compris**. C'est un écart assumé
+à ADR-072 point 1 : ce n'est pas de la mise en page pour grand écran, c'est la correction d'un
+défaut de saisie documenté, et l'organisateur qui annote devant le mur est justement celui qui
+a un téléphone en main.
+
+**Conséquences :**
+
+1. **L'aperçu de création passe de 640 px à 1280 px** (qualité 0,7 → 0,8). Sans cela, le ×3 est
+   flou. Sans effet sur la correction : les prises sont en coordonnées normalisées (ADR-066
+   point 4) et la photo envoyée est ré-encodée depuis le **fichier d'origine**, pas depuis
+   l'aperçu. Effet réel : `resizeToJpeg` est synchrone sur le thread principal et traite quatre
+   fois plus de pixels — c'est le seul point du lot où « le rendu mobile ne change pas » peut
+   être enfreint sans qu'aucun test ne le voie, donc il se mesure sur un téléphone.
+2. **Le cadre zoomable devient un composable partagé** (`useZoomableFrame`), extrait du dialogue
+   de recadrage qui l'avait déjà écrit : largeur de base qui fait tenir la photo entière à ×1,
+   recentrage du défilement autour du milieu de l'écran au changement de niveau.
+3. **L'écran juge n'est pas converti.** `RoutePhotoPanel` porte la troisième copie du même zoom ;
+   le gain serait cosmétique et `CLAUDE.md` déclare les écrans juge non négociables. Noté dans
+   `TODO.md`.
+4. Le dialogue plein écran restitue le focus à son ouvrant, comme le dialogue de recadrage.
+   `Modal` de `packages/ui` ne le fait toujours pas : troisième implémentation maison du même
+   besoin, notée dans `TODO.md`.
+
+**Alternatives écartées :** réserver le zoom à `lg` (respecte la lettre de la série, mais laisse
+la limite d'ADR-068 ouverte exactement là où elle gêne) ; monter l'aperçu à 1600 px, la taille
+de la photo stockée (le coût de ré-encodage sur téléphone n'est pas justifié par le gain à ×3) ;
+un second aperçu haute résolution calculé à l'ouverture du dialogue seulement (plus économe,
+mais deux aperçus à garder cohérents et un garde anti-course de plus).
+
+---
+
+## ADR-078 — Les saisies d'un accès révoqué sont reçues, mais mises en quarantaine
+
+**Date :** 2026-09-21
+**Contexte :** Lot 21. Un juge révoqué recevait un 401 que `SyncEngine` traitait comme une panne
+réseau : réessais sans fin, bandeau « Synchronisation… » pour toujours, et des saisies faites
+hors ligne AVANT la révocation qui n'atteignaient jamais le serveur (mesuré à la répétition
+générale du Lot 9). Contraire à la règle n° 1 de `CLAUDE.md`.
+
+**Décision (actée avec l'utilisateur) :**
+
+1. `POST /judge/ascents/batch` — et lui seul — **accepte** le lot d'un juge révoqué. Toutes les
+   autres routes juge répondent toujours 401, désormais avec un membre d'extension RFC 9457
+   `code: 'judge_revoked'`.
+2. Une saisie reçue d'un accès révoqué n'entre **jamais** directement au classement : elle porte
+   un `conflict_group`, comme un conflit. Elle est donc hors classement, bloque la publication de
+   sa catégorie, remonte en alerte, et se tranche par une décision tracée — sans table ni écran
+   nouveaux. S'il n'y a pas de saisie active en face, le groupe n'a **qu'une ligne** : c'est une
+   « saisie à valider », affichée dans l'onglet Conflits sous un libellé distinct (« Saisie d'un
+   accès révoqué — à valider ») avec Accepter / Refuser / Saisir une autre valeur.
+3. **Invariant :** un groupe solitaire n'existe que s'il n'y a pas de ligne active sur le même
+   (tour, voie, compétiteur). Toute nouvelle saisie sur un triplet qui a déjà un groupe non résolu
+   **rejoint ce groupe** (valeur différente) ou le **résout** (valeur identique : la ligne en
+   attente est chaînée sur la nouvelle). C'est ce qui garde le modèle cohérent quand
+   l'organisateur ressaisit en secours.
+4. **Bornes :** uniquement les voies assignées au juge (l'affectation survit à la révocation) et
+   la limitation de débit existante. La fenêtre de correction de 5 minutes (ADR-007) est
+   **conservée** pour un accès révoqué : sans elle, il pourrait sortir du classement toutes ses
+   saisies passées en les « corrigeant ».
+5. **Refuser** une saisie solitaire demande un état terminal : colonne `ascent.voided_at`. La
+   ligne refusée **garde** son `conflict_group` — elle reste ainsi hors de tous les filtres
+   « actif » existants et de l'index `ascent_active_key` sans qu'on y touche — et les lectures de
+   conflits non résolus ajoutent `voided_at IS NULL`. Motif obligatoire, événement `voided`.
+6. Les éléments mis en quarantaine reviennent `accepted` au client (le serveur les détient
+   durablement) ; la réponse du lot porte `accessRevoked: true`. Le client finit alors d'envoyer
+   sa file, **puis déconnecte le juge** sur un écran qui dit ce qui s'est passé et liste les
+   éléments refusés restants.
+
+**Conséquences :** SPEC.md § 3.2 (« un juge révoqué est déconnecté au prochain appel ») devient
+« …ne peut plus rien lire ; ses saisies en file sont reçues pour validation ». Un téléphone volé
+peut encore créer du bruit à valider (et bloquer une publication) ; il ne peut pas toucher au
+classement. Un client resté sur une ancienne version ignore `accessRevoked` et continue de
+saisir : tout part en quarantaine, rien n'est perdu.
+
+**Alternatives écartées :** « Rétablir l'accès » comme chemin de récupération (demande à un
+bénévole sous pression de rétablir, attendre, re-révoquer ; reste souhaitable pour la
+réversibilité, noté dans `TODO.md`) ; une table de quarantaine dédiée (le mécanisme de conflit
+fait déjà tout) ; n'accepter que depuis un appareil déjà connu, ou pendant N heures (écartés par
+l'utilisateur : refusent des cas légitimes).
+
+---
+
+## ADR-079 — Changer de juge sur un appareil ne vide plus jamais une file en attente
+
+**Date :** 2026-09-21
+**Contexte :** ADR-036 vide la base locale quand `bootstrapJudge()` voit un autre `judgeId`. Or
+la procédure d'ADR-026 (« PIN perdu → révoquer puis recréer ») amène précisément un juge à
+scanner un nouveau QR sur un téléphone dont la file n'est pas vide : ses saisies étaient
+effacées sans un mot. **Amende ADR-036.**
+
+**Décision :**
+
+1. `GET /judge/access/:token` renvoie aussi `judgeId`. L'écran d'accès le compare au juge connu
+   localement. **Même juge : aucun message** (rescanner son propre QR est courant).
+2. Autre juge et file en attente : l'écran le dit (« Ce téléphone a encore N saisies de Paul à
+   envoyer »), force l'envoi **avec l'ancien jeton**, et n'avance que file vidée. Avec ADR-078,
+   une file peut toujours partir dès qu'il y a du réseau, même pour un accès révoqué.
+3. Puis une confirmation nominative (« Continuer en tant que Léa ? »). Le nouveau jeton n'est
+   posé qu'après.
+4. **Sortie de secours assumée :** si la file ne peut plus partir (jeton expiré, compétition à la
+   corbeille), l'écran liste les saisies en clair et propose « Effacer ces saisies » derrière une
+   confirmation explicite. Sans elle, l'appareil resterait dans une impasse et le bénévole
+   viderait les données du site à la main, sans rien voir.
+5. `resetJudgeDatabase()` refuse désormais de vider une file contenant du `pending`/`sending`
+   sans demande explicite — ceinture et bretelles.
 
 ---
 

@@ -195,14 +195,9 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   serveur non détecté), rien n'alerte l'organisateur au-delà du bandeau
   juge local (« Hors ligne, N saisies en attente » resterait affiché tant
   que le juge n'est pas revenu en ligne, sans limite de temps).
-- **Un juge révoqué pendant qu'il est hors ligne ne l'apprend qu'à la
-  prochaine tentative de synchronisation** (401 renvoyé par
-  `POST /ascents/batch`, traité comme un échec transport ordinaire — la
-  file retente indéfiniment avec repli exponentiel, sans jamais distinguer
-  ce cas d'une simple coupure réseau). Les écrans juge ne faisant plus aucune
-  lecture réseau (ADR-012), il n'y a plus d'autre point de contact pour
-  détecter une révocation avant ce moment. Pas construit ce lot — noté pour
-  ne pas être surpris si un club signale ce scénario en usage réel.
+- ~~**Un juge révoqué pendant qu'il est hors ligne ne l'apprend qu'à la prochaine tentative de
+  synchronisation**, et sa file réessaie sans fin.~~ Résolu au Lot 21 (ADR-078) : sa file est
+  reçue en quarantaine, il est prévenu puis déconnecté.
 - **Un `rejected` (création) n'annule pas l'écriture optimiste déjà faite
   dans le cache local** (`routeDetails`) — le compétiteur reste affiché
   « fait » avec un avertissement permanent, plutôt que de réapparaître en
@@ -360,11 +355,8 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   renvoyé à l'écran de connexion** (ADR-060) : sa session ne se restaure qu'avec
   le serveur. Il doit attendre le retour du réseau. Un mode « lecture seule »
   qui garderait le dernier état affiché n'existe pas.
-- **Rien ne dit à un juge que sa file est bloquée parce que son accès a été
-  révoqué** : la répétition générale l'a confirmé — l'appareil du juge révoqué
-  reçoit un 401, traité comme une coupure réseau, et réessaie indéfiniment. Ses
-  saisies en attente n'atteindront jamais le serveur ; l'organisateur doit les
-  ressaisir (saisie de secours). Déjà noté au Lot 6, maintenant mesuré.
+- ~~**Rien ne dit à un juge que sa file est bloquée parce que son accès a été révoqué.**~~
+  Résolu au Lot 21 (ADR-078).
 - **Limitation de débit partagée par toute la salle** (mesuré par la répétition
   et le test SSE) : 120 lots de saisie par minute et par adresse, 300
   connexions SSE par minute et par adresse, 600 lectures publiques par minute.
@@ -469,3 +461,146 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   jour du service worker (ADR-061) qui recharge la page en pleine séquence.
 - **`asset.kind` accepte maintenant `route_photo`** ; le message d'erreur de la suppression
   définitive parle encore de « vidéos » quand le stockage manque.
+
+## Depuis la page d'accueil (ADR-070)
+
+- **Brancher la recherche (Lot 13).** Le champ et « Trouver une compétition » sont
+  `disabled` avec la mention « Recherche bientôt disponible » (`LandingSearch.vue`). Le Lot 13
+  retire les deux, ajoute la page de résultats, et peut alors rendre la carte Spectateurs
+  cliquable.
+- **Remplacer les visuels recadrés des maquettes IA** (`apps/web/src/assets/landing/*.webp`,
+  941 px de large pour le mobile, statut juridique flou) par des illustrations HD à licence
+  claire ; le logo SVG de `BrandLogo.vue` est une approximation du badge.
+- ~~**Unifier la charte**~~ Fait, ADR-071.
+- **Menu hamburger** de la maquette mobile : omis, il n'y a rien à y mettre.
+- **`prettier-plugin-tailwindcss` ne connaît pas les jetons `@theme`** (il classe `bg-paper`,
+  `text-ink`… en tête) : lui indiquer `tailwindStylesheet: apps/web/src/style.css` dans
+  `.prettierrc.json` stabiliserait l'ordre des classes.
+
+## Depuis l'extension de la charte (ADR-071)
+
+- **`<RouterLink><Button>` imbriqués** dans `CompetitionList.vue` (« Nouvelle compétition »,
+  « Corbeille ») : un bouton dans un lien est du HTML invalide. `Button` accepte maintenant
+  `to` ; la conversion change le rôle ARIA (`button` → `link`) que des tests e2e ciblent —
+  à faire avec eux.
+- **28 fichiers ne sont pas au format Prettier** sur `main` (`pnpm format:check`), sans lien
+  avec la charte ; non reformatés ici pour garder des diffs lisibles.
+- **Cases à cocher natives** : seules deux portent `accent-blue-700` ; les autres gardent le
+  bleu du navigateur.
+- **Pilules sur deux lignes à 360 px** (« Voir l'accès », « Régénérer le PIN » dans l'onglet
+  Juges) : lisibles et ≥ 48 px, mais massives. Libellés plus courts ou pile verticale à voir.
+- **Écran de salle** (`PublicRoomScreen`) : fond sombre conservé, seulement re-teinté par les
+  échelles. Une version « charte » (logo, Caveat pour le nom de catégorie) reste à décider.
+- ~~**Test instable** `JudgeAscentEntry.test.ts` › « Voir la voie ouvre le panneau… sans
+  réseau »~~ **Corrigé au Lot 18** : `syncEngine` est un singleton de module, vider
+  `judgeDb.queue` ne vidait pas sa file EN MÉMOIRE, et son minuteur de repli envoyait les
+  saisies d'un test précédent au milieu de celui-ci. Les deux `afterEach` du fichier
+  appellent maintenant `syncEngine.hydrate()`. **Reste ouvert :** aucun autre fichier de
+  test ne le fait ; un nettoyage global serait plus sûr qu'une discipline par fichier.
+
+## Depuis les tableaux denses (Lot 18, ADR-074)
+
+- **La ligne d'ajout rapide n'est pas collante** sous l'en-tête du tableau : au-delà d'une
+  vingtaine de compétiteurs, il faut remonter pour saisir le suivant. Deux éléments collants
+  imbriqués dans un `<tbody>` sont un nid à bugs de rendu ; à reprendre si la gêne est
+  réelle à l'usage.
+- **`table-fixed` tronque sans autre indice que l'infobulle `title`.** Un nom long est coupé
+  vers 90 px à 1280 px. Une colonne redimensionnable, ou un choix de colonnes par
+  l'organisateur, serait la vraie réponse — hors lot.
+- **La colonne d'actions garde une largeur fixe** (`w-60` chez les compétiteurs) calée sur
+  ses trois libellés : un libellé plus long la ferait passer sur deux lignes et gonflerait
+  la ligne de 41 à 81 px. Fragile, faute de mesure automatique.
+- **Aucune virtualisation** : 150 compétiteurs × 9 colonnes tiennent, 600 restent à mesurer.
+  Si ça rame, la première réponse n'est pas la virtualisation (Lot 20 au mieux) mais moins
+  de composants par cellule.
+- **Recherche et filtre des onglets ne sont pas dans l'adresse**, contrairement à la liste
+  des compétitions (ADR-062). Cohabiter avec `:tab?` et `?section=` pour un bénéfice faible ;
+  à revoir si quelqu'un demande à partager « les juges triés par dernier accès ».
+- **`prettier-plugin-tailwindcss` ne connaît pas la variante `fine:`** (ni les jetons
+  `@theme`, déjà noté) : les classes `fine:` sont triées arbitrairement mais de façon
+  stable, `format:check` ne casse pas. À régler avec la dette `tailwindStylesheet` du
+  `.prettierrc`.
+- **Le lien retour « ← Mes compétitions » fait 20 px de haut à partir de `lg`** (décision du
+  Lot 17, `lg:min-h-0`). La garde e2e des 48 px est donc bornée au tableau sur les parcours
+  de bureau ; à trancher si on veut une règle uniforme.
+
+## Depuis le socle desktop (Lot 17, ADR-072)
+
+- ~~**Liste, corbeille et création restent une colonne étroite**~~ Levé au Lot 18 pour la
+  liste et la corbeille (`lg:max-w-none`). **`CompetitionCreate` garde son `max-w-2xl`** :
+  c'est un formulaire, sa mise en grille est le Lot 19.
+- **`Tabs` n'a pas de pastille** (`badge`) : prévue au plan, non écrite tant que rien ne
+  l'alimente (compteurs de conflits / alertes / points bloquants → Lot 20).
+- **Identifiants DOM en double** : les onglets de la page et les sous-onglets du pilotage
+  produisent tous deux `#tab-rounds` (et `aria-controls="panel-…"` ne pointe sur aucun
+  élément). Antérieur au Lot 17 ; `Tabs` devrait recevoir un préfixe d'identifiant et les
+  panneaux porter `role="tabpanel"`.
+- **Correction d'adresse `rounds` hors phases** (`CompetitionDetail`, `watchEffect`) : vérifiée
+  en navigateur, couverte en unitaire par `resolveCompetitionTab` seulement — pas de test de
+  composant de la page.
+- **Pistes desktop écartées des Lots 17–20**, à arbitrer plus tard : sélection multiple et
+  actions en lot sur les compétiteurs ; matrice juges × voies ; tours en colonnes côte à
+  côte ; modales → panneau latéral ; classement provisoire à côté de la matrice de pilotage ;
+  raccourcis clavier globaux ; navigation clavier dans les tableaux ; glisser-déposer des
+  voies et dépôt de fichier ; sélecteur rapide de compétition ; feuille d'impression ; lien
+  vers l'écran de salle depuis le pilotage ; exports en grille ; « Prêt à démarrer ? » en
+  deux colonnes.
+
+## Depuis le maître–détail (Lot 19, ADR-075 à ADR-077)
+
+- **`RoutePhotoPanel` (écran juge) garde sa propre copie du zoom.** `useZoomableFrame`
+  factorise le cadre zoomable du recadrage et de l'annotation, mais l'écran juge n'a pas été
+  converti : le gain est cosmétique et `CLAUDE.md` déclare ces écrans non négociables. À faire
+  si on y touche pour une autre raison.
+- **`Modal` de `packages/ui` n'a ni piège de focus ni restitution du focus.** `PhotoCropDialog`
+  et `HoldAnnotatorDialog` le font à la main, chacun de son côté : troisième implémentation du
+  même besoin. Un `useDialog` (ou une `Modal` qui s'en charge) s'impose, hors lot.
+- **Les modifications non enregistrées d'une voie ne survivent pas au rechargement.** `?route=`
+  rouvre bien la voie, mais ses valeurs sont relues du serveur : `RouteEditorPanel` n'a pas de
+  `useFormDraft` (seuls `InfosTab` et `CompetitionCreate` en ont un). À brancher si un
+  organisateur perd une saisie longue.
+- **Un portable de 1366 px n'a pas le maître–détail.** C'est le prix des colonnes à largeur
+  fixe (`table-fixed`, ADR-074) : il faudrait des colonnes élastiques ou redimensionnables pour
+  descendre plus bas. Même dette que « `table-fixed` tronque sans autre indice que l'infobulle ».
+- **Les en-têtes de colonne ne s'alignent pas entre eux** quand certaines colonnes sont
+  triables et d'autres non : le `<th>` sans bouton retombe plus bas. Visible sur les juges
+  (« Voies » sous « Juge » et « Statut »). Antérieur au Lot 19, dans `DataList` — donc sur les
+  six listes à la fois, ce qui vaut un lot à soi.
+- **Le tri peut rester posé sur une colonne devenue invisible** (le PIN chez les juges, quand on
+  passe sous 1280 px ou en maître–détail) : l'ordre reste celui de cette colonne sans que rien
+  ne l'indique. Sans conséquence sur les données, déroutant à l'œil.
+- **Le QR est dessiné deux fois dans le dépôt** : `qrcode` côté serveur pour la planche PDF,
+  côté navigateur pour la fiche (ADR-076). Assumé — ni le même support ni les mêmes contraintes —
+  mais deux versions à garder en phase.
+- **Le panneau de détail n'est pas atteignable au clavier depuis la liste** autrement qu'en
+  tabulant : pas de raccourci, pas de déplacement du focus vers le panneau à l'ouverture. À voir
+  avec la « navigation clavier dans les tableaux » déjà écartée des Lots 17–20.
+
+## Depuis le juge révoqué (Lot 21, ADR-078 et ADR-079)
+
+- **« Rétablir l'accès » n'existe pas** : la révocation reste irréversible, alors que `CLAUDE.md`
+  veut des saisies destructives réversibles. Écarté comme chemin de récupération (ADR-078), mais
+  un clic sur le mauvais juge ne se rattrape toujours qu'en recréant un accès.
+- **Un juge SUPPRIMÉ (`deleted_at`) n'a pas la quarantaine** : son lot reçoit toujours un 401
+  « Accès introuvable », et sa file reste sur son téléphone. Même traitement à prévoir si la
+  suppression d'un juge devient possible depuis l'interface.
+- **Un accès révoqué peut envoyer sans limite de durée** (bornes retenues : voies assignées et
+  limitation de débit). Un téléphone volé peut donc remplir l'onglet Conflits et retenir une
+  publication. Une fenêtre de temps ou une borne par appareil connu ont été écartées ; à
+  reconsidérer si le cas se présente.
+- **Une saisie refusée ne se « dé-refuse » pas** : elle reste en base et dans le journal, mais
+  l'organisateur doit la ressaisir (saisie de secours) s'il s'est trompé.
+- **Deux saisies en quarantaine sur le même passage, envoyées au même instant par deux
+  appareils**, peuvent créer deux groupes solitaires (elles ne sont pas dans l'index d'unicité).
+  Accepter la seconde renvoie alors un 409 lisible. Négligeable en pratique.
+- **Un client resté sur l'ancienne version ignore `accessRevoked`** et continue de saisir : tout
+  part en quarantaine, rien n'est perdu, mais le juge n'est pas prévenu avant la mise à jour.
+- **« Envoi en cours… » sur l'écran de changement de juge** reste affiché même si chaque essai
+  échoue (borne wifi saturée) : le bouton « Réessayer l'envoi » et la sortie de secours sont là,
+  mais rien ne dit « ça ne passe pas ».
+- **Le limiteur de `GET /judge/access` (30 / 15 min par adresse) s'épuise vite en e2e**, et la page
+  dit alors « Lien invalide » — message trompeur pour un vrai 429, en salle aussi (une seule
+  adresse publique pour tous les juges le matin).
+- **L'état « file pas encore relue » de l'écran « accès révoqué »** n'a pas de test de composant
+  (le moteur est un singleton déjà hydraté en test) ; seul `SyncEngine.isHydrated` est testé.
+

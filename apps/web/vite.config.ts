@@ -16,14 +16,14 @@ export default defineConfig({
       includeAssets: ['favicon.svg'],
       manifest: {
         id: '/',
-        name: 'ClimbContest',
-        short_name: 'ClimbContest',
+        name: 'Climb Contest',
+        short_name: 'Climb Contest',
         description: "Gestion de compétitions d'escalade de difficulté",
         lang: 'fr',
         start_url: '/',
         display: 'standalone',
-        background_color: '#ffffff',
-        theme_color: '#1d4ed8',
+        background_color: '#f9f7f1',
+        theme_color: '#0e3b4e',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
@@ -36,6 +36,11 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // `.webp` et `.woff2` sont volontairement ABSENTS : ce sont les
+        // visuels et polices de la page d'accueil publique (ADR-070),
+        // quelques centaines de Ko qui n'ont rien à faire dans le précache
+        // installé sur le téléphone d'un juge. Ils passent par le cache à la
+        // demande (`runtimeCaching` ci-dessous, destinations `image`/`font`).
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         // Lot 6 (SPEC.md § 6.3) : réponse réseau d'abord avec repli cache
         // pour les données API (utile au premier chargement du bootstrap

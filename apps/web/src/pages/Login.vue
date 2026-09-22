@@ -6,6 +6,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError, apiFetch } from '../api/client'
 import { setSession } from '../api/session'
 import { UNREACHABLE_MESSAGE } from '../lib/network-errors'
+import BrandShell from '../components/brand/BrandShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -111,55 +112,62 @@ async function onResend(): Promise<void> {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 px-4 py-8">
-    <h1 class="text-2xl font-bold text-gray-900">Connexion</h1>
+  <BrandShell decor>
+    <main class="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-8">
+      <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">Connexion</h1>
 
-    <p
-      v-if="banner"
-      role="status"
-      class="rounded-lg px-4 py-3 text-sm"
-      :class="{
-        'bg-green-100 text-green-800': banner.variant === 'success',
-        'bg-red-100 text-red-800': banner.variant === 'error',
-        'bg-blue-100 text-blue-800': banner.variant === 'info',
-      }"
-    >
-      {{ banner.text }}
-    </p>
-
-    <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
-      <TextField
-        v-model="form.email"
-        label="E-mail"
-        type="email"
-        autocomplete="email"
-        required
-        :error="errors.email"
-      />
-      <TextField
-        v-model="form.password"
-        label="Mot de passe"
-        type="password"
-        autocomplete="current-password"
-        required
-        :error="errors.password"
-      />
-
-      <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
-      <Button v-if="needsVerification" variant="secondary" :disabled="resending" @click="onResend">
-        Renvoyer l’e-mail de vérification
-      </Button>
-
-      <Button type="submit" full-width :disabled="submitting">
-        {{ submitting ? 'Connexion…' : 'Se connecter' }}
-      </Button>
-    </form>
-
-    <p class="text-center text-sm text-gray-600">
-      Pas encore de compte ?
-      <RouterLink to="/register" class="font-medium text-blue-700 hover:underline"
-        >Créer un compte</RouterLink
+      <p
+        v-if="banner"
+        role="status"
+        class="rounded-lg px-4 py-3 text-sm"
+        :class="{
+          'bg-green-100 text-green-800': banner.variant === 'success',
+          'bg-red-100 text-red-800': banner.variant === 'error',
+          'bg-blue-100 text-blue-800': banner.variant === 'info',
+        }"
       >
-    </p>
-  </main>
+        {{ banner.text }}
+      </p>
+
+      <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
+        <TextField
+          v-model="form.email"
+          label="E-mail"
+          type="email"
+          autocomplete="email"
+          required
+          :error="errors.email"
+        />
+        <TextField
+          v-model="form.password"
+          label="Mot de passe"
+          type="password"
+          autocomplete="current-password"
+          required
+          :error="errors.password"
+        />
+
+        <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
+        <Button
+          v-if="needsVerification"
+          variant="secondary"
+          :disabled="resending"
+          @click="onResend"
+        >
+          Renvoyer l’e-mail de vérification
+        </Button>
+
+        <Button type="submit" full-width :disabled="submitting">
+          {{ submitting ? 'Connexion…' : 'Se connecter' }}
+        </Button>
+      </form>
+
+      <p class="text-center text-sm text-gray-600">
+        Pas encore de compte ?
+        <RouterLink to="/register" class="font-medium text-blue-700 hover:underline"
+          >Créer un compte</RouterLink
+        >
+      </p>
+    </main>
+  </BrandShell>
 </template>

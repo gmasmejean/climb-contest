@@ -1,5 +1,7 @@
 import type { Competition } from '@climbcontest/contracts'
 
+import { compareText, normalize } from './table-sort'
+
 /**
  * Recherche, filtres et tri de la liste des compétitions (Lot 11, ADR-062).
  * Tout se fait dans le navigateur, sur la liste que l'API renvoie déjà en
@@ -65,15 +67,6 @@ export function toLocalDay(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${date.getFullYear()}-${month}-${day}`
-}
-
-/** Minuscules, sans accents, sans espaces aux extrémités. */
-function normalize(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
-}
-
-function compareText(a: string, b: string): number {
-  return a.localeCompare(b, 'fr', { sensitivity: 'base' })
 }
 
 function matchesSearch(row: ListedCompetition, tokens: readonly string[]): boolean {

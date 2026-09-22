@@ -1,10 +1,12 @@
 import type { CreateRouteInput } from '@climbcontest/contracts'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createRouter, createWebHistory, type Router } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../../../api/client'
 import type { RouteWithCategories } from '../../../api/competitions'
+import { stubDesktop, stubViewport } from '../../../test-utils/media-query'
 
 const api = vi.hoisted(() => ({
   routes: { list: vi.fn(), create: vi.fn(), update: vi.fn(), reorder: vi.fn() },
@@ -32,6 +34,15 @@ vi.mock('../../../lib/photo-resize', async (importOriginal) => ({
 const { default: RoutesTab } = await import('./RoutesTab.vue')
 
 const mounted: VueWrapper[] = []
+let router: Router
+
+/** La voie ouverte vit dans `?route=` (ADR-075) : les écrans ont besoin d'un routeur. */
+function makeRouter(): Router {
+  return createRouter({
+    history: createWebHistory(),
+    routes: [{ path: '/competitions/:id/:tab?', component: { template: '<div />' } }],
+  })
+}
 const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/jpeg' })
 const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.6 }
 
@@ -57,18 +68,15 @@ function aRoute(overrides: Partial<RouteWithCategories> = {}): RouteWithCategori
   }
 }
 
-async function mountTab() {
+async function mountTab(
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
+  await router.push('/competitions/comp-1/routes')
+  await router.isReady()
   const wrapper = mount(RoutesTab, {
     attachTo: document.body,
     props: { competitionId: 'comp-1' },
-    global: {
-      plugins: [
-        [
-          VueQueryPlugin,
-          { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
-        ],
-      ],
-    },
+    global: { plugins: [router, [VueQueryPlugin, { queryClient }]] },
   })
   mounted.push(wrapper)
   await flushPromises()
@@ -96,6 +104,7 @@ async function submit(wrapper: VueWrapper) {
 }
 
 beforeEach(() => {
+  router = makeRouter()
   for (const group of Object.values(api)) for (const fn of Object.values(group)) fn.mockReset()
   resize.resizeToJpeg.mockReset()
   resize.resizeToJpeg.mockResolvedValue(jpeg)
@@ -107,6 +116,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   for (const wrapper of mounted.splice(0)) wrapper.unmount()
   document.body.innerHTML = ''
 })
@@ -364,5 +374,287 @@ describe('RoutesTab — annotation à la création : le nombre de prises suit la
     expect(wrapper.find('[data-testid="photo-preview"]').exists()).toBe(false)
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(buttonNamed(wrapper, 'Annuler')).toBeUndefined()
+  })
+})
+
+describe('RoutesTab — tableau des grands écrans (Lot 18)', () => {
+  const three = [
+    aRoute({ id: 'r1', number: 1, name: 'Dalle', sector: 'Gauche', color: '#ff0000' }),
+    aRoute({ id: 'r2', number: 2, name: 'Dièdre' }),
+    aRoute({ id: 'r3', number: 3, name: 'Toit' }),
+  ]
+
+  it('montre en colonnes le secteur et la couleur, invisibles en cartes', async () => {
+    api.routes.list.mockResolvedValue(three)
+    const cards = await mountTab()
+    expect(cards.text()).not.toContain('Gauche')
+
+    // 1280 px : tableau du Lot 18, sans panneau à côté — toutes les colonnes.
+    stubViewport(1280)
+    api.routes.list.mockResolvedValue(three)
+    const table = await mountTab()
+    expect(table.find('table').exists()).toBe(true)
+    expect(table.text()).toContain('Gauche')
+    expect(table.text()).toContain('#ff0000')
+  })
+
+  it('n’offre aucun tri : l’ordre de la compétition fait foi', async () => {
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    const wrapper = await mountTab()
+    expect(wrapper.findAll('thead button')).toHaveLength(0)
+    expect(wrapper.findAll('thead th[aria-sort]')).toHaveLength(0)
+  })
+
+  /**
+   * `route-photo`, `route-photo-create-crop` et `route-video` prennent le
+   * PREMIER bouton nommé « Modifier » et comptent sur l'ordre de la compétition.
+   */
+  it('garde un bouton « Modifier » par ligne, dans l’ordre reçu', async () => {
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    const wrapper = await mountTab()
+    const editors = wrapper.findAll('button').filter((button) => button.text() === 'Modifier')
+    expect(editors).toHaveLength(3)
+    await editors[0]?.trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll<HTMLInputElement>('input[type="number"]')[0]?.element.value).toBe('1')
+  })
+
+  it('remonte une voie depuis le tableau', async () => {
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    api.routes.reorder.mockResolvedValue(undefined)
+    const wrapper = await mountTab()
+    const up = wrapper.findAll('button[aria-label="Monter"]')
+    expect(up[0]?.attributes('disabled')).toBeDefined()
+    await up[1]?.trigger('click')
+    await flushPromises()
+    expect(api.routes.reorder).toHaveBeenCalledWith('comp-1', ['r2', 'r1', 'r3'])
+  })
+})
+
+describe('RoutesTab — la voie modifiée quitte la liste', () => {
+  it('revient en création plutôt que d’enregistrer sur un identifiant mort', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    api.routes.list.mockResolvedValue([aRoute({ id: 'route-1', number: 7 })])
+    const wrapper = await mountTab(queryClient)
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier la voie')
+
+    // La voie disparaît de la liste sous les pieds de l'éditeur.
+    api.routes.list.mockResolvedValue([])
+    await queryClient.invalidateQueries({ queryKey: ['competitions', 'comp-1', 'routes'] })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Ajouter une voie')
+    await submit(wrapper)
+    expect(api.routes.update).not.toHaveBeenCalled()
+  })
+
+  it('ne referme pas la voie ouverte pendant que la liste est encore en vol', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    api.routes.list.mockResolvedValue([aRoute({ id: 'route-1', number: 7 })])
+    const wrapper = await mountTab(queryClient)
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+
+    // Une requête en vol ne doit pas être lue comme « la voie a disparu ».
+    let resolveList: (routes: RouteWithCategories[]) => void = () => {}
+    api.routes.list.mockReturnValue(
+      new Promise<RouteWithCategories[]>((resolve) => (resolveList = resolve)),
+    )
+    void queryClient.invalidateQueries({ queryKey: ['competitions', 'comp-1', 'routes'] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier la voie')
+
+    resolveList([aRoute({ id: 'route-1', number: 7 })])
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier la voie')
+  })
+})
+
+describe('RoutesTab — la voie ouverte vit dans l’adresse (ADR-075)', () => {
+  it('met la voie choisie dans l’adresse, et l’en retire à l’enregistrement', async () => {
+    api.routes.list.mockResolvedValue([aRoute({ id: 'route-1', number: 7 })])
+    api.routes.update.mockResolvedValue(aRoute({ id: 'route-1', number: 7 }))
+    const wrapper = await mountTab()
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.route).toBe('route-1')
+
+    await submit(wrapper)
+    expect(api.routes.update).toHaveBeenCalledWith('comp-1', 'route-1', expect.anything())
+    expect(router.currentRoute.value.query.route).toBeUndefined()
+  })
+
+  it('ouvre directement la voie désignée par l’adresse', async () => {
+    api.routes.list.mockResolvedValue([
+      aRoute({ id: 'route-1', number: 7 }),
+      aRoute({ id: 'route-2', number: 8, name: 'Le dièdre' }),
+    ])
+    await router.push('/competitions/comp-1/routes?route=route-2')
+    await router.isReady()
+    const wrapper = mount(RoutesTab, {
+      attachTo: document.body,
+      props: { competitionId: 'comp-1' },
+      global: {
+        plugins: [
+          router,
+          [
+            VueQueryPlugin,
+            { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+          ],
+        ],
+      },
+    })
+    mounted.push(wrapper)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Modifier la voie')
+    const [number] = wrapper.findAll<HTMLInputElement>('input[type="number"]')
+    expect(number?.element.value).toBe('8')
+  })
+
+  it('ignore un identifiant inconnu et nettoie l’adresse', async () => {
+    api.routes.list.mockResolvedValue([aRoute({ id: 'route-1', number: 7 })])
+    await router.push('/competitions/comp-1/routes?route=disparue&section=garde')
+    await router.isReady()
+    const wrapper = mount(RoutesTab, {
+      attachTo: document.body,
+      props: { competitionId: 'comp-1' },
+      global: {
+        plugins: [
+          router,
+          [
+            VueQueryPlugin,
+            { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+          ],
+        ],
+      },
+    })
+    mounted.push(wrapper)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Ajouter une voie')
+    expect(router.currentRoute.value.query.route).toBeUndefined()
+    // Le reste de l'adresse est préservé.
+    expect(router.currentRoute.value.query.section).toBe('garde')
+  })
+
+  it('refuse d’ouvrir une autre voie tant qu’une création est en reprise', async () => {
+    api.routes.list.mockResolvedValue([aRoute({ id: 'route-1', number: 7 })])
+    api.routes.create.mockResolvedValue(aRoute({ id: 'route-9', number: 1 }))
+    api.photo.upload.mockRejectedValue(new ApiError(503, 'Service indisponible', 'Réseau saturé.'))
+    const wrapper = await mountTab()
+    await fillAndChoosePhoto(wrapper)
+    await submit(wrapper)
+    expect(wrapper.get('[role="alert"]').text()).toContain('La voie a été créée, mais')
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+
+    // Ni sélection, ni perte de la photo déjà choisie.
+    expect(router.currentRoute.value.query.route).toBeUndefined()
+    expect(wrapper.text()).toContain('Ajouter une voie')
+    expect(wrapper.find('[data-testid="photo-preview"]').exists()).toBe(true)
+  })
+})
+
+describe('RoutesTab — maître–détail (Lot 19)', () => {
+  const three = [
+    aRoute({ id: 'r1', number: 1 }),
+    aRoute({ id: 'r2', number: 2, name: 'Le dièdre' }),
+    aRoute({ id: 'r3', number: 3 }),
+  ]
+
+  it('marque la ligne ouverte, et elle seule', async () => {
+    stubDesktop(true)
+    api.routes.list.mockResolvedValue(three)
+    const wrapper = await mountTab()
+
+    const editors = wrapper.findAll('button').filter((button) => button.text() === 'Modifier')
+    await editors[1]?.trigger('click')
+    await flushPromises()
+
+    expect(editors[1]?.attributes('aria-current')).toBe('true')
+    expect(editors[0]?.attributes('aria-current')).toBeUndefined()
+    const marked = wrapper.findAll('[data-testid="data-list-row"]').filter((row) => {
+      const classes = row.attributes('class') ?? ''
+      return classes.includes('bg-blue-50')
+    })
+    expect(marked).toHaveLength(1)
+  })
+
+  it('ne marque rien en cartes : le repère est une affaire de tableau', async () => {
+    api.routes.list.mockResolvedValue(three)
+    const wrapper = await mountTab()
+
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('button[aria-current]').exists()).toBe(false)
+  })
+})
+
+describe('RoutesTab — seuil du maître–détail (ADR-075)', () => {
+  it('garde le tableau dès 1024 px, avec l’éditeur toujours accessible', async () => {
+    // Le maître–détail n'arrive qu'à 1440 px : ici l'éditeur reste sous la
+    // liste, mais « Modifier » l'ouvre exactement pareil.
+    stubViewport(1280)
+    api.routes.list.mockResolvedValue([aRoute({ id: 'r1', number: 1 })])
+    const wrapper = await mountTab()
+
+    expect(wrapper.find('table').exists()).toBe(true)
+    await buttonNamed(wrapper, 'Modifier')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Modifier la voie')
+    expect(router.currentRoute.value.query.route).toBe('r1')
+  })
+})
+
+describe('RoutesTab — colonnes réduites en maître–détail (ADR-075)', () => {
+  const route = () => aRoute({ id: 'r1', number: 1, name: 'Le grand dièdre', sector: 'Gauche' })
+
+  it('retire secteur, couleur et média : le panneau les montre', async () => {
+    stubViewport(1440)
+    api.routes.list.mockResolvedValue([route()])
+    const wrapper = await mountTab()
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text())
+    expect(headers).toContain('Nom')
+    expect(headers).toContain('Catégories')
+    expect(headers).not.toContain('Secteur')
+    expect(headers).not.toContain('Couleur')
+    expect(headers).not.toContain('Média')
+  })
+
+  it('les garde entre 1024 et 1440 px, où la liste a toute la largeur', async () => {
+    stubViewport(1280)
+    api.routes.list.mockResolvedValue([route()])
+    const wrapper = await mountTab()
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text())
+    expect(headers).toContain('Secteur')
+    expect(headers).toContain('Média')
+  })
+})
+
+describe('RoutesTab — colonnes de confort sous 1280 px', () => {
+  it('retire secteur, couleur et média : sinon « Nom » tombe à zéro pixel', async () => {
+    // Défaut du Lot 18 trouvé en navigateur : à 1024 px, les largeurs fixes
+    // (656 px) dépassaient la colonne et écrasaient les deux colonnes libres.
+    stubViewport(1024)
+    api.routes.list.mockResolvedValue([aRoute({ id: 'r1', number: 1, name: 'Le grand dièdre' })])
+    const wrapper = await mountTab()
+
+    const headers = wrapper.findAll('thead th').map((th) => th.text())
+    expect(headers).toContain('Nom')
+    expect(headers).not.toContain('Secteur')
+    expect(wrapper.text()).toContain('Le grand dièdre')
   })
 })

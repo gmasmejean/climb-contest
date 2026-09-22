@@ -9,6 +9,7 @@ import {
   makeCompetition,
   type FakeCompetitionServer,
 } from '../../test-utils/fake-competition-server'
+import { stubDesktop } from '../../test-utils/media-query'
 import CompetitionTrash from './CompetitionTrash.vue'
 
 const stub = { template: '<div />' }
@@ -247,5 +248,49 @@ describe('CompetitionTrash', () => {
 
     expect(wrapper.find('[role="status"]').text()).toContain('Rien n’a été modifié.')
     expect(rows()).toHaveLength(3)
+  })
+  describe('sur grand écran (Lot 18)', () => {
+    beforeEach(() => {
+      stubDesktop(true)
+    })
+
+    it('rend un tableau, et un seul arbre', async () => {
+      await open()
+      expect(wrapper.find('table').exists()).toBe(true)
+      expect(wrapper.find('ul').exists()).toBe(false)
+      expect(wrapper.findAll('[data-testid="data-list-row"]')).toHaveLength(3)
+    })
+
+    it('garde une case à cocher nommée par compétition', async () => {
+      await open()
+      const labels = wrapper
+        .findAll('input[type="checkbox"]')
+        .map((box) => box.attributes('aria-label'))
+      expect(labels).toContain('Open de Lyon')
+    })
+
+    it('montre l’ancienneté en colonne', async () => {
+      await open()
+      expect(wrapper.find('thead').text()).toContain('À la corbeille depuis')
+      expect(wrapper.find('table').text()).toContain('aujourd')
+    })
+
+    it('n’offre aucun tri', async () => {
+      await open()
+      expect(wrapper.findAll('thead button')).toHaveLength(0)
+    })
+
+    it('restaure depuis une ligne du tableau', async () => {
+      await open()
+      const row = wrapper
+        .findAll('[data-testid="data-list-row"]')
+        .find((candidate) => candidate.text().includes('Open de Lyon'))
+      await row
+        ?.findAll('button')
+        .find((button) => button.text() === 'Restaurer')
+        ?.trigger('click')
+      await flush()
+      expect(server.calls).toContain('POST /competitions/y/restore')
+    })
   })
 })

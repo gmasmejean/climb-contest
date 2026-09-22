@@ -9,6 +9,7 @@ import {
   makeCompetition,
   type FakeCompetitionServer,
 } from '../../test-utils/fake-competition-server'
+import { stubDesktop } from '../../test-utils/media-query'
 import CompetitionList from './CompetitionList.vue'
 
 const stub = { template: '<div />' }
@@ -360,5 +361,83 @@ describe('CompetitionList', () => {
     await open()
     expect(wrapper.text()).toContain('Aucune compétition pour l')
     expect(wrapper.find('input[type="text"]').exists()).toBe(false)
+  })
+  describe('sur grand écran (Lot 18)', () => {
+    /** Le nom vit dans l'en-tête de ligne, qui porte le lien vers la compétition. */
+    const rowNames = (): string[] =>
+      wrapper.findAll('[data-testid="data-list-row"] th').map((cell) => cell.text())
+
+    const headerByText = (text: string) =>
+      wrapper.findAll('thead th').find((th) => th.text().startsWith(text))
+
+    beforeEach(() => {
+      stubDesktop(true)
+    })
+
+    it('rend un tableau, et un seul arbre : plus aucune carte', async () => {
+      await open()
+      expect(wrapper.find('table').exists()).toBe(true)
+      expect(wrapper.find('ul').exists()).toBe(false)
+      expect(rowNames()).toHaveLength(4)
+    })
+
+    it('retire le sélecteur de tri, remplacé par les en-têtes', async () => {
+      await open()
+      expect(wrapper.find('select').exists()).toBe(false)
+    })
+
+    it('trie par nom au clic sur l’en-tête et l’écrit dans l’adresse', async () => {
+      await open()
+      await headerByText('Nom')?.find('button').trigger('click')
+      await flush()
+      expect(router.currentRoute.value.query).toMatchObject({ sort: 'name', dir: 'asc' })
+      expect(rowNames()[0]).toBe('Coupe d’été')
+    })
+
+    it('inverse le sens au second clic', async () => {
+      await open()
+      await headerByText('Nom')?.find('button').trigger('click')
+      await flush()
+      await headerByText('Nom')?.find('button').trigger('click')
+      await flush()
+      // `desc` est le sens par défaut : il ne s'écrit pas dans l'adresse.
+      expect(router.currentRoute.value.query).toEqual({ sort: 'name' })
+      expect(rowNames()[0]).toBe('Trophée des Écrins')
+    })
+
+    it('annonce le tri de l’adresse, une seule colonne à la fois', async () => {
+      await open('?sort=name&dir=asc')
+      expect(headerByText('Nom')?.attributes('aria-sort')).toBe('ascending')
+      expect(headerByText('Début')?.attributes('aria-sort')).toBe('none')
+      expect(headerByText('Lieu')?.attributes('aria-sort')).toBeUndefined()
+    })
+
+    it('montre le lieu, invisible sur la carte', async () => {
+      await open()
+      expect(wrapper.text()).toContain('Gymnase Jean Moulin')
+    })
+
+    it('coche une ligne et refuse celle qui est en cours', async () => {
+      await open()
+      await buttonByText('Sélectionner')?.trigger('click')
+      const boxes = wrapper.findAll('input[type="checkbox"]')
+      expect(boxes).toHaveLength(4)
+      const running = wrapper
+        .findAll('[data-testid="data-list-row"]')
+        .find((row) => row.text().includes('Critérium régional'))
+      expect(running?.find('input[type="checkbox"]').attributes('disabled')).toBeDefined()
+
+      await boxes[0]?.trigger('change')
+      expect(wrapper.text()).toContain('1 sélectionnée')
+    })
+
+    it('nomme chaque case par sa compétition', async () => {
+      await open()
+      await buttonByText('Sélectionner')?.trigger('click')
+      const labels = wrapper
+        .findAll('input[type="checkbox"]')
+        .map((box) => box.attributes('aria-label'))
+      expect(labels).toContain('Open de Lyon')
+    })
   })
 })

@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { createCategoryInputSchema } from '@climbcontest/contracts'
-import { Badge, Button, Select, TextField, useToast } from '@climbcontest/ui'
+import { createCategoryInputSchema, type Category } from '@climbcontest/contracts'
+import {
+  Badge,
+  Button,
+  DataList,
+  Select,
+  TextField,
+  useToast,
+  type DataListColumn,
+} from '@climbcontest/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 
 import { ApiError } from '../../../api/client'
 import { categoriesApi } from '../../../api/competitions'
+import { DESKTOP_QUERY, useMediaQuery } from '../../../composables/useMediaQuery'
 
 const props = defineProps<{ competitionId: string }>()
 
@@ -42,6 +51,32 @@ const sexOptions = [
   { value: 'M', label: 'Homme' },
   { value: 'X', label: 'Mixte / libre' },
 ]
+const sexLabel = (sex: Category['sex']): string =>
+  sexOptions.find((option) => option.value === sex)?.label ?? sex
+
+const isDesktop = useMediaQuery(DESKTOP_QUERY)
+
+/** Action de ligne compacte sous pointeur fin seulement (ADR-073). */
+const rowActionClass =
+  'fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+
+/**
+ * Pas de colonne triable (Lot 18) : l'ordre des catégories est celui du
+ * déroulé de la compétition, posé aux flèches. Le sexe, saisi à la création,
+ * n'était visible nulle part ; il prend sa colonne.
+ */
+const columns = computed<DataListColumn<Category>[]>(() => [
+  { key: 'label', label: 'Catégorie', card: 'title', value: (row) => row.label },
+  {
+    key: 'sex',
+    label: 'Sexe',
+    card: 'hidden',
+    cellClass: 'w-32',
+    value: (row) => sexLabel(row.sex),
+  },
+  { key: 'years', label: 'Années', card: 'aside', cellClass: 'w-32' },
+  { key: 'actions', label: 'Actions', card: 'actions', labelHidden: true, cellClass: 'w-48' },
+])
 
 const { mutate: createCategory, isPending: isCreating } = useMutation({
   mutationFn: () => categoriesApi.create(props.competitionId, { label: form.label, sex: form.sex }),
@@ -108,23 +143,27 @@ const { mutate: remove, isPending: isDeleting } = useMutation({
     </Button>
 
     <p v-if="isPending" class="text-gray-600">Chargement…</p>
-    <ul v-else class="flex flex-col gap-2">
-      <li
-        v-for="(category, index) in categories"
-        :key="category.id"
-        class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-4 py-2"
-      >
-        <div class="flex items-center gap-3">
-          <span class="font-medium text-gray-900">{{ category.label }}</span>
-          <Badge v-if="category.birthYearMin || category.birthYearMax">
-            {{ category.birthYearMin ?? '…' }}–{{ category.birthYearMax ?? '…' }}
-          </Badge>
-        </div>
+    <DataList
+      v-else
+      :rows="categories ?? []"
+      :columns="columns"
+      :layout="isDesktop ? 'table' : 'cards'"
+      label="Catégories, dans l’ordre de la compétition"
+      empty-text="Aucune catégorie."
+    >
+      <template #cell-years="{ row }">
+        <Badge v-if="row.birthYearMin || row.birthYearMax">
+          {{ row.birthYearMin ?? '…' }}–{{ row.birthYearMax ?? '…' }}
+        </Badge>
+        <template v-else-if="isDesktop">—</template>
+      </template>
+
+      <template #cell-actions="{ row, index }">
         <div class="flex items-center gap-1">
           <button
             type="button"
             aria-label="Monter"
-            class="min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
+            class="fine:min-h-8 fine:min-w-8 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
             :disabled="index === 0"
             @click="move(index, -1)"
           >
@@ -133,33 +172,50 @@ const { mutate: remove, isPending: isDeleting } = useMutation({
           <button
             type="button"
             aria-label="Descendre"
-            class="min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
+            class="fine:min-h-8 fine:min-w-8 min-h-12 min-w-12 rounded-lg text-lg hover:bg-gray-100 disabled:opacity-30"
             :disabled="!categories || index === categories.length - 1"
             @click="move(index, 1)"
           >
             ↓
           </button>
-          <template v-if="confirmingDeleteId === category.id">
-            <Button variant="danger" :disabled="isDeleting" @click="remove(category.id)"
+          <template v-if="confirmingDeleteId === row.id">
+            <button
+              v-if="isDesktop"
+              type="button"
+              :disabled="isDeleting"
+              class="fine:min-h-8 inline-flex min-h-12 items-center rounded-lg px-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              @click="remove(row.id)"
+            >
+              Confirmer
+            </button>
+            <Button v-else variant="danger" :disabled="isDeleting" @click="remove(row.id)"
               >Confirmer</Button
             >
-            <Button variant="secondary" @click="confirmingDeleteId = null">Annuler</Button>
+            <button
+              v-if="isDesktop"
+              type="button"
+              :class="rowActionClass"
+              @click="confirmingDeleteId = null"
+            >
+              Annuler
+            </button>
+            <Button v-else variant="secondary" @click="confirmingDeleteId = null">Annuler</Button>
           </template>
           <button
             v-else
             type="button"
             aria-label="Supprimer"
-            class="min-h-12 min-w-12 rounded-lg text-lg text-red-700 hover:bg-red-50"
-            @click="confirmingDeleteId = category.id"
+            class="fine:min-h-8 fine:min-w-8 min-h-12 min-w-12 rounded-lg text-lg text-red-700 hover:bg-red-50"
+            @click="confirmingDeleteId = row.id"
           >
             ✕
           </button>
         </div>
-      </li>
-    </ul>
+      </template>
+    </DataList>
 
     <form
-      class="flex flex-col gap-4 rounded-lg border border-gray-200 p-4"
+      class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
       @submit.prevent="onCreate"
     >
       <h2 class="font-medium text-gray-900">Ajouter une catégorie libre</h2>

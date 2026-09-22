@@ -37,7 +37,8 @@ function alertLabel(alert: DashboardAlert): string {
     case 'judge_silent':
       return 'Juge muet depuis plus de 10 minutes'
     case 'unresolved_conflict':
-      return 'Conflit de saisie non résolu'
+      // Lot 21 (ADR-078) : couvre aussi une saisie d'accès révoqué en attente.
+      return 'Saisie à trancher dans l’onglet Conflits'
     case 'competitor_no_ascent':
       return 'Compétiteur sans aucun passage alors que le tour est fermé'
   }
@@ -95,7 +96,7 @@ function alertDetail(alert: DashboardAlert): string {
         <div
           v-for="cat in data.categories"
           :key="cat.categoryId"
-          class="rounded-lg border border-gray-200 p-4"
+          class="rounded-lg border border-gray-200 bg-white p-4"
         >
           <h3 class="font-medium text-gray-900">{{ cat.label }}</h3>
           <ul class="mt-2 flex flex-col gap-1">
@@ -129,7 +130,7 @@ function alertDetail(alert: DashboardAlert): string {
           <li
             v-for="j in data.judges"
             :key="j.judgeId"
-            class="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3"
+            class="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3"
           >
             <span class="font-medium text-gray-900">{{ j.displayName }}</span>
             <span class="text-sm text-gray-600">

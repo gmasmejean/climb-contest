@@ -5,10 +5,10 @@ import { computed } from 'vue'
  * Indicateur visuel seul. `conflict` ajouté au Lot 6 (`packages/sync`) : une
  * saisie dont un autre appareil a enregistré une valeur différente pour le
  * même passage — l'organisateur tranche (SPEC.md § 6.3, Lot 8). Voir
- * ROADMAP.md Lot 1, point 7.
+ * ROADMAP.md Lot 1, point 7. `revoked` ajouté au Lot 21 (ADR-078).
  */
 const props = defineProps<{
-  status: 'offline' | 'pending' | 'syncing' | 'synced' | 'conflict'
+  status: 'offline' | 'pending' | 'syncing' | 'synced' | 'conflict' | 'revoked'
   pendingCount?: number
 }>()
 
@@ -26,6 +26,11 @@ const label = computed(() => {
       return 'À jour'
     case 'conflict':
       return 'Conflit — organisateur alerté'
+    // Lot 21 (ADR-078) : jamais « Synchronisation… » pour un accès révoqué.
+    case 'revoked':
+      return props.pendingCount
+        ? `Accès révoqué — envoi de ${props.pendingCount} saisie(s)…`
+        : 'Accès révoqué'
   }
   return ''
 })
@@ -36,7 +41,8 @@ const label = computed(() => {
     role="status"
     class="inline-flex min-h-12 items-center gap-2 rounded-full px-4 text-sm font-medium"
     :class="{
-      'bg-red-100 text-red-800': status === 'offline' || status === 'conflict',
+      'bg-red-100 text-red-800':
+        status === 'offline' || status === 'conflict' || status === 'revoked',
       'bg-amber-100 text-amber-800': status === 'pending' || status === 'syncing',
       'bg-green-100 text-green-800': status === 'synced',
     }"
@@ -44,7 +50,7 @@ const label = computed(() => {
     <span
       class="h-2.5 w-2.5 rounded-full"
       :class="{
-        'bg-red-600': status === 'offline' || status === 'conflict',
+        'bg-red-600': status === 'offline' || status === 'conflict' || status === 'revoked',
         'animate-pulse bg-amber-600': status === 'pending' || status === 'syncing',
         'bg-green-600': status === 'synced',
       }"

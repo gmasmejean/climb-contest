@@ -18,4 +18,13 @@ describe('SyncStatusIndicator', () => {
     const wrapper = mount(SyncStatusIndicator, { props: { status: 'conflict' } })
     expect(wrapper.text()).toBe('Conflit — organisateur alerté')
   })
+
+  it('ne dit jamais « Synchronisation… » à un accès révoqué (Lot 21, ADR-078)', () => {
+    expect(mount(SyncStatusIndicator, { props: { status: 'revoked' } }).text()).toBe(
+      'Accès révoqué',
+    )
+    expect(
+      mount(SyncStatusIndicator, { props: { status: 'revoked', pendingCount: 3 } }).text(),
+    ).toBe('Accès révoqué — envoi de 3 saisie(s)…')
+  })
 })

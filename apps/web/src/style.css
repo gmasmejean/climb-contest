@@ -1,2 +1,110 @@
 @import 'tailwindcss';
 @source '../../../packages/ui/src';
+
+/*
+ * Densité compacte à la souris seulement (ADR-073, amendé au Lot 18). Les
+ * lignes de tableau de l'espace organisateur descendent à ~40 px sous cette
+ * variante, et à 48 px partout ailleurs.
+ *
+ * `not (any-pointer: coarse)` en plus de `pointer: fine` : un portable à écran
+ * tactile rapporte `pointer: fine` pour son pavé tactile, mais le doigt y reste
+ * possible. Dès qu'un doigt est possible, on garde 48 px.
+ *
+ * Utilisable depuis `packages/ui` : le `@source` ci-dessus y scanne les classes.
+ */
+@custom-variant fine (@media (pointer: fine) and (not (any-pointer: coarse)));
+
+@theme {
+  /*
+   * Charte aquarelle (DECISIONS.md ADR-070, étendue à toute l'application par
+   * l'ADR-071). Couleurs relevées sur les maquettes.
+   */
+  --color-ink: #0f3241;
+  --color-navy: #184e67;
+  --color-navy-deep: #0e3b4e;
+  --color-paper: #f9f7f1;
+  --color-card-yellow: #fde6ba;
+  --color-card-green: #cedbc8;
+  --color-card-blue: #c8e0f0;
+  --color-card-coral: #f8a699;
+  --font-display: 'Caveat', cursive;
+  --font-body: 'Source Sans 3', system-ui, sans-serif;
+
+  /*
+   * Échelles Tailwind re-teintées (ADR-071). Chaque cran garde la clarté OKLCH
+   * du cran d'origine ; les couples texte/fond utilisés sont vérifiés en AA par
+   * `brand-contrast.test.ts`. Ne pas modifier une valeur sans relancer ce test.
+   */
+  /* Neutres teintés encre (232°). */
+  --color-gray-50: #f8fbfc;
+  --color-gray-100: #f0f5f7;
+  --color-gray-200: #e1e9ed;
+  --color-gray-300: #ccd7dd;
+  --color-gray-400: #96a3aa;
+  --color-gray-500: #617078;
+  --color-gray-600: #47575f;
+  --color-gray-700: #33434c;
+  --color-gray-800: #1a2b34;
+  --color-gray-900: #081b24;
+  --color-gray-950: #00090f;
+
+  /* Navy : 700 = navy, 800 = navy-deep, 900 = ink. */
+  --color-blue-50: #ecf7fd;
+  --color-blue-100: #d6edf9;
+  --color-blue-200: #b9def3;
+  --color-blue-300: #96c9e4;
+  --color-blue-400: #69aacb;
+  --color-blue-500: #4389ac;
+  --color-blue-600: #286886;
+  --color-blue-700: #184e67;
+  --color-blue-800: #0f3b4e;
+  --color-blue-900: #103241;
+  --color-blue-950: #08222f;
+
+  /* Corail (30°) : erreurs, danger. */
+  --color-red-50: #fef2f0;
+  --color-red-100: #fde3de;
+  --color-red-200: #fdccc3;
+  --color-red-300: #faa89a;
+  --color-red-400: #ee7766;
+  --color-red-500: #e15846;
+  --color-red-600: #ca4737;
+  --color-red-700: #a9392c;
+  --color-red-800: #8d3025;
+  --color-red-900: #752c22;
+  --color-red-950: #3f130e;
+
+  /* Ocre (78°) : avertissements, en attente. */
+  --color-amber-50: #fffaf3;
+  --color-amber-100: #fff0db;
+  --color-amber-200: #ffe1b5;
+  --color-amber-300: #ffce82;
+  --color-amber-400: #f8ba50;
+  --color-amber-500: #e4a73a;
+  --color-amber-600: #bf881f;
+  --color-amber-700: #976902;
+  --color-amber-800: #795301;
+  --color-amber-900: #644508;
+  --color-amber-950: #372503;
+
+  /* Sauge (148°) : confirmé, TOP. */
+  --color-green-50: #f3fcf4;
+  --color-green-100: #e7f8e8;
+  --color-green-200: #d3efd6;
+  --color-green-300: #b8e1bd;
+  --color-green-400: #96cb9d;
+  --color-green-500: #7cb684;
+  --color-green-600: #57905f;
+  --color-green-700: #47784e;
+  --color-green-800: #37603e;
+  --color-green-900: #2d4f33;
+  --color-green-950: #152b19;
+}
+
+@layer base {
+  /* Fond papier partout, y compris chez les juges : une couleur, pas une image. */
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+  }
+}

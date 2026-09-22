@@ -213,7 +213,12 @@ export async function computeDashboard(
   }
 
   const conflictRows = await db.query.ascent.findMany({
-    where: and(eq(ascent.competitionId, competitionId), isNull(ascent.supersededBy)),
+    where: and(
+      eq(ascent.competitionId, competitionId),
+      isNull(ascent.supersededBy),
+      // ADR-078 : une saisie refusée garde son groupe, sans plus alerter.
+      isNull(ascent.voidedAt),
+    ),
     columns: { conflictGroup: true, routeId: true, competitorId: true },
   })
   const seenConflictGroups = new Set<string>()

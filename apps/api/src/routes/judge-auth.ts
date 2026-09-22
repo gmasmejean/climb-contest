@@ -78,6 +78,7 @@ export function createJudgeAuthRoutes(deps: JudgeAuthRouteDeps): Hono {
     if (!found || found.revokedAt) throw INVALID_LINK()
 
     const response: JudgeAccessInfo = {
+      judgeId: found.id,
       displayName: found.displayName,
       pinRequired: found.pinHash !== null,
     }

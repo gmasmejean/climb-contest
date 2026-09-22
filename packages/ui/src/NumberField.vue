@@ -51,7 +51,7 @@ function onInput(event: Event): void {
       :required="required"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="describedBy"
-      class="min-h-12 rounded-lg border px-4 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+      class="min-h-12 rounded-lg border bg-white px-4 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
       :class="error ? 'border-red-700' : 'border-gray-400'"
       @input="onInput"
     />

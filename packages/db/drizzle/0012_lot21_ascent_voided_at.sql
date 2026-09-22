@@ -1,0 +1,1 @@
+ALTER TABLE "ascent" ADD COLUMN "voided_at" timestamp with time zone;

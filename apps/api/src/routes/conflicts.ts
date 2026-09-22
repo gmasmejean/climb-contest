@@ -5,11 +5,16 @@ import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { uuidv7 } from 'uuidv7'
 
-import { resolveConflictByChoosing, supersedeToNewAscent } from '../lib/ascent-correction'
+import {
+  resolveConflictByChoosing,
+  supersedeToNewAscent,
+  voidQuarantinedAscent,
+} from '../lib/ascent-correction'
 import { findConflictGroupRows, listUnresolvedConflicts } from '../lib/conflicts'
 import type { AccessTokenSigner } from '../lib/jwt'
 import { requireOrganizer } from '../middleware/auth'
 import { requireCompetitionAccess } from '../middleware/competition-access'
+import { isUniqueViolation } from '../lib/pg-errors'
 import { ApiError, problem } from '../middleware/problem'
 
 export interface ConflictsRouteDeps {
@@ -62,6 +67,22 @@ export function createConflictsRoutes(deps: ConflictsRouteDeps): Hono {
       const actor = { kind: 'organizer' as const, userId: organizer.sub }
       const reason = input.reason ?? null
 
+      if (input.resolution === 'reject') {
+        // ADR-078 : seule une saisie en quarantaine (groupe à une ligne) se
+        // refuse. Un vrai conflit se tranche — refuser les deux valeurs
+        // laisserait le compétiteur sans résultat sans que personne l'ait dit.
+        const [only, ...others] = groupRows
+        if (!only || others.length > 0) {
+          throw new ApiError(
+            409,
+            'Refus impossible',
+            'Ce conflit porte plusieurs valeurs — choisissez-en une ou saisissez-en une autre.',
+          )
+        }
+        const voided = await voidQuarantinedAscent(db, { row: only, actor, reason: input.reason })
+        return c.json(ascentSchema.parse(voided))
+      }
+
       if (input.resolution === 'choose') {
         const winner = groupRows.find((row) => row.id === input.ascentId)
         if (!winner) {
@@ -72,14 +93,27 @@ export function createConflictsRoutes(deps: ConflictsRouteDeps): Hono {
           )
         }
         const losers = groupRows.filter((row) => row.id !== winner.id)
-        const result = await resolveConflictByChoosing(db, {
-          winner,
-          losers,
-          actor,
-          categoryId: competitorRow.categoryId,
-          reason,
-        })
-        return c.json(ascentSchema.parse(result))
+        try {
+          const result = await resolveConflictByChoosing(db, {
+            winner,
+            losers,
+            actor,
+            categoryId: competitorRow.categoryId,
+            reason,
+          })
+          return c.json(ascentSchema.parse(result))
+        } catch (error) {
+          // Garde-fou : ADR-078 (invariant) rend ce cas impossible par
+          // construction, sauf course entre deux écritures simultanées.
+          if (isUniqueViolation(error)) {
+            throw new ApiError(
+              409,
+              'Passage déjà enregistré',
+              'Un autre passage vient d’être enregistré pour ce compétiteur sur cette voie — actualisez la page.',
+            )
+          }
+          throw error
+        }
       }
 
       const result = await supersedeToNewAscent(db, {

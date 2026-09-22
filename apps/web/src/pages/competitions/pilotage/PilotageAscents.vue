@@ -179,7 +179,7 @@ const editFormComputed = computed(() => editing.value as EditState)
       <li
         v-for="entry in entries"
         :key="entry.id"
-        class="flex flex-col gap-2 rounded-lg border border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
           <span class="font-medium text-gray-900"

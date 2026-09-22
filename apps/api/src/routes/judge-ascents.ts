@@ -35,7 +35,7 @@ import {
   categoryLabelsByRoute,
   expectedCompetitors,
 } from '../lib/ascent-progress'
-import { supersedeToNewAscent } from '../lib/ascent-correction'
+import { quarantineCorrection, supersedeToNewAscent } from '../lib/ascent-correction'
 import type { JudgeTokenSigner } from '../lib/jwt'
 import { assertJudgeAssignedToRoute, resolveOpenRoundForRoute } from '../lib/judge-authorization'
 import { notifyPublic } from '../lib/notify-public'
@@ -168,7 +168,11 @@ function toBatchResult(id: string, result: AscentWriteResult): JudgeAscentBatchR
       incoming: ascentSchema.parse(result.incoming),
     }
   }
-  return { id, status: result.status, ascent: ascentSchema.parse(result.ascent) }
+  // ADR-078 : une saisie en quarantaine est DURABLEMENT en base — du point de
+  // vue de l'appareil, elle est partie. C'est `accessRevoked`, en tête de
+  // réponse, qui dit au client ce qui se passe.
+  const status = result.status === 'quarantined' ? 'accepted' : result.status
+  return { id, status, ascent: ascentSchema.parse(result.ascent) }
 }
 
 interface CorrectContentShape {
@@ -209,7 +213,10 @@ async function processCreateItem(
   db: Database,
   currentJudge: JudgeRow,
   item: CreateBatchItem,
+  quarantine: boolean,
 ): Promise<JudgeAscentBatchResult> {
+  // ADR-078 : la borne d'un accès révoqué, c'est cette vérification — ses
+  // affectations de voies survivent à la révocation.
   const routeRow = await assertJudgeAssignedToRoute(db, currentJudge, item.routeId)
   const result = await createAscentOrConflict(
     db,
@@ -217,6 +224,7 @@ async function processCreateItem(
     item,
     routeRow,
     currentJudge.competitionId,
+    { quarantine },
   )
   return toBatchResult(item.id, result)
 }
@@ -236,6 +244,7 @@ async function processCorrectItem(
   currentJudge: JudgeRow,
   item: CorrectBatchItem,
   now: () => Date,
+  quarantine: boolean,
 ): Promise<JudgeAscentBatchResult> {
   const existingSuccessor = await db.query.ascent.findFirst({ where: eq(ascent.id, item.id) })
   if (existingSuccessor) {
@@ -304,6 +313,33 @@ async function processCorrectItem(
     throw new ApiError(404, 'Compétiteur introuvable', "Ce compétiteur n'existe pas.")
   }
 
+  if (quarantine) {
+    // ADR-078 : la correction d'un accès révoqué ne remplace rien — elle se
+    // pose EN CONFLIT avec la saisie visée, l'organisateur tranche. La fenêtre
+    // de 5 minutes vérifiée plus haut borne ce qu'il peut ainsi sortir du
+    // classement.
+    const result = await quarantineCorrection(db, {
+      target,
+      newId: item.id,
+      content: {
+        holdNumber: item.holdNumber,
+        modifier: item.modifier,
+        isTop: item.isTop,
+        status: item.status,
+        climbTimeMs: item.climbTimeMs,
+      },
+      judgeId: currentJudge.id,
+      categoryId: targetCompetitor.categoryId,
+    })
+    return {
+      id: item.id,
+      status: 'conflict',
+      conflictGroup: result.conflictGroup,
+      existing: ascentSchema.parse(result.existing),
+      incoming: ascentSchema.parse(result.incoming),
+    }
+  }
+
   const created = await supersedeToNewAscent(db, {
     sources: [target],
     newId: item.id,
@@ -328,7 +364,13 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
   const { db, judgeTokenSigner } = deps
   const now = deps.now ?? (() => new Date())
 
-  app.use('*', requireJudge(judgeTokenSigner, db, now))
+  app.use(
+    '*',
+    requireJudge(judgeTokenSigner, db, now, {
+      // ADR-078 : seul le lot de saisies reçoit encore un accès révoqué.
+      allowRevoked: (c) => c.req.method === 'POST' && c.req.path.endsWith('/ascents/batch'),
+    }),
+  )
 
   app.get('/routes', async (c) => {
     const currentJudge = c.get('judge')
@@ -671,6 +713,7 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
     }),
     async (c) => {
       const currentJudge = c.get('judge')
+      const accessRevoked = c.get('judgeRevoked')
       const { items } = c.req.valid('json')
 
       const results: JudgeAscentBatchResult[] = []
@@ -678,15 +721,15 @@ export function createJudgeAscentRoutes(deps: JudgeAscentRouteDeps): Hono {
         try {
           const result =
             item.kind === 'create'
-              ? await processCreateItem(db, currentJudge, item)
-              : await processCorrectItem(db, currentJudge, item, now)
+              ? await processCreateItem(db, currentJudge, item, accessRevoked)
+              : await processCorrectItem(db, currentJudge, item, now, accessRevoked)
           results.push(result)
         } catch (error) {
           results.push({ id: item.id, status: 'rejected', reason: rejectionReasonFor(error) })
         }
       }
 
-      return c.json(judgeAscentsBatchResponseSchema.parse({ results }), 200)
+      return c.json(judgeAscentsBatchResponseSchema.parse({ results, accessRevoked }), 200)
     },
   )
 

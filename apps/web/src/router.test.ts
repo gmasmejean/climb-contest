@@ -91,7 +91,7 @@ describe('router — restauration de la session au chargement direct (F5)', () =
     expect(bootstrapSession).not.toHaveBeenCalled()
   })
 
-  it("ne tente jamais de restaurer une session organisateur sur les écrans juge", async () => {
+  it('ne tente jamais de restaurer une session organisateur sur les écrans juge', async () => {
     const { router, bootstrapSession } = await freshRouter({ refreshSucceeds: true })
 
     await router.push('/j/home')
@@ -99,5 +99,65 @@ describe('router — restauration de la session au chargement direct (F5)', () =
 
     await router.push('/j/un-token')
     expect(bootstrapSession).not.toHaveBeenCalled()
+  })
+
+  // ADR-070 : `/` est publique (pas de `requiresAuth`) mais restaure la
+  // session organisateur (pas de `skipOrganizerSession`) pour l'en-tête.
+  it("affiche l'accueil sans session, après avoir tenté de la restaurer", async () => {
+    const { router, bootstrapSession } = await freshRouter({ refreshSucceeds: false })
+
+    await router.push('/')
+
+    expect(bootstrapSession).toHaveBeenCalledTimes(1)
+    expect(router.currentRoute.value.name).toBe('home')
+  })
+
+  it("reste sur l'accueil quand la session est restaurable", async () => {
+    const { router } = await freshRouter({ refreshSucceeds: true })
+
+    await router.push('/')
+
+    expect(router.currentRoute.value.fullPath).toBe('/')
+  })
+})
+
+describe('router — onglet de la page compétition dans l’URL (ADR-072)', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  it('ouvre directement un onglet connu', async () => {
+    const { router } = await freshRouter({ refreshSucceeds: true })
+
+    await router.push('/competitions/abc/routes')
+
+    expect(router.currentRoute.value.name).toBe('competition-detail')
+    expect(router.currentRoute.value.params).toEqual({ id: 'abc', tab: 'routes' })
+  })
+
+  it('retire un segment d’onglet inconnu et reste sur la compétition', async () => {
+    const { router } = await freshRouter({ refreshSucceeds: true })
+
+    await router.push('/competitions/abc/nimporte-quoi')
+
+    expect(router.currentRoute.value.fullPath).toBe('/competitions/abc')
+  })
+
+  it('ne confond pas « new » et « trash » avec un identifiant de compétition', async () => {
+    const { router } = await freshRouter({ refreshSucceeds: true })
+
+    await router.push('/competitions/new')
+    expect(router.currentRoute.value.name).toBe('competition-create')
+
+    await router.push('/competitions/trash')
+    expect(router.currentRoute.value.name).toBe('competition-trash')
+  })
+
+  it('protège aussi les onglets derrière la connexion', async () => {
+    const { router } = await freshRouter({ refreshSucceeds: false })
+
+    await router.push('/competitions/abc/pilotage')
+
+    expect(router.currentRoute.value.name).toBe('login')
   })
 })

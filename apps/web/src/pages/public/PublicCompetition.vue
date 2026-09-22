@@ -12,13 +12,18 @@ import {
 } from '../../composables/usePublicStream'
 import PublicRanking from './PublicRanking.vue'
 import PublicRoutes from './PublicRoutes.vue'
+import BrandShell from '../../components/brand/BrandShell.vue'
 
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
 const categoryPreference = usePublicCategoryPreference(slug.value)
 const queryClient = useQueryClient()
 
-const { data: meta, isPending, isError } = useQuery({
+const {
+  data: meta,
+  isPending,
+  isError,
+} = useQuery({
   queryKey: computed(() => publicQueryKeys.meta(slug.value)),
   queryFn: () => publicApi.meta(slug.value),
   refetchOnWindowFocus: false,
@@ -107,58 +112,68 @@ const lastUpdatedLabel = computed(() => {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-dvh max-w-lg flex-col gap-4 px-4 py-6">
-    <p v-if="isPending" class="text-gray-600">Chargement…</p>
-    <p v-else-if="isError" role="alert" class="text-red-700">
-      Impossible de charger cette compétition.
-    </p>
+  <BrandShell decor>
+    <main class="mx-auto flex w-full max-w-lg flex-1 flex-col gap-4 px-4 py-6">
+      <p v-if="isPending" class="text-gray-600">Chargement…</p>
+      <p v-else-if="isError" role="alert" class="text-red-700">
+        Impossible de charger cette compétition.
+      </p>
 
-    <template v-else-if="meta">
-      <header class="flex flex-col gap-1">
-        <h1 class="text-2xl font-bold text-gray-900">{{ meta.competition.name }}</h1>
-        <p class="text-sm text-gray-600">
-          {{ meta.competition.venue }} — {{ meta.competition.startsOn }}
-        </p>
-        <div role="status" class="flex items-center gap-2 text-xs text-gray-600">
-          <span
-            class="h-2 w-2 rounded-full"
-            :class="connectionState === 'open' ? 'bg-green-600' : 'animate-pulse bg-amber-600'"
-            aria-hidden="true"
-          />
-          <span v-if="connectionState === 'open'">En direct</span>
-          <span v-else>Reconnexion…</span>
-          <span v-if="lastUpdatedLabel">— dernière mise à jour à {{ lastUpdatedLabel }}</span>
+      <template v-else-if="meta">
+        <header class="flex flex-col gap-1">
+          <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">
+            {{ meta.competition.name }}
+          </h1>
+          <p class="text-sm text-gray-600">
+            {{ meta.competition.venue }} — {{ meta.competition.startsOn }}
+          </p>
+          <div role="status" class="flex items-center gap-2 text-xs text-gray-600">
+            <span
+              class="h-2 w-2 rounded-full"
+              :class="connectionState === 'open' ? 'bg-green-600' : 'animate-pulse bg-amber-600'"
+              aria-hidden="true"
+            />
+            <span v-if="connectionState === 'open'">En direct</span>
+            <span v-else>Reconnexion…</span>
+            <span v-if="lastUpdatedLabel">— dernière mise à jour à {{ lastUpdatedLabel }}</span>
+          </div>
+        </header>
+
+        <div v-if="roundBadges.length > 0" class="flex flex-wrap gap-2">
+          <Badge v-for="round in roundBadges" :key="round.id" tone="neutral">
+            {{
+              round.type === 'qualification'
+                ? 'Qualification'
+                : round.type === 'semifinal'
+                  ? 'Demi-finale'
+                  : 'Finale'
+            }}
+            : {{ roundStatusLabels[round.status] ?? round.status }}
+          </Badge>
         </div>
-      </header>
 
-      <div v-if="roundBadges.length > 0" class="flex flex-wrap gap-2">
-        <Badge v-for="round in roundBadges" :key="round.id" tone="neutral">
-          {{ round.type === 'qualification' ? 'Qualification' : round.type === 'semifinal' ? 'Demi-finale' : 'Finale' }}
-          : {{ roundStatusLabels[round.status] ?? round.status }}
-        </Badge>
-      </div>
+        <Select
+          v-if="meta.categories.length > 0"
+          v-model="selectedCategoryId"
+          label="Catégorie"
+          :options="meta.categories.map((c) => ({ value: c.id, label: c.label }))"
+        />
+        <p v-else class="text-gray-600">Aucune catégorie n'est encore configurée.</p>
 
-      <Select
-        v-if="meta.categories.length > 0"
-        v-model="selectedCategoryId"
-        label="Catégorie"
-        :options="meta.categories.map((c) => ({ value: c.id, label: c.label }))"
-      />
-      <p v-else class="text-gray-600">Aucune catégorie n'est encore configurée.</p>
+        <Tabs v-model="activeTab" :tabs="tabs" />
 
-      <Tabs v-model="activeTab" :tabs="tabs" />
-
-      <PublicRanking
-        v-if="activeTab === 'ranking' && selectedCategoryId"
-        :slug="slug"
-        :category-id="selectedCategoryId"
-        :format="meta.competition.format"
-      />
-      <PublicRoutes
-        v-else-if="activeTab === 'routes' && selectedCategoryId"
-        :slug="slug"
-        :category-id="selectedCategoryId"
-      />
-    </template>
-  </main>
+        <PublicRanking
+          v-if="activeTab === 'ranking' && selectedCategoryId"
+          :slug="slug"
+          :category-id="selectedCategoryId"
+          :format="meta.competition.format"
+        />
+        <PublicRoutes
+          v-else-if="activeTab === 'routes' && selectedCategoryId"
+          :slug="slug"
+          :category-id="selectedCategoryId"
+        />
+      </template>
+    </main>
+  </BrandShell>
 </template>

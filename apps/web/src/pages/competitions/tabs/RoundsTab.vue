@@ -143,7 +143,7 @@ const expandedRoundId = ref<string | null>(null)
       <li
         v-for="(round, index) in rounds"
         :key="round.id"
-        class="flex flex-col gap-2 rounded-lg border border-gray-200 px-4 py-3"
+        class="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3"
       >
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -194,7 +194,7 @@ const expandedRoundId = ref<string | null>(null)
     </ul>
 
     <form
-      class="flex flex-col gap-4 rounded-lg border border-gray-200 p-4"
+      class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4"
       @submit.prevent="onSubmit"
     >
       <h2 class="font-medium text-gray-900">

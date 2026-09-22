@@ -150,6 +150,9 @@ export const backupAscentSchema = z
     deviceId: z.string(),
     supersededBy: id.nullable(),
     conflictGroup: id.nullable(),
+    // Lot 21 (ADR-078) : saisie en quarantaine refusée. Facultatif — une
+    // sauvegarde d'avant le Lot 21 ne le porte pas, et reste lisible.
+    voidedAt: isoDateTime.nullable().optional(),
   })
   .strict()
 

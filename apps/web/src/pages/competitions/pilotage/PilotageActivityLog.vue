@@ -73,7 +73,7 @@ async function downloadCsv(): Promise<void> {
       <li
         v-for="entry in data?.entries ?? []"
         :key="entry.id"
-        class="flex flex-col gap-1 rounded-lg border border-gray-200 px-4 py-3"
+        class="flex flex-col gap-1 rounded-lg border border-gray-200 bg-white px-4 py-3"
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="font-medium text-gray-900">{{ TYPE_LABELS[entry.type] ?? entry.type }}</span>

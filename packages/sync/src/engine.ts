@@ -32,6 +32,7 @@ function realClock(): Clock {
 export class SyncEngine<TPayload> {
   private items = new Map<string, QueueItem<TPayload>>()
   private readonly listeners = new Set<Listener<TPayload>>()
+  private hydrated = false
   private flushing = false
   private flushAgain = false
   private debounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -53,7 +54,17 @@ export class SyncEngine<TPayload> {
   async hydrate(): Promise<void> {
     const stored = await this.storage.getAll()
     this.items = new Map(stored.map((item) => [item.id, item]))
+    this.hydrated = true
     this.notify()
+  }
+
+  /**
+   * Faux tant que la file persistée n'a pas été lue : un instantané vide ne veut
+   * alors PAS dire « rien en attente ». À consulter avant toute décision prise
+   * sur une file vide (Lot 21 : déconnecter un juge révoqué).
+   */
+  get isHydrated(): boolean {
+    return this.hydrated
   }
 
   /**

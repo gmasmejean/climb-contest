@@ -2,6 +2,9 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import { bootstrapSession } from './api/client'
 import { currentUser } from './api/session'
+import { judgeAccessRevoked } from './judge/access-state'
+import { judgeScreens } from './judge/screens'
+import { isCompetitionTabId } from './lib/competition-tabs'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -19,10 +22,14 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      // Page d'accueil publique (ADR-070) : pas d'authentification requise,
+      // mais PAS de `skipOrganizerSession` non plus — la session organisateur
+      // est restaurée au F5 pour afficher l'état connecté dans l'en-tête. Si
+      // l'API est injoignable, la garde ci-dessous avale l'erreur et la page
+      // s'affiche en anonyme.
       path: '/',
       name: 'home',
       component: () => import('./pages/Home.vue'),
-      meta: { requiresAuth: true },
     },
     {
       path: '/competitions',
@@ -43,10 +50,17 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/competitions/:id',
+      // L'onglet vit dans l'URL (ADR-072) : rechargement, lien profond et
+      // « précédent » du navigateur. Un segment inconnu est retiré ici ; le cas
+      // qui dépend de la compétition (`rounds` hors phases) l'est par la page.
+      path: '/competitions/:id/:tab?',
       name: 'competition-detail',
       component: () => import('./pages/competitions/CompetitionDetail.vue'),
       meta: { requiresAuth: true },
+      beforeEnter: (to) =>
+        to.params.tab === '' || to.params.tab === undefined || isCompetitionTabId(to.params.tab)
+          ? true
+          : { name: 'competition-detail', params: { id: to.params.id }, replace: true },
     },
     {
       // Pas de compte, pas de session organisateur (SPEC.md § 3.2) : ni
@@ -71,26 +85,34 @@ const router = createRouter({
       meta: { skipOrganizerSession: true },
     },
     {
+      // Lot 21 (ADR-078) : hors de `JudgeLayout` — l'écran dit lui-même où en
+      // est la file, et doit s'afficher même une fois le jeton retiré.
+      path: '/j/revoked',
+      name: 'judge-revoked',
+      component: judgeScreens.revoked,
+      meta: { skipOrganizerSession: true },
+    },
+    {
       // `JudgeLayout` monte le bandeau de synchronisation UNE SEULE FOIS
       // (Lot 6, ROADMAP.md point 6) pour les trois écrans juge authentifiés.
       path: '/j',
-      component: () => import('./pages/judge/JudgeLayout.vue'),
-      meta: { skipOrganizerSession: true },
+      component: judgeScreens.layout,
+      meta: { skipOrganizerSession: true, judgeEntryScreen: true },
       children: [
         {
           path: 'home',
           name: 'judge-home',
-          component: () => import('./pages/judge/JudgeHome.vue'),
+          component: judgeScreens.home,
         },
         {
           path: 'routes/:routeId',
           name: 'judge-route',
-          component: () => import('./pages/judge/JudgeRoute.vue'),
+          component: judgeScreens.route,
         },
         {
           path: 'routes/:routeId/competitors/:competitorId',
           name: 'judge-ascent-entry',
-          component: () => import('./pages/judge/JudgeAscentEntry.vue'),
+          component: judgeScreens.ascentEntry,
         },
       ],
     },
@@ -122,6 +144,12 @@ router.beforeEach(async (to) => {
       // (SPEC.md § 6.1) — on continue sans session restaurée, jamais un
       // écran blanc.
     }
+  }
+
+  // ADR-078 : un accès révoqué ne revoit plus aucun écran de saisie. Lecture
+  // locale (localStorage) — aucune requête, comme l'exige tout écran juge.
+  if (to.meta.judgeEntryScreen && judgeAccessRevoked.value) {
+    return { name: 'judge-revoked', replace: true }
   }
 
   if (to.meta.requiresAuth && !currentUser.value) {

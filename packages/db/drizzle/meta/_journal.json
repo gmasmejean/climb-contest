@@ -78,6 +78,13 @@
       "when": 1789916441272,
       "tag": "0011_lot15_route_photo",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790010250488,
+      "tag": "0012_lot21_ascent_voided_at",
+      "breakpoints": true
     }
   ]
 }

@@ -45,7 +45,7 @@ const roundTypeLabels: Record<string, string> = {
           <li
             v-for="entry in data.entries"
             :key="`${entry.rank}-${entry.bib ?? entry.lastName}`"
-            class="rounded-lg border border-gray-200"
+            class="rounded-lg border border-gray-200 bg-white"
           >
             <details>
               <summary

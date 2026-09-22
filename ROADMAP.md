@@ -605,3 +605,115 @@ classement faux se découvre sur le podium.
 
 **Fais relire `packages/scoring/RULES.md` par un juge fédéral** avant la
 première compétition réelle. C'est pour ça que ce document existe.
+
+---
+
+## Lots 17 à 20 — Interface organisateur sur grand écran
+
+> Décidé le 2026-09-21 (ADR-072, ADR-073). L'espace organisateur est plafonné à
+> 512–768 px alors que la préparation et le pilotage jour J se font sur un
+> portable à la table de l'organisation. Tout est **additif à partir de `lg`
+> (1024 px)** : le rendu mobile ne change pas, les écrans juge et public ne sont
+> pas concernés. Un lot à la fois ; les pistes écartées sont dans `TODO.md`.
+
+### Lot 17 — Socle desktop (D1)
+
+```
+Lot 17 : conteneur large commun aux pages organisateur (`BrandShell` `wide`) ;
+sur la page compétition, barre latérale groupée Préparer / Vérifier / Jour J à
+partir de 1024 px (onglets horizontaux conservés en dessous, `role="tab"`
+gardé) ; onglet dans l'URL (`/competitions/:id/:tab?`, `?section=` pour le
+pilotage) ; en-tête de compétition collant avec fil d'Ariane. Aucune
+fonctionnalité métier, aucune migration.
+```
+
+### Lot 18 — Listes en tableaux denses (D2, livré)
+
+> Livré le 2026-09-21. Décisions : ADR-074, et amendement d'ADR-073 (la requête
+> de densité exclut désormais les portables à écran tactile).
+
+```
+Lot 18 : composant `DataList` dans `packages/ui` (cartes sous `lg`, tableau
+triable à en-tête collant au-dessus) appliqué aux compétiteurs, voies, juges,
+catégories, liste des compétitions et corbeille ; barre d'outils sur une ligne ;
+ligne d'ajout rapide des compétiteurs ; densité compacte sous `pointer: fine`
+(ADR-073).
+```
+
+Écarts au cadrage initial, vus en navigateur : les colonnes de confort des
+compétiteurs (année, club, licence) attendent 1280 px, et le tri ne concerne que
+compétiteurs, juges, liste et corbeille — voies et catégories gardent l'ordre
+posé aux flèches.
+
+### Lot 19 — Maître–détail des voies et des juges (D3, livré)
+
+> Livré le 2026-09-21. Décisions : ADR-075 (maître–détail et sélection dans
+> l'adresse), ADR-076 (QR dessiné dans le navigateur), ADR-077 (annotateur en
+> grand, qui amende ADR-068).
+
+```
+Lot 19 : voies en liste + éditeur côte à côte, annotateur de photo en grand
+(zoom, plein écran) ; juges en liste + fiche (QR, PIN, voies).
+```
+
+Écarts au cadrage initial, tous vus en navigateur :
+
+- **Le seuil n'est pas 1024 px mais 1440 px**, et il est mesuré : les largeurs fixes du
+  tableau des voies totalisent 656 px (528 px pour les juges) ; en dessous, le tableau
+  passait sous le panneau collant et avalait les clics. Entre 1024 et 1440 px, les deux
+  onglets gardent le rendu du Lot 18.
+- **Le zoom de l'annotateur vaut à toutes les largeurs**, téléphone compris (ADR-077) : ce
+  n'est pas de la mise en page, c'est la levée d'une limite écrite dans ADR-068.
+- **Défaut préexistant corrigé en passant** : à 1024 px, les tableaux des voies et des juges
+  écrasaient leurs colonnes libres à zéro pixel — les noms disparaissaient. La règle des
+  colonnes de confort d'ADR-074 point 7 leur est maintenant appliquée.
+- **L'assistant d'import et les formulaires en grille sont reportés au Lot 19b** : de la
+  mise en page pure, sans décision d'architecture, détachable sans dette.
+
+### Lot 19b — Import et formulaires en grille (à faire)
+
+```
+Lot 19b : assistant d'import CSV en deux colonnes (le choix du fichier reste à
+gauche, l'aperçu prend la hauteur à droite) ; formulaires Infos et création de
+compétition en grille, avec barre d'enregistrement collante à partir de `lg`.
+Attention, dans Infos : le bloc « statut » a sa propre mutation et ne doit pas
+tomber sous la barre d'enregistrement du formulaire principal.
+```
+
+### Lot 21 — Juge révoqué : aucune saisie perdue (livré)
+
+> Hors série grand écran, passé devant les Lots 19b et 20 parce qu'il touche la règle n° 1
+> (« une action de juge ne doit jamais être perdue »). Décisions : ADR-078, ADR-079.
+
+```
+Lot 21 : le lot d'un juge révoqué est reçu et mis en quarantaine (groupe de
+conflit, éventuellement à une seule ligne) ; l'organisateur accepte, refuse ou
+ressaisit depuis l'onglet Conflits ; le juge apprend sa révocation, sa file
+finit de partir, puis il est déconnecté ; ouvrir le lien d'un autre juge ne vide
+plus jamais une file en attente. Migration réversible (`ascent.voided_at`).
+```
+
+Écarts au cadrage, vus en navigateur ou en écrivant le code :
+
+- **Les cartes de l'onglet Conflits nomment maintenant le compétiteur et la voie.** Elles ne le
+  faisaient pas, y compris pour les conflits ordinaires : avec trois saisies à valider, on ne
+  savait pas laquelle était laquelle.
+- **Défaut préexistant corrigé en passant** : une troisième saisie arrivant pendant un conflit
+  ouvert entrait au classement, et trancher le conflit heurtait alors l'index d'unicité. Elle
+  rejoint désormais le groupe (ADR-078 point 3), testé.
+- **Une saisie refusée par le serveur (`rejected`) bloque aussi le changement de juge** : comme
+  une saisie en attente, elle n'existe que sur le téléphone.
+- **La sauvegarde JSON porte `voidedAt`** (facultatif, version inchangée) : sans lui, une saisie
+  refusée redevenait « à valider » après un réimport.
+- **La répétition générale** attendait un 401 pour le juge révoqué ; elle vérifie maintenant la
+  quarantaine, et n'a plus besoin de saisie de secours.
+
+### Lot 20 — Pilotage jour J sur portable (D4, à cadrer)
+
+```
+Lot 20 : tableau de bord multi-panneaux à partir de `lg` (alertes, conflits,
+progression en barres, juges, journal) ; matrice compétiteurs × voies cliquable
+(point d'API d'agrégat à cadrer en début de lot) ; conflits en vis-à-vis ;
+journal en tableau filtrable ; bandeau d'état serveur ; pastilles dans la barre
+latérale et compteurs dans l'en-tête.
+```

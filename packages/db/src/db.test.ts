@@ -362,9 +362,10 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
 
   it('le up réplique l’ancien statut sur chaque catégorie du tour, le down garde `open` en priorité', async () => {
     await withRawClient(async (client) => {
-      // 0011 (Lot 15) a été posée par-dessus 0010 : deux crans. À réviser si une
-      // migration est ajoutée après 0011.
-      expect(await revertLastMigrations(client, 2)).toEqual([
+      // 0011 (Lot 15) et 0012 (Lot 21) ont été posées par-dessus 0010 : trois
+      // crans. À réviser si une migration est ajoutée après 0012.
+      expect(await revertLastMigrations(client, 3)).toEqual([
+        '0012_lot21_ascent_voided_at.sql',
         '0011_lot15_route_photo.sql',
         '0010_lot12_round_category.sql',
       ])
@@ -397,7 +398,7 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
         [openId, u16.id],
       )
-      await revertLastMigrations(client, 2)
+      await revertLastMigrations(client, 3)
       const back = await client.query<{ id: string; status: string }>(
         'select id, status from round where id = any($1)',
         [[openId, closedId, draftId]],
@@ -551,6 +552,34 @@ describe('migration 0011_lot15_route_photo (ADR-066)', () => {
       await applyPendingMigrations(client)
       expect(await hasColumn('photo_asset_id')).toBe(true)
       expect(await hasColumn('photo_holds')).toBe(true)
+    })
+  })
+})
+
+describe('migration 0012_lot21_ascent_voided_at (ADR-078)', () => {
+  it('est réversible : le down retire ascent.voided_at, le up la rétablit, nulle par défaut', async () => {
+    await withRawClient(async (client) => {
+      const hasColumn = async () => {
+        const result = await client.query(
+          "select 1 from information_schema.columns where table_name = 'ascent' and column_name = 'voided_at'",
+        )
+        return result.rows.length === 1
+      }
+      expect(await hasColumn()).toBe(true)
+
+      let guard = 0
+      while (await hasColumn()) {
+        expect((await revertLastMigrations(client, 1)).length).toBe(1)
+        guard += 1
+        expect(guard).toBeLessThan(20)
+      }
+
+      await applyPendingMigrations(client)
+      expect(await hasColumn()).toBe(true)
+      const nullable = await client.query(
+        "select is_nullable, column_default from information_schema.columns where table_name = 'ascent' and column_name = 'voided_at'",
+      )
+      expect(nullable.rows[0]).toMatchObject({ is_nullable: 'YES', column_default: null })
     })
   })
 })

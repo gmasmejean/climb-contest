@@ -93,12 +93,17 @@ test('l’organisateur choisit, recadre puis annote la photo en créant la voie'
   const cropStep = page.getByTestId('crop-step')
   await expect(cropStep).toContainText('Souhaitez-vous recadrer la photo ?')
   await expect(page.getByTestId('hold-annotator')).toHaveCount(0)
-  // L'aperçu est la photo entière (480 × 720, plafonnée à 640 px de côté : 427 × 640).
+  // L'aperçu est la photo entière. Depuis ADR-077 le plafond est à 1280 px de
+  // côté (640 auparavant) : cette photo de 480 × 720 n'est plus réduite du tout,
+  // ce qui est justement le but — on y place les prises, avec un zoom ×3.
   const preview = page.getByTestId('photo-preview')
   await expect(preview).toBeVisible()
   await expect
     .poll(() => preview.evaluate((img) => (img as HTMLImageElement).naturalHeight))
-    .toBe(640)
+    .toBe(720)
+  await expect
+    .poll(() => preview.evaluate((img) => (img as HTMLImageElement).naturalWidth))
+    .toBe(480)
 
   // --- Recadrage : on garde le centre de la photo (moitié de chaque côté) ---
   await cropStep.getByRole('button', { name: 'Recadrer la photo' }).click()
@@ -184,8 +189,9 @@ test('l’organisateur choisit, recadre puis annote la photo en créant la voie'
   await expect(page.getByText('Voie créée avec sa photo et ses 3 prises.')).toBeVisible({
     timeout: 30_000,
   })
-  await expect(page.getByText('Voie 1')).toBeVisible()
-  await expect(page.getByText('photo annotée')).toBeVisible()
+  const listed = page.getByTestId('data-list-row')
+  await expect(listed).toHaveCount(1)
+  await expect(listed).toContainText(/photo annotée|Photo/)
 
   const routes = await apiJson<
     {

@@ -1,8 +1,8 @@
 import type { QueueItem } from '@climbcontest/sync'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { saveAscentDraft } from './ascent-draft'
-import { JudgeDatabase, judgeDb, resetJudgeDatabase } from './local-db'
+import { JudgeDatabase, UnsentAscentsError, judgeDb, resetJudgeDatabase } from './local-db'
 import type { QueuePayload } from './queue-payload'
 
 function makeItem(id: string, competitorId: string): QueueItem<QueuePayload> {
@@ -51,7 +51,47 @@ describe('JudgeDatabase — durabilité (cas SPEC.md § 9 #23)', () => {
   })
 })
 
+describe('resetJudgeDatabase — ne vide jamais une file en attente (ADR-079)', () => {
+  beforeEach(async () => {
+    await judgeDb.queue.clear()
+  })
+
+  it('refuse de vider la base tant qu’une saisie n’est pas partie, et ne touche à rien', async () => {
+    await judgeDb.queue.bulkPut([makeItem('ascent-a', 'comp-a'), makeItem('ascent-b', 'comp-b')])
+    await judgeDb.meta.put({
+      key: 'judge',
+      judgeId: 'judge-1',
+      displayName: 'Paul',
+      fetchedAt: new Date().toISOString(),
+    })
+
+    await expect(resetJudgeDatabase()).rejects.toBeInstanceOf(UnsentAscentsError)
+
+    expect(await judgeDb.queue.count()).toBe(2)
+    expect(await judgeDb.meta.get('judge')).toBeDefined()
+  })
+
+  it('refuse aussi pour une saisie refusée par le serveur : elle n’existe que sur ce téléphone', async () => {
+    await judgeDb.queue.put({
+      ...makeItem('ascent-r', 'comp-r'),
+      state: 'rejected',
+      rejectedReason: 'Tour fermé.',
+    })
+    await expect(resetJudgeDatabase()).rejects.toBeInstanceOf(UnsentAscentsError)
+  })
+
+  it('accepte quand il ne reste que des conflits : le serveur détient déjà les deux valeurs', async () => {
+    await judgeDb.queue.put({ ...makeItem('ascent-c', 'comp-c'), state: 'conflict' })
+    await resetJudgeDatabase()
+    expect(await judgeDb.queue.count()).toBe(0)
+  })
+})
+
 describe('resetJudgeDatabase — changement de juge (ADR-036)', () => {
+  beforeEach(async () => {
+    await judgeDb.queue.clear()
+  })
+
   it('supprime aussi le brouillon de saisie du juge précédent (ADR-061)', async () => {
     saveAscentDraft(
       { routeId: 'route-1', competitorId: 'comp-1', baseAscentId: null, holdCount: 40 },
@@ -67,6 +107,10 @@ describe('resetJudgeDatabase — changement de juge (ADR-036)', () => {
 })
 
 describe('resetJudgeDatabase — photos de voie (ADR-066)', () => {
+  beforeEach(async () => {
+    await judgeDb.queue.clear()
+  })
+
   it('supprime aussi les photos du juge précédent', async () => {
     await judgeDb.routePhotos.put({
       routeId: 'route-1',

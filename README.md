@@ -97,7 +97,8 @@ apps/web        Vue 3 + Vite — PWA (auth, espace organisateur : compétitions,
                 `/c/<slug>` et écran de salle `/c/<slug>/salle`, sans
                 authentification, mise à jour en direct — Lot 7 ; onglet
                 Pilotage — vue d'ensemble, tours, correction/secours,
-                conflits, journal — Lot 8)
+                conflits, journal — Lot 8 ; page d'accueil publique `/`,
+                ADR-070)
 packages/db     Schéma Drizzle, migrations, seed
 packages/contracts   Schémas Zod partagés (entités + payloads d'API)
 packages/ui     Composants Vue partagés (bouton, champ, modale…)
@@ -123,6 +124,24 @@ Network → Offline (ou débrancher le wifi), noter des passages, recharger la
 page, revenir en ligne — le bandeau en haut de l'écran juge doit toujours
 refléter honnêtement l'état de la file.
 
+### Juge révoqué, changement de juge (Lot 21)
+
+Révoquer un juge ne perd plus ses saisies en attente (ADR-078). Son téléphone
+les envoie quand même : le serveur les reçoit **en quarantaine** — hors
+classement — et l'organisateur les retrouve dans **Pilotage → Conflits**, sous
+« Saisie d'un accès révoqué — à valider » : accepter, refuser (motif
+obligatoire) ou saisir une autre valeur. Tant qu'il en reste, la catégorie ne se
+publie pas. Côté juge, l'écran « Votre accès a été révoqué » laisse la file finir
+de partir, puis déconnecte ; toutes les autres routes juge répondent 401 avec
+`code: "judge_revoked"`.
+
+Ouvrir le lien d'un **autre** juge sur un téléphone ne vide plus jamais une file
+en attente (ADR-079) : elle part d'abord, avec l'ancien jeton, puis une
+confirmation nominative est demandée. Rescanner son propre lien ne demande rien.
+
+Parcours e2e : `e2e/judge-revoked.spec.ts` (projet `mobile`, 360 px). La
+répétition générale (`pnpm rehearsal`) joue aussi le cas du juge révoqué.
+
 ### Mise à jour de l'application
 
 Après un redéploiement (`docker compose up --build -d`), un navigateur qui
@@ -139,6 +158,49 @@ juge laissé en veille toute la matinée) ne se met à jour qu'à son prochain
 rechargement — mesuré : aucune mise à jour en 90 s de page ouverte (`TODO.md`,
 Lot 10). Après un déploiement le jour d'une compétition, faites recharger les
 appareils.
+
+## Page d'accueil publique
+
+`/` s'affiche sans authentification (ADR-070) : en-tête avec le logo et la
+pilule « Espace organisateur » (→ `/login`), titre, recherche, quatre cartes
+(Organisateurs, Juges, Spectateurs, Grimpeurs), mur d'escalade et foule en
+aquarelle. Un organisateur connecté y retrouve son nom, « Mes compétitions »
+et « Se déconnecter » — c'est toujours la page d'arrivée après connexion, et
+la session y est restaurée au rechargement.
+
+- **La recherche est désactivée** et le dit (« Recherche bientôt
+  disponible ») : la recherche publique est le Lot 13, non engagé. Rien n'est
+  simulé.
+- La carte Juges ne devient un lien (vers `/j/home`) que si un accès juge
+  existe déjà sur l'appareil ; Spectateurs et Grimpeurs (« Bientôt ») ne sont
+  pas des liens.
+- Visuels : `apps/web/src/assets/landing/*.webp`, recadrés des maquettes
+  fournies (provisoires, voir `TODO.md`). Images et polices ne sont pas dans
+  le précache du service worker (cache à la demande).
+
+## Charte graphique
+
+La charte aquarelle de l'accueil s'applique à toute l'application (ADR-071).
+
+- **Couleurs** : `apps/web/src/style.css` redéfinit dans `@theme` les échelles
+  Tailwind `gray` (neutres encre), `blue` (navy, `blue-700` = `#184e67`),
+  `red` (corail), `amber` (ocre) et `green` (sauge). On continue d'écrire
+  `text-red-700` ou `bg-blue-50` : c'est la valeur qui change, pas la classe.
+  `brand-contrast.test.ts` lit ce fichier et exige le contraste AA pour chaque
+  couple texte/fond utilisé — **ne modifiez pas une teinte sans le relancer**,
+  et ajoutez-y tout nouveau couple.
+- **`Button`** (`packages/ui`) est une pilule : `primary`, `secondary`,
+  `danger`, `glass` (translucide, à poser sur un décor) ; avec `to`, c'est un
+  vrai lien.
+- **`BrandShell`** (`components/brand/`) enveloppe les pages hors notation
+  (connexion, inscription, organisateur, page publique, accès juge) : polices
+  Source Sans 3 / Caveat (`brand-fonts.ts`, auto-hébergées, OFL), fond papier,
+  en-tête avec le logo (`BrandLogo.vue`) ; `decor` ajoute le mur aquarelle
+  (pages d'entrée seulement). Le `<main>` de la page porte `flex-1`.
+- **Écrans de notation du juge** (`/j/home`, voies, saisie) : couleurs
+  seulement. Ni `BrandShell`, ni police, ni image — rien de plus à précacher.
+  L'écran de salle (`/c/<slug>/salle`) reste sombre.
+- Favicon, icônes PWA, `theme-color` et manifest portent le logo navy.
 
 ## Page publique et temps réel
 
@@ -246,7 +308,10 @@ ré-encodée en JPEG **dans le navigateur** (côté long 1600 px, environ 300 Ko
 orientation appliquée, GPS retiré) ; le serveur n'accepte que du JPEG, reconnu à
 ses octets. Toucher la photo pose une prise, la glisser la déplace, « Renuméroter
 de bas en haut » classe les prises d'après leur hauteur (à vérifier sur une
-traversée ou un dévers). Les modifications ne partent qu'à « Enregistrer les
+traversée ou un dévers). **« Agrandir la photo »** ouvre le placement en plein
+écran, avec zoom ×1 / ×2 / ×3 — à toutes les largeurs, téléphone compris, parce
+que c'est devant le mur qu'on en a le plus besoin (ADR-077). L'aperçu sur lequel
+on annote à la création fait 1280 px de côté long, et non plus 640. Les modifications ne partent qu'à « Enregistrer les
 prises ». Une prise ne peut pas porter un numéro supérieur au nombre de prises de
 la voie. Remplacer la photo **efface** les prises. **Dès qu'un passage existe sur
 la voie, la photo et les prises sont figées**, comme le nombre de prises
@@ -262,6 +327,57 @@ téléphone** (IndexedDB) au moment de l'amorçage : elle s'affiche sans réseau
 elle n'a pas encore été téléchargée, le panneau le dit et la saisie continue. Les
 photos sont sur le volume `uploads-data`, comme les vidéos. Voir DECISIONS.md
 ADR-066.
+
+## Espace organisateur sur grand écran
+
+À partir de 1024 px de large (`lg`), l'espace organisateur prend la largeur de l'écran
+(ADR-072) ; en dessous, rien ne change et les 360 px restent la référence.
+
+- `BrandShell` accepte `width="wide"` : en-tête et contenu bornés à `max-w-screen-2xl`. Les
+  pages d'entrée et publiques gardent `narrow`, la valeur par défaut.
+- Sur la page d'une compétition, les onglets deviennent une **barre latérale** groupée
+  *Préparer / Vérifier / Jour J*, et l'en-tête (retour, nom, lieu, date, lien vers la page
+  publique) reste **collant**. C'est le même composant `Tabs` de `packages/ui`, en
+  `orientation="vertical"` : mêmes rôles ARIA, flèches ↑/↓ comme ←/→, le focus suit.
+- **L'onglet est dans l'adresse** : `/competitions/:id/routes`, `/competitors`,
+  `/pilotage?section=conflicts`, etc. (identifiants
+  dans `apps/web/src/lib/competition-tabs.ts`). Rechargement, lien profond et bouton
+  « précédent » fonctionnent ; un segment inconnu, ou `rounds` hors format à phases, ramène
+  à Infos.
+- **Les listes sont des tableaux** : compétiteurs, voies, juges, catégories, liste des
+  compétitions et corbeille passent par le composant `DataList` de `packages/ui` — cartes
+  en dessous de 1024 px, tableau à en-tête collant au-dessus (ADR-074). Une colonne s'y
+  décrit une seule fois et sert aux deux rendus ; c'est l'écran qui choisit sa disposition,
+  il n'y a jamais deux rendus dans le DOM.
+- **Les en-têtes trient** (compétiteurs, juges, liste, corbeille), avec `aria-sort`. Sur la
+  liste des compétitions ils commandent le tri qui vit déjà dans l'adresse, et le sélecteur
+  « Trier par » s'efface. Voies et catégories ne se trient pas : leur ordre est celui que
+  vous posez avec les flèches.
+- **Une ligne d'ajout rapide** en tête du tableau des compétiteurs : `Entrée` ajoute et rend
+  le focus au prénom, `Échap` abandonne la ligne. La catégorie et le club sont conservés
+  d'une saisie à l'autre — on entre une catégorie entière sans toucher la souris. En dessous
+  de 1024 px, c'est le formulaire en carte d'avant.
+- **Densité compacte à la souris** (ADR-073) : les lignes de tableau descendent à ~40 px
+  sous `@media (pointer: fine) and (not (any-pointer: coarse))`. Dès qu'un doigt est
+  possible — téléphone, tablette, portable à écran tactile — tout revient à 48 px, et les
+  écrans juge et public ne sont jamais concernés.
+- Le tableau des compétiteurs ne montre l'année de naissance, le club et le numéro de
+  licence qu'à partir de 1280 px : en dessous, neuf colonnes rendraient les noms illisibles.
+  Même règle pour le secteur, la couleur et le média d'une voie, et pour le PIN et le
+  dernier accès d'un juge.
+- **Voies et juges s'éditent à côté de leur liste à partir de 1440 px** (ADR-075) : la liste
+  à gauche, l'éditeur de la voie ou la fiche du juge à droite, collés en haut. Le seuil est
+  mesuré, pas choisi : en dessous, les colonnes du tableau n'ont plus la place et passeraient
+  sous le panneau. Entre 1024 et 1440 px, c'est le tableau seul, l'éditeur en dessous.
+  - **La sélection est dans l'adresse** (`?route=…`, `?judge=…`) : recharger la page en
+    pleine annotation ne referme pas la voie ouverte. Un identifiant inconnu est ignoré
+    sans bruit. Changer de voie est refusé tant qu'une création en cours n'a pas fini
+    d'envoyer sa photo ou ses prises.
+  - **La fiche d'un juge** montre son statut, ses voies, son PIN, son lien d'accès et son
+    **QR code**, dessiné dans le navigateur (ADR-076) — c'est le seul endroit qui puisse le
+    faire quand la compétition ne conserve pas les accès en clair. Aucun QR pour un juge
+    révoqué. « Voir l'accès », « Régénérer le PIN » et « Révoquer » vivent alors dans la
+    fiche, plus sur la ligne.
 
 ## Liste des compétitions et corbeille
 
@@ -302,7 +418,8 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   synchronisation juge).
 - `packages/scoring` (le moteur de cotation, voir `RULES.md`) exige 100 %
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
-- Dix-neuf tests Playwright end-to-end (`e2e/`) : connexion d'un compte déjà
+- Vingt tests Playwright end-to-end (`e2e/`) : la page d'accueil publique en
+  anonyme et en connecté (aussi à 360 px) ; connexion d'un compte déjà
   activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
@@ -314,5 +431,5 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   depuis l'onglet Pilotage ; une compétition en phases jouée de bout en bout
   (qualification à deux voies, demi-finale, finale, classement final avec
   contre-performance) ; les exports PDF/CSV/JSON et le réimport d'une
-  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise ; la photo annotée d'une voie, de l'organisateur au juge hors ligne (aussi à 360 px) ; le choix, le recadrage et l'annotation de la photo à la création de la voie, avec le nombre de prises déduit (aussi à 360 px) —
+  sauvegarde ; le téléversement d'une vidéo, avec coupure réseau et reprise ; la photo annotée d'une voie, de l'organisateur au juge hors ligne (aussi à 360 px) ; le choix, le recadrage et l'annotation de la photo à la création de la voie, avec le nombre de prises déduit (aussi à 360 px) ; le maître–détail des voies et des juges à 1440 px, la sélection dans l'adresse et l'annotateur en plein écran (aussi à 360 px) —
   la purge des données personnelles ; le mode dégradé quand le serveur est injoignable ; la recherche dans la liste, la corbeille, la restauration et la suppression définitive d'une compétition (aussi à 360 px) ; voir `e2e/README.md` pour les lancer.

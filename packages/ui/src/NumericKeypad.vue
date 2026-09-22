@@ -60,7 +60,7 @@ function clear(): void {
       :aria-valuemin="min"
       :aria-valuemax="max"
       :aria-valuenow="modelValue ?? undefined"
-      class="min-h-16 rounded-xl border border-gray-400 px-4 text-center text-4xl font-semibold tracking-wide text-gray-900"
+      class="min-h-16 rounded-xl border border-gray-400 bg-white px-4 text-center text-4xl font-semibold tracking-wide text-gray-900"
       :class="disabled ? 'opacity-50' : ''"
     >
       {{ modelValue ?? '—' }}

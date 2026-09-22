@@ -4,6 +4,7 @@ import {
   judgeAscentBatchItemInputSchema,
   judgeAscentBatchResultSchema,
   judgeAscentsBatchInputSchema,
+  judgeAscentsBatchResponseSchema,
 } from './judge-ascents-batch'
 
 const ID_1 = '0189dcd5-5311-7d40-8db0-9496a2eef37b'
@@ -139,6 +140,7 @@ describe('judgeAscentBatchResultSchema', () => {
     deviceId: 'device-1',
     supersededBy: null,
     conflictGroup: null,
+    voidedAt: null,
     createdAt: new Date('2026-09-18T14:03:00.000Z'),
     updatedAt: new Date('2026-09-18T14:03:00.000Z'),
   }
@@ -175,5 +177,16 @@ describe('judgeAscentBatchResultSchema', () => {
     expect(judgeAscentBatchResultSchema.safeParse({ id: ID_1, status: 'rejected' }).success).toBe(
       false,
     )
+  })
+})
+
+describe('judgeAscentsBatchResponseSchema', () => {
+  it('accepte une réponse sans accessRevoked (serveur d’avant le Lot 21)', () => {
+    expect(judgeAscentsBatchResponseSchema.safeParse({ results: [] }).success).toBe(true)
+  })
+
+  it('porte accessRevoked quand l’accès du juge est révoqué (ADR-078)', () => {
+    const parsed = judgeAscentsBatchResponseSchema.parse({ results: [], accessRevoked: true })
+    expect(parsed.accessRevoked).toBe(true)
   })
 })

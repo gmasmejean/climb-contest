@@ -360,7 +360,7 @@ async function confirm(): Promise<void> {
       </template>
 
       <template v-else>
-        <p class="rounded-lg border border-gray-200 px-4 py-4 text-lg text-gray-900">
+        <p class="rounded-lg border border-gray-200 bg-white px-4 py-4 text-lg text-gray-900">
           Dossard {{ competitor.bib ?? '—' }} — {{ competitor.firstName }}
           {{ competitor.lastName }} — Voie {{ detail.route.number }} — {{ summary() }}
         </p>

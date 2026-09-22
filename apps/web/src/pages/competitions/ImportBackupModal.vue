@@ -90,7 +90,10 @@ async function confirmImport(): Promise<void> {
       <p v-if="busy && !preview" class="text-sm text-gray-600">Vérification du fichier…</p>
       <p v-if="error" role="alert" class="text-sm text-red-700">{{ error }}</p>
 
-      <div v-if="preview" class="flex flex-col gap-3 rounded-lg border border-gray-200 p-4">
+      <div
+        v-if="preview"
+        class="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4"
+      >
         <p class="font-medium text-gray-900">{{ preview.competitionName }}</p>
         <ul class="text-sm text-gray-800">
           <li>{{ preview.counts.categories }} catégorie(s)</li>
