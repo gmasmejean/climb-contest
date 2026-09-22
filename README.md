@@ -88,7 +88,9 @@ apps/api        Hono — API HTTP, auth organisateur, préparation de compétiti
                 tableau de bord (`GET .../dashboard`), transitions de tour
                 (`POST .../round-status/:roundId`), conflits
                 (`GET/POST .../conflicts`), correction et saisie de secours
-                (`.../ascents`), statut compétiteur, journal d'activité
+                (`.../ascents`), statut compétiteur, journal d'activité ;
+                grille compétiteurs × voies (Lot 20) —
+                `GET .../ascents/matrix?roundId=&categoryId=`
 apps/web        Vue 3 + Vite — PWA (auth, espace organisateur : compétitions,
                 catégories, compétiteurs, voies, tours, juges — Lot 3/4 ;
                 accès juge `/j/<token>` — Lot 4 ; ses voies, saisie et
@@ -97,8 +99,9 @@ apps/web        Vue 3 + Vite — PWA (auth, espace organisateur : compétitions,
                 `/c/<slug>` et écran de salle `/c/<slug>/salle`, sans
                 authentification, mise à jour en direct — Lot 7 ; onglet
                 Pilotage — vue d'ensemble, tours, correction/secours,
-                conflits, journal — Lot 8 ; page d'accueil publique `/`,
-                ADR-070)
+                conflits, journal — Lot 8, poste multi-panneaux et matrice
+                compétiteurs × voies sur grand écran — Lot 20 ; page
+                d'accueil publique `/`, ADR-070)
 packages/db     Schéma Drizzle, migrations, seed
 packages/contracts   Schémas Zod partagés (entités + payloads d'API)
 packages/ui     Composants Vue partagés (bouton, champ, modale…)
@@ -235,21 +238,29 @@ L'onglet **Pilotage** de l'espace organisateur (`/competitions/:id`, visible
 quel que soit le format) rassemble le suivi en direct de la compétition,
 distinct de la préparation (onglets Catégories/Compétiteurs/Voies/Tours) :
 
-- **Vue d'ensemble** — progression par catégorie et par voie, compétiteurs
-  n'ayant pas encore grimpé, état de chaque juge (dernier signe de vie,
-  nombre de saisies), et les alertes (voie muette depuis 15 min, juge muet
-  depuis 10 min, conflit non résolu, compétiteur sans passage un tour
+- **Vue d'ensemble** — progression par catégorie et par voie (en barres),
+  compétiteurs n'ayant pas encore grimpé, état de chaque juge (dernier signe
+  de vie, nombre de saisies), et les alertes (voie muette depuis 15 min, juge
+  muet depuis 10 min, conflit non résolu, compétiteur sans passage un tour
   fermé). Rafraîchi par sondage toutes les 8 s (pas de flux temps réel ici,
   contrairement à la page publique — DECISIONS.md ADR-045) ;
 - **Tours** — ouvrir/fermer/publier (et rouvrir/dépublier), pour les deux
   formats ; publier est bloqué tant qu'un conflit du tour n'est pas résolu ;
 - **Voies** — corriger n'importe quel passage (motif obligatoire, historique
-  conservé) ou saisir un passage à la place d'un juge (secours) ;
+  conservé) ou saisir un passage à la place d'un juge (secours). À partir de
+  1024 px, une **grille compétiteurs × voies** remplace le choix d'une voie à
+  la fois (Lot 20, voir plus bas) ;
 - **Conflits** — les deux valeurs côte à côte (juge, appareil, heure),
   choisir l'une ou saisir une troisième valeur ;
 - **Journal** — l'historique complet de la compétition (saisies juge,
-  corrections, conflits tranchés, changements de statut), filtrable et
-  exportable en CSV.
+  corrections, conflits tranchés, changements de statut), filtrable par type,
+  par acteur et par dates, et exportable en CSV.
+
+Un **bandeau d'état** apparaît au-dessus des cinq sous-sections dès qu'une
+lecture échoue : il dit depuis quand les chiffres datent, et que les saisies
+des juges restent sur leurs téléphones. Le sondage est unique pour toute la
+page (`useCompetitionPulse`) et tourne quand la compétition est « En cours »
+ou quand l'onglet Pilotage est ouvert.
 
 **Le statut d'un tour se porte par catégorie** (Lot 12, ADR-065) : les U16 peuvent finir
 leur qualification le matin quand les U18 n'ont pas commencé. Dans **Pilotage → Tours**,
@@ -379,6 +390,27 @@ ADR-066.
     faire quand la compétition ne conserve pas les accès en clair. Aucun QR pour un juge
     révoqué. « Voir l'accès », « Régénérer le PIN » et « Révoquer » vivent alors dans la
     fiche, plus sur la ligne.
+- **Le pilotage jour J devient un poste de travail à partir de 1024 px** (ADR-082) : dans
+  « Vue d'ensemble », les alertes, la progression en barres et les compétiteurs en attente
+  occupent la colonne principale, pendant qu'un rail collant à droite montre les conflits à
+  trancher (avec le nom du compétiteur et la voie), l'état des juges et les cinq dernières
+  actions du journal. Chaque panneau mène à sa sous-section.
+  - **L'onglet Pilotage porte une pastille** : le nombre de conflits non résolus en rouge —
+    ils retiennent une publication — ou, à défaut, le nombre d'alertes en ambre. « Prêt à
+    démarrer ? » porte le nombre de contrôles en échec. L'en-tête collant affiche
+    l'avancement global (`128 / 240 passages`), lisible depuis n'importe quel onglet.
+  - **Une grille compétiteurs × voies** remplace, dans « Voies », le choix d'une voie à la
+    fois : on choisit une catégorie (et un tour s'il y en a plusieurs), et chaque case ouvre
+    la correction ou la saisie de secours du passage qu'elle désigne. Une case **en conflit**
+    est colorée, libellée « à trancher » et mène à l'onglet Conflits : elle ne se confond
+    jamais avec une case vide. La sélection vit dans l'adresse (`?pair=…`). Côté API :
+    `GET .../ascents/matrix?roundId=&categoryId=` (ADR-083), borné au couple (tour,
+    catégorie). En dessous de 1024 px, la liste par voie du Lot 8 est conservée telle quelle.
+  - **Les conflits sont en vis-à-vis** : les valeurs candidates à gauche (trois de front
+    au-delà de 1280 px), les actions à droite, et une phrase dit sur quoi les saisies
+    diffèrent.
+  - **Le journal est un tableau triable**, avec un filtre par dates en plus du type et de
+    l'acteur ; le détail brut n'apparaît qu'au-delà de 1280 px.
 
 ## Liste des compétitions et corbeille
 

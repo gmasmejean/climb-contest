@@ -88,7 +88,7 @@ export async function activeAscentsFor(
 
 /**
  * La grille compétiteurs × voies d'un couple (tour, catégorie) — ROADMAP.md
- * Lot 20, point d'agrégat cadré en début de lot (DECISIONS.md ADR-082).
+ * Lot 20, point d'agrégat cadré en début de lot (DECISIONS.md ADR-083).
  *
  * Borné au couple : les voies sont alors les mêmes pour toute la colonne de
  * compétiteurs, et le volume reste celui d'une catégorie (~30 × 4). Réutilise

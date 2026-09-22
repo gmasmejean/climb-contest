@@ -148,7 +148,7 @@ export function createOrganizerAscentRoutes(deps: OrganizerAscentRouteDeps): Hon
 
   /**
    * La grille compétiteurs × voies d'un couple (tour, catégorie) — Lot 20,
-   * DECISIONS.md ADR-082. Monté ici plutôt que sur un chemin à soi : ce
+   * DECISIONS.md ADR-083. Monté ici plutôt que sur un chemin à soi : ce
    * routeur porte déjà `requireOrganizer` + `requireCompetitionAccess` en
    * `*`, et `GET /matrix` ne croise ni `GET /` ni `PATCH /:ascentId`.
    */

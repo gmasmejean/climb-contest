@@ -261,7 +261,8 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   d'annulation (faire disparaître un passage du décompte sans le
   requalifier) apparaît, prévoir une action dédiée à ce moment-là.
 - **Pas de SSE pour le tableau de bord organisateur, polling à 8 s**
-  (DECISIONS.md ADR-045, décidé avec l'utilisateur). À revisiter si un club
+  (DECISIONS.md ADR-045, décidé avec l'utilisateur ; inchangé au Lot 20, où le
+  sondage a seulement été remonté au niveau de l'onglet). À revisiter si un club
   signale un tableau de bord perçu comme trop lent en usage réel — le
   travail d'authentification d'un flux SSE organisateur (jeton signé en
   query param, `EventSource` ne portant pas de header) resterait à faire.
@@ -279,7 +280,7 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **`GET .../activity-log` n'est pas paginé**, cohérent avec le reste du
   dépôt à cette échelle (TODO.md Lot 3) — à revoir si une compétition très
   active (des centaines de passages sur plusieurs jours) rend la réponse
-  trop grosse.
+  trop grosse. Toujours vrai après le Lot 20.
 - **`e2e/organizer-pilotage.spec.ts` ne couvre que la résolution de
   conflit par « choix », pas par « nouvelle valeur »**, ni la saisie de
   secours (couvertes par les tests d'intégration API,
@@ -529,8 +530,8 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - ~~**Liste, corbeille et création restent une colonne étroite**~~ Levé au Lot 18 pour la
   liste et la corbeille (`lg:max-w-none`). **`CompetitionCreate` garde son `max-w-2xl`** :
   c'est un formulaire, sa mise en grille est le Lot 19.
-- **`Tabs` n'a pas de pastille** (`badge`) : prévue au plan, non écrite tant que rien ne
-  l'alimente (compteurs de conflits / alertes / points bloquants → Lot 20).
+- ~~**`Tabs` n'a pas de pastille** (`badge`)~~ Faite au Lot 20 (ADR-082 point 5) :
+  conflits et alertes sur Pilotage, contrôles en échec sur « Prêt à démarrer ? ».
 - **Identifiants DOM en double** : les onglets de la page et les sous-onglets du pilotage
   produisent tous deux `#tab-rounds` (et `aria-controls="panel-…"` ne pointe sur aucun
   élément). Antérieur au Lot 17 ; `Tabs` devrait recevoir un préfixe d'identifiant et les
@@ -604,3 +605,37 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **L'état « file pas encore relue » de l'écran « accès révoqué »** n'a pas de test de composant
   (le moteur est un singleton déjà hydraté en test) ; seul `SyncEngine.isHydrated` est testé.
 
+
+## Depuis le pilotage sur portable (Lot 20, ADR-082 et ADR-083)
+
+- **L'angle mort des conflits subsiste dans la liste par voie** (sous 1024 px, rendu du
+  Lot 8) : `GET .../ascents?roundId=&routeId=` s'appuie sur `activeAscentsFor`, qui écarte
+  les saisies en conflit — la ligne affiche donc « — », comme si personne n'avait rien saisi.
+  La grille du Lot 20 le corrige pour elle-même (drapeau `conflict`, ADR-083 point 4), mais
+  la liste n'a pas été touchée : son point d'API renvoie `judgeRouteCompetitorSchema`,
+  partagé avec l'écran juge, qu'il aurait fallu changer aussi.
+- **`GET .../conflicts` et `GET .../activity-log` ne valident toujours pas leur sortie** :
+  ils renvoient `c.json(...)` brut, alors que `activityLogResponseSchema` et
+  `conflictSummarySchema` existent. Dette antérieure au Lot 20 ; la nouvelle route
+  `.../ascents/matrix` parse la sienne. À faire converger si quelqu'un y touche.
+- **Le journal n'est toujours pas paginé** (déjà noté au Lot 8) — il est maintenant un
+  tableau triable côté navigateur, ce qui rend la limite plus visible : une compétition très
+  active charge tout, trie tout, et affiche tout.
+- **La matrice n'est pas virtualisée** et n'a pas de recherche : 30 compétiteurs × 4 voies
+  tiennent, 150 × 8 restent à mesurer (même dette que les tableaux du Lot 18).
+- **Aucune navigation au clavier dans la grille** (pas de déplacement par flèches d'une case
+  à l'autre) : chaque case est un `<button>` atteignable en tabulant, rien de plus. Même
+  piste que la « navigation clavier dans les tableaux » écartée des Lots 17–20.
+- **Le compteur de l'en-tête additionne toutes les catégories et tous les tours ouverts** :
+  en phases, il mélange la qualification et la demi-finale. Suffisant comme signal
+  d'avancement, trompeur si on cherche un chiffre exact par tour.
+- **Le rail du poste de pilotage n'est pas réordonnable** et ne se replie pas : un
+  organisateur qui ne se sert jamais du journal le garde à l'écran.
+- **Le limiteur de `GET /judge/access` fait échouer les derniers tests juge d'une suite e2e
+  complète** (30 / 15 min par adresse, déjà noté au Lot 21) : vérifié à nouveau ici —
+  `judge-revoked` et `route-photo` échouent en fin de série et repassent seuls après
+  `docker restart <api>`. Rien à voir avec ce lot, mais ça rend « la suite entière est verte »
+  impossible à montrer en une seule exécution.
+- **Les en-têtes de colonne du journal ne s'alignent pas** entre colonnes triables et non
+  triables (« Motif », « Détail » retombent plus bas) : défaut de `DataList` déjà noté au
+  Lot 19, désormais visible sur une septième liste.

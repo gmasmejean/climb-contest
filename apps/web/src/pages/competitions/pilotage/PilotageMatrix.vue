@@ -16,7 +16,7 @@ import type { AscentEditTarget } from './ascent-edit'
 
 /**
  * La grille compétiteurs × voies d'un couple (tour, catégorie) — ROADMAP.md
- * Lot 20, point d'API cadré en ADR-082. D'un coup d'œil : qui a grimpé quoi,
+ * Lot 20, point d'API cadré en ADR-083. D'un coup d'œil : qui a grimpé quoi,
  * ce qui manque, et ce qui reste à trancher. Chaque case ouvre la correction
  * ou la saisie de secours.
  *
@@ -143,7 +143,7 @@ function cellClass(cell: AscentMatrixCell): string {
 }
 
 /**
- * `cells` suit l'ordre de `routes` (l'API les construit ensemble, ADR-082) :
+ * `cells` suit l'ordre de `routes` (l'API les construit ensemble, ADR-083) :
  * on apparie par index plutôt que de chercher un `routeId` pour chaque case
  * d'un tableau qui peut faire 150 lignes.
  */

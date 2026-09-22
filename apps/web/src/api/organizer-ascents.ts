@@ -32,7 +32,7 @@ export const organizerAscentsApi = {
     apiFetch<RouteAscentEntry[]>(
       `/competitions/${competitionId}/ascents?roundId=${roundId}&routeId=${routeId}`,
     ),
-  /** Grille compétiteurs × voies d'un couple (tour, catégorie) — Lot 20, ADR-082. */
+  /** Grille compétiteurs × voies d'un couple (tour, catégorie) — Lot 20, ADR-083. */
   matrix: (competitionId: string, roundId: string, categoryId: string) =>
     apiFetch<AscentMatrixResponse>(
       `/competitions/${competitionId}/ascents/matrix?roundId=${roundId}&categoryId=${categoryId}`,

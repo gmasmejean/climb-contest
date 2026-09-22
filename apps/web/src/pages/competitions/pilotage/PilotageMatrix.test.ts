@@ -214,7 +214,7 @@ describe('PilotageMatrix — grille compétiteurs × voies (Lot 20)', () => {
 
     vi.unstubAllGlobals()
     stubApi()
-    const twoRounds = await mount(PilotageMatrix, {
+    const twoRounds = mount(PilotageMatrix, {
       props: {
         competitionId: 'c1',
         categories: [

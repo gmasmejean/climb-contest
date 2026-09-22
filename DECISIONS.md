@@ -3180,6 +3180,134 @@ permettre depuis ce formulaire d'ajouter un PIN à un juge qui n'en a pas (hors 
 
 ---
 
+## ADR-082 — Le pilotage jour J devient un poste multi-panneaux, avec un seul sondage
+
+**Date :** 2026-09-22
+**Contexte :** Lot 20, dernier de la série grand écran (ADR-072 point 6, qui désignait
+explicitement le pilotage comme « la cible d'optimisation »). Avant ce lot, l'onglet
+Pilotage était la seule partie de l'espace organisateur sans **aucune** classe `lg:` : cinq
+sous-sections dont une seule visible à la fois, sur un portable de 1440 px. Trois défauts
+trouvés en relisant le code avant d'écrire :
+
+- `refetchInterval: 8000` n'était déclaré que dans `PilotageOverview` : **quitter « Vue
+  d'ensemble » arrêtait tout rafraîchissement automatique**, sans que rien ne le dise.
+  Conflits, Tours et Journal ne bougeaient plus qu'après une mutation ;
+- le bandeau « Le serveur ne répond plus » vivait dans ce même composant : depuis Conflits
+  ou Journal, l'organisateur lisait des chiffres d'âge inconnu sans avertissement ;
+- la progression était du texte (`12 / 30`), et `Tabs` n'avait pas de pastille — noté comme
+  « à faire quand quelque chose l'alimentera » depuis le Lot 17.
+
+**Décisions (actées avec l'utilisateur en cadrage, 2026-09-22) :**
+
+1. **« Vue d'ensemble » devient le poste de pilotage.** À partir de `lg`, une grille
+   `[minmax(0,1fr)_22rem]` : alertes, progression en barres et compétiteurs en attente à
+   gauche ; conflits, juges et cinq dernières actions dans un rail collant à droite, chaque
+   panneau menant à sa section détaillée. Les quatre autres sous-sections gardent leur rôle
+   et leur `?section=`. Sous `lg`, les panneaux s'empilent — le rendu mobile ne change pas
+   (ADR-072 point 1).
+   *Alternatives écartées :* une page unique sans sous-onglets au-dessus de `lg` (deux
+   structures de navigation selon la largeur, et `?section=` perdrait son sens sur
+   téléphone) ; élargir les cinq sections sans vue de synthèse (l'organisateur continuerait
+   de naviguer entre alertes et conflits).
+
+2. **Le seuil est bien `lg` (1024 px), et c'est mesuré.** Le Lot 19 a montré qu'un seuil se
+   vérifie en navigateur (ADR-075 point 1, où 1024 est devenu 1440). Ici rien n'a de largeur
+   fixe — pas de `table-fixed` dans les panneaux — et `e2e/organizer-pilotage-desktop.spec.ts`
+   vérifie à **1024 px comme à 1440 px** que le rail commence bien après la colonne
+   principale, sans débordement horizontal. Le seuil annoncé tient.
+
+3. **Un seul sondage pour toute la page**, dans `useCompetitionPulse`
+   (`apps/web/src/composables/`). Il réutilise les clés de cache existantes (`dashboard`,
+   `readiness`) : les écrans qui les interrogeaient déjà partagent la même requête, aucune
+   requête supplémentaire n'est émise. Il tourne à 8 s quand la compétition est **En cours**
+   ou quand l'onglet Pilotage est ouvert ; sinon une seule lecture. Le second terme préserve
+   exactement le comportement d'avant ce lot pour qui prépare sa compétition la veille.
+   ADR-045 (sondage plutôt que SSE pour l'organisateur) n'est pas remis en cause.
+
+4. **Le bandeau d'état du serveur remonte au niveau de l'onglet**, donc visible depuis les
+   cinq sections. Il n'est pas collant : l'en-tête de compétition l'est déjà à partir de
+   `lg`, et une troisième couche collante mangerait la hauteur utile. Il reste piloté par
+   l'échec de la requête, et non par `navigator.onLine` : un organisateur derrière un portail
+   captif est « en ligne » et pourtant non servi.
+
+5. **Une seule pastille par onglet, et le compte n'entre pas dans le nom accessible.**
+   *Pilotage* porte le nombre de conflits non résolus en rouge — ils retiennent une
+   publication — et retombe sur le nombre d'alertes en ambre quand rien n'est contesté ;
+   *Prêt à démarrer ?* porte le nombre de contrôles en échec. Deux compteurs côte à côte dans
+   une barre latérale de 15 rem ne se lisent plus. La pastille est `aria-hidden` et son sens
+   passe par un `aria-label` composé (« Pilotage, 2 conflits ») : sans cela « 2 » entrerait
+   dans le nom accessible, illisible au lecteur d'écran, et les 28 sélecteurs e2e
+   `getByRole('tab', { name })` cesseraient de correspondre.
+   `competitionTabs()` reste une **fonction pure** : elle reçoit les pastilles, elle ne va
+   pas les chercher, et ne modifie jamais la définition partagée des onglets.
+
+6. **L'avancement global (`128 / 240 passages`) vit dans l'en-tête de compétition**, collant
+   à partir de `lg`, donc lisible depuis n'importe quel onglet. Masqué sous `lg`, où
+   l'en-tête est déjà plein.
+
+**Écart assumé :** la pastille apparaît aussi sur la barre d'onglets horizontale, donc sous
+1024 px. C'est une information, pas une mise en page, et elle ne déplace rien ; mais ADR-072
+point 1 dit « sous ce seuil le rendu ne change pas », alors autant l'écrire.
+
+---
+
+## ADR-083 — La matrice compétiteurs × voies est bornée au couple (tour, catégorie)
+
+**Date :** 2026-09-22
+**Contexte :** `ROADMAP.md` Lot 20 demandait une « matrice compétiteurs × voies cliquable »
+et laissait explicitement son **point d'API d'agrégat à cadrer en début de lot**. Rien de tel
+n'existait : `GET .../dashboard` donne des **comptes** par voie (`done` / `expected`, sans
+identité) et, à l'inverse, une liste de compétiteurs avec leurs `remainingRouteNumbers` —
+mais uniquement pour les tours **ouverts**, et sans aucune valeur par case. Les valeurs ne
+s'obtenaient que par `GET .../ascents?roundId=&routeId=`, **une voie à la fois**.
+
+**Décisions (le point 1 acté avec l'utilisateur) :**
+
+1. **L'unité est le couple (tour, catégorie)**, pas la compétition entière ni une catégorie
+   sur tous ses tours. C'est l'unité du classement : les voies y sont les mêmes pour toute la
+   colonne de compétiteurs, la réponse reste de l'ordre de 30 × 4, et aucune case n'est
+   structurellement sans objet. Une matrice « toute la compétition » mêlerait des voies qui
+   ne concernent pas toutes les catégories ; une matrice « une catégorie, tous ses tours »
+   mêlerait des tours dont les listes de qualifiés diffèrent (ADR-054), donc des cases vides
+   par construction — indiscernables d'un passage manquant.
+
+2. **`GET /api/v1/competitions/:id/ascents/matrix?roundId=&categoryId=`**, monté dans le
+   routeur organisateur existant (`createOrganizerAscentRoutes`). Il porte déjà
+   `requireOrganizer` + `requireCompetitionAccess` en `*`, et `GET /matrix` ne croise ni
+   `GET /` ni `PATCH /:ascentId` : pas de nouveau routeur, et le piège de montage d'ADR-046
+   ne se pose pas. La route est classée automatiquement `organizer-competition` par le préfixe
+   dans `security-matrix.test.ts`, et passe ses contrôles de frontière sans ajout.
+
+3. **`buildAscentMatrix` réutilise `expectedCompetitors` et `activeAscentsFor`**
+   (`lib/ascent-progress.ts`) : la grille compte donc **exactement** ce que comptent le tableau
+   de bord et l'écran juge, restriction aux qualifiés figés comprise (ADR-054). Une source, pas
+   trois.
+
+4. **Une requête de plus, pour les cases en conflit.** `activeAscentsFor` écarte les saisies
+   dont le `conflict_group` n'est pas nul : sans cette requête supplémentaire, une case à
+   trancher s'afficherait **vide**, donc identique à un passage jamais saisi. Or l'une veut dire
+   « allez trancher » et l'autre « allez voir le juge ». La case porte donc un drapeau
+   `conflict`, elle est colorée, libellée « à trancher », et mène à l'onglet Conflits au lieu
+   d'ouvrir une correction. *(Le même angle mort subsiste dans la liste par voie du Lot 8, qui
+   n'est pas touchée ici — noté dans `TODO.md`.)*
+
+5. **La réponse est validée dans `buildAscentMatrix`, pas dans la route.** `ascent.modifier` et
+   `ascent.status` sont des colonnes texte à CHECK, donc typées `string` par Drizzle ; c'est le
+   schéma Zod qui les rétrécit, comme `GET /` le fait déjà avec `judgeRouteCompetitorSchema`.
+
+6. **La matrice ne s'affiche qu'à partir de `lg`** ; en dessous, `PilotageAscents` garde la
+   liste par voie du Lot 8, au pixel près. Un seul des deux est monté (ADR-074 point 2). La
+   sélection vit dans l'adresse (`?pair=<roundId>:<categoryId>`, écrite par `router.replace`),
+   sur le patron d'ADR-075. Le tour n'entre dans le libellé du sélecteur que si la compétition
+   en a plusieurs : en contest il est implicite (ADR-023) et le nommer n'apprend rien.
+
+7. **Le formulaire de correction / saisie de secours est extrait dans `AscentEditDialog`**,
+   partagé par la grille et la liste pour qu'ils ne divergent pas. Il travaille désormais sur sa
+   **propre copie** des valeurs : annuler ne laisse plus rien derrière sur la case qu'on vient
+   de fermer.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
