@@ -3076,6 +3076,47 @@ effacées sans un mot. **Amende ADR-036.**
 
 ---
 
+## ADR-080 — La connexion mène à `/competitions`, pas à `/` (amende ADR-070)
+
+**Date :** 2026-09-22
+**Contexte :** l'utilisateur demande que la connexion organisateur atterrisse directement sur
+`/competitions` plutôt que sur la page d'accueil publique. L'ADR-070 avait explicitement acté
+l'inverse (« `/` reste la destination après connexion ») avec un contrat documenté : onze tests
+e2e cliquaient le lien « Mes compétitions » juste après connexion, et le bouton
+**« Se déconnecter » n'existait que dans l'en-tête de `/`** (`LandingHeader.vue`) — aucune page
+organisateur (`/competitions`, `/competitions/:id`, …) n'avait de moyen de se déconnecter.
+
+**Décision (actée avec l'utilisateur) :**
+
+1. `Login.vue` (succès de connexion) et la redirection `guestOnly` du routeur visent désormais
+   `competition-list`, pas `home`. `/` reste publique et continue de restaurer la session pour
+   son propre en-tête (rien ne change côté ADR-070 pour la page d'accueil elle-même).
+2. Un menu (icône ☰, `OrganizerMenu.vue`) apparaît en haut à droite des quatre pages
+   organisateur (liste, détail, création, corbeille), via le slot `#actions` de `BrandShell`.
+   Contenu : nom de l'organisateur, « Accueil », « Mes compétitions », « Se déconnecter ». C'est
+   désormais le seul point d'accès à la déconnexion en dehors de `/`.
+3. **Bug trouvé en construisant le menu :** l'en-tête et le contenu de `BrandShell` partageaient
+   `z-10` ; à égalité, l'ordre du DOM faisait gagner le contenu de la page, qui recouvrait un
+   menu déroulant ancré dans l'en-tête (vérifié à l'écran : « Nouvelle compétition » recouvrait
+   le menu ouvert). Corrigé en passant l'en-tête à `z-20`, au-dessus du contenu (`z-10`) et du
+   décor aquarelle (`z-0`).
+
+**Conséquences :** `Login.vue`, `router.ts` (redirection `guestOnly`), nouveau
+`components/brand/OrganizerMenu.vue`, `BrandShell.vue` (z-index de l'en-tête), les quatre pages
+`competitions/*.vue`. Onze tests e2e mis à jour (le clic sur « Mes compétitions » juste après
+connexion est retiré, la compétition étant déjà affichée) ; `degraded-mode.spec.ts` pose
+désormais son abandon de route **avant** de soumettre le formulaire de connexion, puisque la
+requête de liste part avec la redirection elle-même. Vérifié dans un vrai navigateur (Chromium
+via Playwright, bureau et 360 px) : connexion → `/competitions`, menu lisible et cliquable,
+« Se déconnecter » fonctionne.
+
+**Alternatives écartées :** garder la déconnexion uniquement sur `/` (rejeté par l'utilisateur —
+« Ajoute une icône menu… ») ; dupliquer le lien « Mes compétitions » et le bouton de
+déconnexion de `LandingHeader.vue` telles quelles sur chaque page organisateur plutôt qu'un menu
+dédié (moins extensible : ce menu est le point d'accroche naturel pour de futures entrées).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
