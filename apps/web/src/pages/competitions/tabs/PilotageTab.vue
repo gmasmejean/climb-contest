@@ -66,6 +66,7 @@ const section = computed({
       v-if="section === 'overview'"
       :competition-id="competition.id"
       :pulse="pulse"
+      @open="section = $event"
     />
     <PilotageRounds
       v-else-if="section === 'rounds'"
