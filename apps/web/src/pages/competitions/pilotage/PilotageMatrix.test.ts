@@ -204,6 +204,43 @@ describe('PilotageMatrix — grille compétiteurs × voies (Lot 20)', () => {
     expect(wrapper.emitted('edit')).toBeUndefined()
   })
 
+  it('ne nomme le tour que s’il y en a plusieurs', async () => {
+    stubApi()
+    const single = await open()
+    await flushPromises()
+    // Contest : le tour est implicite (ADR-023), le nommer n'apprend rien.
+    expect(single.get('select').text()).toContain('U16 Femme')
+    expect(single.get('select').text()).not.toContain('Qualification')
+
+    vi.unstubAllGlobals()
+    stubApi()
+    const twoRounds = await mount(PilotageMatrix, {
+      props: {
+        competitionId: 'c1',
+        categories: [
+          {
+            ...categories[0]!,
+            routes: [
+              categories[0]!.routes[0]!,
+              { ...categories[0]!.routes[1]!, roundId: '0192f0c0-0000-7000-8000-000000000011' },
+            ],
+          },
+        ],
+      },
+      global: {
+        plugins: [
+          router,
+          [
+            VueQueryPlugin,
+            { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+          ],
+        ],
+      },
+    })
+    await flushPromises()
+    expect(twoRounds.get('select').text()).toContain('Qualification')
+  })
+
   it('annonce chaque case en toutes lettres', async () => {
     stubApi()
     const wrapper = await open()

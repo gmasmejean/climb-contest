@@ -51,23 +51,33 @@ interface Pair {
   categoryId: string
 }
 
-/** Couples (tour, catégorie) réellement câblés, dans l'ordre des catégories. */
+/**
+ * Couples (tour, catégorie) réellement câblés, dans l'ordre des catégories.
+ * Le tour n'entre dans le libellé que s'il y en a plusieurs : en contest il
+ * est implicite (ADR-023) et « U16 Femme — Qualification » n'apprendrait rien.
+ */
 const pairs = computed<Pair[]>(() => {
   const seen = new Map<string, Pair>()
+  const roundIds = new Set<string>()
   for (const category of props.categories) {
     for (const route of category.routes) {
       if (route.roundId === null) continue
+      roundIds.add(route.roundId)
       const value = `${route.roundId}:${category.categoryId}`
       if (seen.has(value)) continue
       seen.set(value, {
         value,
-        label: `${category.label} — ${roundLabels.value.get(route.roundId) ?? 'Tour'}`,
+        label: category.label,
         roundId: route.roundId,
         categoryId: category.categoryId,
       })
     }
   }
-  return [...seen.values()]
+  if (roundIds.size <= 1) return [...seen.values()]
+  return [...seen.values()].map((pair) => ({
+    ...pair,
+    label: `${pair.label} — ${roundLabels.value.get(pair.roundId) ?? 'Tour'}`,
+  }))
 })
 
 /*
