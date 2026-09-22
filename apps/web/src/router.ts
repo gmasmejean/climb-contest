@@ -156,7 +156,7 @@ router.beforeEach(async (to) => {
     return { name: 'login' }
   }
   if (to.meta.guestOnly && currentUser.value) {
-    return { name: 'home' }
+    return { name: 'competition-list' }
   }
   return true
 })

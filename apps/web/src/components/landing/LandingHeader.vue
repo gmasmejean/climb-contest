@@ -21,10 +21,12 @@ async function onLogout(): Promise<void> {
     <BrandLogo />
 
     <!--
-      État connecté : `/` reste la destination après connexion (ADR-070). Le
-      libellé « Mes compétitions » est un contrat : une dizaine de tests e2e
-      cliquent `getByRole('link', { name: 'Mes compétitions' })` juste après
-      s'être connectés. Ne pas le renommer sans les mettre à jour.
+      État connecté : `/` reste publique et restaure la session pour cet
+      en-tête (ADR-070), mais n'est plus la destination après connexion
+      depuis ADR-080 — c'est `OrganizerMenu.vue` (pages `/competitions*`)
+      qui porte désormais « Se déconnecter » au quotidien. Quelques tests
+      e2e cliquent encore ce lien après une navigation manuelle vers `/` ;
+      ne pas le renommer sans vérifier `e2e/landing.spec.ts`.
     -->
     <div v-if="currentUser" class="flex flex-wrap items-center gap-x-3 gap-y-2">
       <p class="text-ink max-w-[12rem] truncate text-base">

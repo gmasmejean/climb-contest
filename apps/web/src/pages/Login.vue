@@ -80,7 +80,7 @@ async function onSubmit(): Promise<void> {
       { method: 'POST', body: JSON.stringify(form) },
     )
     setSession(result.accessToken, result.user)
-    await router.push({ name: 'home' })
+    await router.push({ name: 'competition-list' })
   } catch (error) {
     if (error instanceof ApiError) {
       formError.value = error.detail ?? error.title
