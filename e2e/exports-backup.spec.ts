@@ -99,8 +99,7 @@ test('exporter les résultats et la sauvegarde, puis réimporter la sauvegarde',
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)
   await page.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(page).toHaveURL('/')
-  await page.getByRole('link', { name: 'Mes compétitions' }).click()
+  await expect(page).toHaveURL('/competitions')
   await page.getByText(name).click()
   await page.getByRole('tab', { name: 'Exports' }).click()
 
@@ -179,7 +178,7 @@ test('l’aperçu refuse un fichier qui n’est pas une sauvegarde, sans rien cr
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)
   await page.getByRole('button', { name: 'Se connecter' }).click()
-  await page.getByRole('link', { name: 'Mes compétitions' }).click()
+  await expect(page).toHaveURL('/competitions')
   await page.getByRole('button', { name: 'Importer une sauvegarde' }).click()
   const dialog = page.getByRole('dialog')
 

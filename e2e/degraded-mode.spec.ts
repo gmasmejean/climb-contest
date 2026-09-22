@@ -99,8 +99,7 @@ test('organisateur : le tableau de bord avertit quand le serveur ne répond plus
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)
   await page.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(page).toHaveURL('/')
-  await page.getByRole('link', { name: 'Mes compétitions' }).click()
+  await expect(page).toHaveURL('/competitions')
   await page.getByText(name).click()
   await page.getByRole('tab', { name: 'Pilotage' }).click()
   await expect(page.getByText('Chargement…')).toHaveCount(0)
@@ -141,11 +140,13 @@ test('organisateur : la liste des compétitions propose de réessayer', async ({
   await page.goto('/login')
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)
-  await page.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(page).toHaveURL('/')
 
+  // La connexion mène directement à la liste (ADR-070 modifié) : l'abandon
+  // de route doit être posé avant la connexion pour intercepter la requête
+  // déclenchée par la redirection elle-même.
   await page.route('**/api/v1/competitions', (route) => route.abort('connectionrefused'))
-  await page.getByRole('link', { name: 'Mes compétitions' }).click()
+  await page.getByRole('button', { name: 'Se connecter' }).click()
+  await expect(page).toHaveURL('/competitions')
   await expect(page.getByRole('alert')).toContainText('Impossible de joindre le serveur', {
     timeout: 15_000,
   })

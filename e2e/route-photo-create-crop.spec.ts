@@ -79,8 +79,7 @@ test('l’organisateur choisit, recadre puis annote la photo en créant la voie'
   await page.getByLabel('E-mail').fill(ORGANIZER_EMAIL)
   await page.getByLabel('Mot de passe').fill(ORGANIZER_PASSWORD)
   await page.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(page).toHaveURL('/')
-  await page.getByRole('link', { name: 'Mes compétitions' }).click()
+  await expect(page).toHaveURL('/competitions')
   await page.getByText(name).click()
   await page.getByRole('tab', { name: 'Voies' }).click()
 

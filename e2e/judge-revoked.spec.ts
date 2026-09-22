@@ -156,7 +156,7 @@ test('un juge révoqué pendant qu’il est hors ligne : ses saisies arrivent, l
   await organizer.getByLabel('E-mail').fill(fixture.email)
   await organizer.getByLabel('Mot de passe').fill(fixture.password)
   await organizer.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(organizer).toHaveURL('/')
+  await expect(organizer).toHaveURL('/competitions')
   await organizer.goto(`/competitions/${fixture.competitionId}/pilotage?section=conflicts`)
 
   const pending = organizer.getByTestId('conflict-revoked_access')
