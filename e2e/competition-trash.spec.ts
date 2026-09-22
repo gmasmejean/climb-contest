@@ -50,8 +50,7 @@ test('rechercher, mettre à la corbeille, restaurer, supprimer définitivement',
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)
   await page.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(page).toHaveURL('/')
-  await page.getByRole('link', { name: 'Mes compétitions' }).click()
+  await expect(page).toHaveURL('/competitions')
 
   // --- Recherche : sans accent ni casse, gardée dans l'adresse ---
   // Une ligne de liste, carte ou rangée de tableau selon la largeur.

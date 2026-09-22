@@ -165,8 +165,9 @@ appareils.
 pilule « Espace organisateur » (→ `/login`), titre, recherche, quatre cartes
 (Organisateurs, Juges, Spectateurs, Grimpeurs), mur d'escalade et foule en
 aquarelle. Un organisateur connecté y retrouve son nom, « Mes compétitions »
-et « Se déconnecter » — c'est toujours la page d'arrivée après connexion, et
-la session y est restaurée au rechargement.
+et « Se déconnecter », et la session y est restaurée au rechargement — mais
+depuis ADR-080 ce n'est plus la page d'arrivée après connexion : c'est
+`/competitions` (voir « Espace organisateur » ci-dessous).
 
 - **La recherche est désactivée** et le dit (« Recherche bientôt
   disponible ») : la recherche publique est le Lot 13, non engagé. Rien n'est
@@ -381,6 +382,11 @@ ADR-066.
 
 ## Liste des compétitions et corbeille
 
+La connexion mène directement à **Mes compétitions** (`/competitions`,
+ADR-080). Le menu ☰ en haut à droite de chaque page organisateur (liste,
+détail, création, corbeille) donne « Accueil », « Mes compétitions » et
+« Se déconnecter » — seul point d'accès à la déconnexion hors de `/`.
+
 **Mes compétitions** se recherche (nom ou lieu, sans tenir compte des accents ni
 de la casse), se filtre (statut, date de début, « À venir ou en cours » /
 « Passées ») et se trie (date, nom, statut). La vue est dans l'adresse de la page
@@ -420,7 +426,7 @@ sont restaurés révoqués : il faut recréer des accès et réimprimer les QR c
   de couverture de branches : `pnpm --filter @climbcontest/scoring test -- --coverage`.
 - Vingt tests Playwright end-to-end (`e2e/`) : la page d'accueil publique en
   anonyme et en connecté (aussi à 360 px) ; connexion d'un compte déjà
-  activé jusqu'à l'accueil ; inscription → vérification par e-mail (via
+  activé jusqu'à « Mes compétitions » ; inscription → vérification par e-mail (via
   Mailpit) → connexion ; un juge note un passage et le corrige (en ligne) ;
   un juge note 10 passages hors ligne, ferme/rouvre l'onglet, puis se
   resynchronise dans l'ordre de saisie ; deux appareils saisissent des

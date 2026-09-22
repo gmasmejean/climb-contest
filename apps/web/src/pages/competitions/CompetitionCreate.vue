@@ -8,6 +8,7 @@ import { ApiError } from '../../api/client'
 import { competitionsApi } from '../../api/competitions'
 import { useFormDraft } from '../../composables/useFormDraft'
 import BrandShell from '../../components/brand/BrandShell.vue'
+import OrganizerMenu from '../../components/brand/OrganizerMenu.vue'
 
 const router = useRouter()
 
@@ -101,6 +102,9 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <BrandShell width="wide">
+    <template #actions>
+      <OrganizerMenu />
+    </template>
     <main class="mx-auto w-full max-w-screen-2xl flex-1 px-4 py-8 lg:px-8">
       <div class="flex max-w-2xl flex-col gap-6">
         <h1 class="font-display text-ink text-3xl leading-none font-bold md:text-4xl">

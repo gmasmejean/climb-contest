@@ -186,10 +186,8 @@ test('un organisateur résout un conflit, corrige un passage, puis publie le tou
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)
   await page.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(page).toHaveURL('/')
-
-  await page.getByRole('link', { name: 'Mes compétitions' }).click()
   await expect(page).toHaveURL('/competitions')
+
   await page.getByText(competitionName).click()
   await expect(page).toHaveURL(/\/competitions\//)
 

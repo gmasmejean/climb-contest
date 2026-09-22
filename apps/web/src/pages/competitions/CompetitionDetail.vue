@@ -6,6 +6,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { competitionsApi } from '../../api/competitions'
 import BrandShell from '../../components/brand/BrandShell.vue'
+import OrganizerMenu from '../../components/brand/OrganizerMenu.vue'
 import { DESKTOP_QUERY, useMediaQuery } from '../../composables/useMediaQuery'
 import {
   competitionTabs,
@@ -69,6 +70,9 @@ const startsOn = computed(() =>
 
 <template>
   <BrandShell width="wide">
+    <template #actions>
+      <OrganizerMenu />
+    </template>
     <main class="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-4 pb-8 lg:px-8">
       <!--
         Collant à partir de `lg` seulement : sur un téléphone il mangerait la

@@ -31,6 +31,7 @@ import {
 import { UNREACHABLE_MESSAGE, describeError } from '../../lib/network-errors'
 import ImportBackupModal from './ImportBackupModal.vue'
 import BrandShell from '../../components/brand/BrandShell.vue'
+import OrganizerMenu from '../../components/brand/OrganizerMenu.vue'
 import ListToolbar from '../../components/ListToolbar.vue'
 
 const route = useRoute()
@@ -254,6 +255,9 @@ async function trashSelected(): Promise<void> {
 
 <template>
   <BrandShell width="wide">
+    <template #actions>
+      <OrganizerMenu />
+    </template>
     <main class="mx-auto w-full max-w-screen-2xl flex-1 px-4 py-8 lg:px-8">
       <div class="flex max-w-3xl flex-col gap-6 lg:max-w-none">
         <header class="flex items-center justify-between gap-4">

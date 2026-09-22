@@ -36,7 +36,12 @@ test('un organisateur connecté retrouve « Mes compétitions » sur l’accueil
   await page.getByLabel('Mot de passe').fill('ChangeMoi123!')
   await page.getByRole('button', { name: 'Se connecter' }).click()
 
-  await expect(page).toHaveURL('/')
+  // La connexion mène directement à la liste des compétitions.
+  await expect(page).toHaveURL('/competitions')
+
+  // `/` reste accessible et affiche l'état connecté (session restaurée, pas
+  // de `skipOrganizerSession`) : c'est ce que ce test vérifie.
+  await page.goto('/')
   await expect(page.getByText('Alex Organisateur')).toBeVisible()
   await expect(page.getByRole('link', { name: /Espace organisateur/ })).toHaveCount(0)
 

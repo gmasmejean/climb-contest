@@ -51,8 +51,7 @@ test('rappel des 5 ans, export des données personnelles, purge confirmée par l
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)
   await page.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(page).toHaveURL('/')
-  await page.getByRole('link', { name: 'Mes compétitions' }).click()
+  await expect(page).toHaveURL('/competitions')
 
   // --- Rappel dans la liste : plus de 5 ans ---
   const row = page.getByTestId('data-list-row').filter({ hasText: name })

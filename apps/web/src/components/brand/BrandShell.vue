@@ -62,7 +62,7 @@ withDefaults(defineProps<{ decor?: boolean; width?: 'narrow' | 'wide' }>(), {
     </template>
 
     <header
-      class="relative z-10 mx-auto flex w-full items-center justify-between gap-4 px-4 pt-4 md:pt-6"
+      class="relative z-20 mx-auto flex w-full items-center justify-between gap-4 px-4 pt-4 md:pt-6"
       :class="width === 'wide' ? 'max-w-screen-2xl lg:px-8' : 'max-w-6xl md:px-8'"
     >
       <RouterLink

@@ -58,7 +58,7 @@ test('tableau des compétiteurs : tri, saisie au clavier, en-tête collant', asy
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)
   await page.getByRole('button', { name: 'Se connecter' }).click()
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/competitions')
 
   await page.goto(`/competitions/${competition.id}/competitors`)
   const rows = page.getByTestId('data-list-row')

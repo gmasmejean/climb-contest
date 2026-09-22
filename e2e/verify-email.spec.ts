@@ -35,6 +35,7 @@ test('inscription, vérification par e-mail puis connexion', async ({ page, requ
   await page.getByLabel('Mot de passe').fill(password)
   await page.getByRole('button', { name: 'Se connecter' }).click()
 
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL('/competitions')
+  await page.getByRole('button', { name: 'Menu' }).click()
   await expect(page.getByText('E2E Testeur')).toBeVisible()
 })
