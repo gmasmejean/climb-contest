@@ -1,0 +1,153 @@
+# Pile de PRODUCTION (Lot 22, ADR-084). Copiée sur le VPS dans
+# /opt/climbcontest/compose.yaml par le workflow `deploy.yml`, à côté de
+# `deploy.sh`, `backup.sh` et du `.env` (qui, lui, n'existe que sur le VPS).
+#
+# Différences avec infra/docker/docker-compose.yml (le compose de dev, inchangé) :
+# - images construites par GitHub Actions et tirées de ghcr.io, jamais de build ici ;
+# - pas de Mailpit ni de seed : les e-mails partent par le vrai SMTP du `.env` ;
+# - Postgres n'est publié sur aucun port (Docker contourne firewalld) ;
+# - Caddy sert le HTTPS du domaine `SITE_ADDRESS` ;
+# - sauvegarde automatique toujours active, redémarrage automatique partout ;
+# - aucun bind-mount : rien à étiqueter pour SELinux.
+#
+# Depuis /opt/climbcontest, les commandes usuelles marchent telles quelles :
+#   docker compose ps
+#   docker compose logs -f api
+
+name: climbcontest
+
+x-defaults: &defaults
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '5'
+
+x-database-url: &database-url postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+
+services:
+  postgres:
+    <<: *defaults
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *defaults
+    restart: 'no'
+    image: ${IMAGE_REPO:-ghcr.io/gmasmejean/climb-contest}-api:${IMAGE_TAG:?IMAGE_TAG manquant, lancez ./deploy.sh <version>}
+    command: ['node_modules/.bin/tsx', 'packages/db/src/migrate.ts']
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *defaults
+    image: ${IMAGE_REPO:-ghcr.io/gmasmejean/climb-contest}-api:${IMAGE_TAG:?IMAGE_TAG manquant, lancez ./deploy.sh <version>}
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: *database-url
+      CORS_ORIGIN: ${PUBLIC_APP_URL:?}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:?}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?}
+      JWT_JUDGE_SECRET: ${JWT_JUDGE_SECRET:?}
+      SMTP_HOST: ${SMTP_HOST:?}
+      SMTP_PORT: ${SMTP_PORT:?}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:?}
+      STORAGE_DRIVER: local-disk
+      STORAGE_LOCAL_DIR: /data/uploads
+      VIDEO_MAX_BYTES: ${VIDEO_MAX_BYTES:-209715200}
+    volumes:
+      - uploads-data:/data/uploads
+    # `node:22-slim` n'a ni curl ni wget : Node interroge lui-même /health.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Un `pg_dump` toutes les BACKUP_INTERVAL_SECONDS (6 h par défaut) dans le
+  # volume `backups-data`, relu avant d'être publié — même boucle que le profil
+  # `backup` du compose de dev. `deploy.sh` fait en plus un dump avant chaque
+  # migration. Les vidéos n'y sont pas : `backup.sh` les prend.
+  backup:
+    <<: *defaults
+    image: postgres:16.15-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:?}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?}
+      PGDATABASE: ${POSTGRES_DB:?}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-21600}
+      BACKUP_KEEP: ${BACKUP_KEEP:-28}
+    volumes:
+      - backups-data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          f="/backups/climbcontest-$$(date +%Y%m%d-%H%M%S).dump"
+          if pg_dump -Fc > "$$f.partial" && pg_restore --list "$$f.partial" > /dev/null; then
+            mv "$$f.partial" "$$f"
+            echo "sauvegarde écrite : $$f"
+          else
+            rm -f "$$f.partial"
+            echo "ERREUR : sauvegarde échouée, rien n'a été publié" >&2
+          fi
+          ls -1t /backups/climbcontest-*.dump | tail -n +$$((BACKUP_KEEP + 1)) | xargs -r rm -f
+          sleep "$$BACKUP_INTERVAL_SECONDS"
+        done
+
+  # Caddy avec l'appli web et le Caddyfile embarqués (étape `web` de
+  # api.Dockerfile). SITE_ADDRESS=mon-domaine.fr → certificat Let's Encrypt
+  # obtenu et renouvelé automatiquement, HTTP redirigé vers HTTPS.
+  caddy:
+    <<: *defaults
+    image: ${IMAGE_REPO:-ghcr.io/gmasmejean/climb-contest}-web:${IMAGE_TAG:?IMAGE_TAG manquant, lancez ./deploy.sh <version>}
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?}
+    ports:
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+      - '${HTTPS_PORT:-443}:443/udp'
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  uploads-data:
+  backups-data:
+  caddy-data:
+  caddy-config:
