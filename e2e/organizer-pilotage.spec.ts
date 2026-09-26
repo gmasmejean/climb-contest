@@ -26,9 +26,7 @@ async function registerAndVerifyOrganizer(request: APIRequestContext) {
     data: { email, password, displayName: 'Pilote E2E', clubName: `Club pilotage ${Date.now()}` },
   })
 
-  const messages = await request
-    .get(`${MAILPIT_URL}/api/v1/messages?limit=1`)
-    .then((r) => r.json())
+  const messages = await request.get(`${MAILPIT_URL}/api/v1/messages?limit=1`).then((r) => r.json())
   const messageId = messages.messages[0].ID as string
   const full = await request.get(`${MAILPIT_URL}/api/v1/message/${messageId}`).then((r) => r.json())
   const token = (full.Text as string).match(/token=(\S+)/)?.[1]
@@ -215,15 +213,18 @@ test('un organisateur résout un conflit, corrige un passage, puis publie le tou
   // --- Voies : corriger le passage retenu vers la prise 32 ---
   // Scopé à `pilotage-sections` : « Voies » et « Tours » existent aussi comme
   // onglets de premier niveau (RoutesTab/RoundsTab), ambigus sans ce scope.
+  // Depuis le Lot 20, ce projet (bureau, 1280 px) tombe sur la matrice
+  // compétiteurs × voies ; la liste par voie reste couverte sous 1024 px par
+  // `organizer-pilotage-desktop.spec.ts`.
   const pilotageSections = page.getByTestId('pilotage-sections')
   await pilotageSections.getByRole('tab', { name: 'Voies' }).click()
-  await page.getByLabel('Tour et voie').selectOption({ index: 1 })
-  await expect(page.getByText('prise 20')).toBeVisible()
-  await page.getByRole('button', { name: 'Corriger' }).click()
+  const matrix = page.getByTestId('ascent-matrix')
+  await expect(matrix).toBeVisible()
+  await matrix.getByRole('button', { name: /: 20$/ }).click()
   await page.getByLabel('Numéro de prise').fill('32')
   await page.getByLabel('Motif (obligatoire)').fill('Vérifié après visionnage vidéo.')
   await page.getByRole('button', { name: 'Enregistrer' }).click()
-  await expect(page.getByText('prise 32')).toBeVisible()
+  await expect(matrix.getByRole('button', { name: /: 32$/ })).toBeVisible()
 
   // --- Tours : fermer puis publier ---
   await pilotageSections.getByRole('tab', { name: 'Tours' }).click()

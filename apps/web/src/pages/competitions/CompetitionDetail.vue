@@ -7,6 +7,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { competitionsApi } from '../../api/competitions'
 import BrandShell from '../../components/brand/BrandShell.vue'
 import OrganizerMenu from '../../components/brand/OrganizerMenu.vue'
+import { useCompetitionPulse } from '../../composables/useCompetitionPulse'
 import { DESKTOP_QUERY, useMediaQuery } from '../../composables/useMediaQuery'
 import {
   competitionTabs,
@@ -32,8 +33,6 @@ const { data: competition } = useQuery({
   queryFn: () => competitionsApi.get(competitionId.value),
 })
 
-const tabs = computed(() => competitionTabs(competition.value?.format))
-
 function tabLocation(tab: string) {
   return {
     name: 'competition-detail',
@@ -47,6 +46,25 @@ const activeTab = computed({
   get: () => resolveCompetitionTab(route.params.tab, competition.value?.format),
   set: (tab: string) => void router.push(tabLocation(tab)),
 })
+
+/*
+ * Un seul sondage pour toute la page (Lot 20). Il tourne quand la compétition
+ * est en cours — les pastilles n'ont de sens que ce jour-là — ou quand
+ * l'onglet Pilotage est ouvert, ce qui reproduit exactement le comportement
+ * d'avant ce lot pour qui prépare sa compétition la veille.
+ */
+const pulse = useCompetitionPulse(competitionId, {
+  live: () => competition.value?.status === 'running' || activeTab.value === 'pilotage',
+})
+
+// Les pastilles (Lot 20) se posent ici et non dans `competition-tabs.ts` :
+// la liste des onglets reste une fonction pure, l'état vient du pouls.
+const tabs = computed(() =>
+  competitionTabs(competition.value?.format, {
+    pilotage: pulse.pilotageBadge.value,
+    readiness: pulse.readinessBadge.value,
+  }),
+)
 
 // Segment valide mais sans objet pour cette compétition (`rounds` hors phases) :
 // on corrige l'adresse plutôt que d'afficher Infos sous une URL qui dit Tours.
@@ -94,6 +112,18 @@ const startsOn = computed(() =>
             {{ competition?.name }}
           </h1>
         </div>
+        <!--
+          Avancement global (Lot 20) : l'en-tête est collant à partir de `lg`,
+          donc ce compteur reste visible depuis n'importe quel onglet. Masqué
+          sous `lg`, où l'en-tête est déjà plein.
+        -->
+        <p
+          v-if="pulse.expected.value > 0"
+          class="hidden shrink-0 text-sm font-medium text-gray-900 lg:inline-flex"
+          data-testid="competition-progress"
+        >
+          {{ pulse.done.value }} / {{ pulse.expected.value }} passages
+        </p>
         <p v-if="competition" class="text-sm text-gray-600 lg:shrink-0 lg:text-right">
           {{ competition.venue }}<span class="hidden lg:inline"> · {{ startsOn }}</span>
         </p>
@@ -133,7 +163,11 @@ const startsOn = computed(() =>
           <RoundsTab v-else-if="activeTab === 'rounds'" :competition-id="competitionId" />
           <JudgesTab v-else-if="activeTab === 'judges'" :competition="competition" />
           <ReadinessTab v-else-if="activeTab === 'readiness'" :competition-id="competitionId" />
-          <PilotageTab v-else-if="activeTab === 'pilotage'" :competition="competition" />
+          <PilotageTab
+            v-else-if="activeTab === 'pilotage'"
+            :competition="competition"
+            :pulse="pulse"
+          />
           <ExportsTab v-else-if="activeTab === 'exports'" :competition="competition" />
         </div>
       </div>

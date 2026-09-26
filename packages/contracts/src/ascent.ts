@@ -152,6 +152,69 @@ export const organizerRouteAscentsQuerySchema = z.object({
 })
 export type OrganizerRouteAscentsQuery = z.infer<typeof organizerRouteAscentsQuerySchema>
 
+/**
+ * `GET .../ascents/matrix?roundId=&categoryId=` (Lot 20) — la grille
+ * compétiteurs × voies du pilotage jour J.
+ *
+ * L'agrégat est borné au couple (tour, catégorie) : c'est l'unité du
+ * classement, les voies y sont les mêmes pour tout le monde, et la réponse
+ * reste de l'ordre de 30 × 4. Une matrice « toute la compétition » mêlerait
+ * des voies qui ne concernent pas toutes les catégories.
+ */
+export const ascentMatrixQuerySchema = z.object({
+  roundId: z.uuid(),
+  categoryId: z.uuid(),
+})
+export type AscentMatrixQuery = z.infer<typeof ascentMatrixQuerySchema>
+
+export const ascentMatrixRouteSchema = z.object({
+  routeId: z.uuid(),
+  number: z.number(),
+  name: z.string().nullable(),
+  holdCount: z.number(),
+})
+
+const ascentMatrixValueSchema = z.object({
+  id: z.uuid(),
+  holdNumber: z.number().nullable(),
+  modifier: z.enum(['none', 'plus']),
+  isTop: z.boolean(),
+  status: z.enum(['valid', 'dns', 'dnf', 'dsq']),
+  climbTimeMs: z.number().nullable(),
+  recordedAt: z.iso.datetime(),
+})
+
+export const ascentMatrixCellSchema = z.object({
+  routeId: z.uuid(),
+  /** Le passage qui compte au classement, ou `null` s'il n'y en a pas. */
+  ascent: ascentMatrixValueSchema.nullable(),
+  /**
+   * Une saisie existe mais reste à trancher dans l'onglet Conflits. Sans ce
+   * drapeau la case serait vide, donc indiscernable d'un passage manquant —
+   * or l'un veut dire « allez voir le juge » et l'autre « allez trancher ».
+   */
+  conflict: z.boolean(),
+})
+
+export const ascentMatrixCompetitorSchema = z.object({
+  competitorId: z.uuid(),
+  bib: z.number().nullable(),
+  firstName: z.string(),
+  lastName: z.string(),
+  cells: z.array(ascentMatrixCellSchema),
+})
+
+export const ascentMatrixResponseSchema = z.object({
+  roundId: z.uuid(),
+  categoryId: z.uuid(),
+  routes: z.array(ascentMatrixRouteSchema),
+  competitors: z.array(ascentMatrixCompetitorSchema),
+})
+export type AscentMatrixResponse = z.infer<typeof ascentMatrixResponseSchema>
+export type AscentMatrixCell = z.infer<typeof ascentMatrixCellSchema>
+export type AscentMatrixCompetitor = z.infer<typeof ascentMatrixCompetitorSchema>
+export type AscentMatrixRoute = z.infer<typeof ascentMatrixRouteSchema>
+
 export const judgeRouteCategorySchema = z.object({
   id: z.uuid(),
   label: z.string(),

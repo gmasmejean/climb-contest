@@ -83,6 +83,8 @@ const TEXT_PAIRS: [string, string][] = [
   ['gray-900', 'gray-50'],
   ['gray-900', 'blue-50'],
   ['gray-600', 'blue-50'],
+  // Pastilles d'onglet et progression (Lot 20)
+  ['white', 'amber-700'],
   // Écran de salle (fond sombre)
   ['white', 'gray-900'],
   ['gray-300', 'gray-900'],
@@ -92,6 +94,9 @@ const TEXT_PAIRS: [string, string][] = [
 
 // Grand texte gras (bouton TOP du juge) et pastilles d'état : 3:1.
 const LARGE_OR_NON_TEXT_PAIRS: [string, string][] = [
+  // Remplissage des barres de progression sur leur rail (Lot 20)
+  ['blue-700', 'gray-200'],
+  ['green-700', 'gray-200'],
   ['white', 'green-600'],
   ['green-600', 'white'],
   ['amber-600', 'white'],

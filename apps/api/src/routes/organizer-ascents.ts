@@ -1,4 +1,5 @@
 import {
+  ascentMatrixQuerySchema,
   ascentSchema,
   correctAscentByOrganizerInputSchema,
   createAscentByOrganizerInputSchema,
@@ -7,13 +8,21 @@ import {
   organizerRouteAscentsQuerySchema,
   type OrganizerAscentWriteResult,
 } from '@climbcontest/contracts'
-import { ascent, category, competitor, round, roundRoute, route, type Database } from '@climbcontest/db'
+import {
+  ascent,
+  category,
+  competitor,
+  round,
+  roundRoute,
+  route,
+  type Database,
+} from '@climbcontest/db'
 import { zValidator } from '@hono/zod-validator'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { uuidv7 } from 'uuidv7'
 
-import { activeAscentsFor, expectedCompetitors } from '../lib/ascent-progress'
+import { activeAscentsFor, buildAscentMatrix, expectedCompetitors } from '../lib/ascent-progress'
 import { supersedeToNewAscent } from '../lib/ascent-correction'
 import { createAscentOrConflict, type AscentWriteResult } from '../lib/ascent-write'
 import type { AccessTokenSigner } from '../lib/jwt'
@@ -92,13 +101,17 @@ export function createOrganizerAscentRoutes(deps: OrganizerAscentRouteDeps): Hon
         )
       const categoryIds = links.map((link) => link.categoryId)
       if (categoryIds.length === 0) {
-        throw new ApiError(404, 'Tour ou voie introuvable', "Cette voie n'appartient pas à ce tour.")
+        throw new ApiError(
+          404,
+          'Tour ou voie introuvable',
+          "Cette voie n'appartient pas à ce tour.",
+        )
       }
 
       const categoryLabels = new Map(
-        (
-          await db.query.category.findMany({ where: inArray(category.id, categoryIds) })
-        ).map((cat) => [cat.id, cat.label]),
+        (await db.query.category.findMany({ where: inArray(category.id, categoryIds) })).map(
+          (cat) => [cat.id, cat.label],
+        ),
       )
       const competitors = await expectedCompetitors(db, competitionId, categoryIds, roundId)
       const ascentsByCompetitor = await activeAscentsFor(
@@ -133,6 +146,34 @@ export function createOrganizerAscentRoutes(deps: OrganizerAscentRouteDeps): Hon
     },
   )
 
+  /**
+   * La grille compétiteurs × voies d'un couple (tour, catégorie) — Lot 20,
+   * DECISIONS.md ADR-083. Monté ici plutôt que sur un chemin à soi : ce
+   * routeur porte déjà `requireOrganizer` + `requireCompetitionAccess` en
+   * `*`, et `GET /matrix` ne croise ni `GET /` ni `PATCH /:ascentId`.
+   */
+  app.get(
+    '/matrix',
+    zValidator('query', ascentMatrixQuerySchema, (result, c) => {
+      if (!result.success)
+        return problem(c, 400, 'Requête invalide', result.error.issues[0]?.message)
+    }),
+    async (c) => {
+      const competitionId = c.get('competition').id
+      const { roundId, categoryId } = c.req.valid('query')
+      const matrix = await buildAscentMatrix(db, competitionId, roundId, categoryId)
+      if (matrix === null) {
+        throw new ApiError(
+          404,
+          'Tour ou catégorie introuvable',
+          "Cette catégorie n'a aucune voie dans ce tour.",
+        )
+      }
+      // Déjà validée par `buildAscentMatrix` (colonnes texte à CHECK).
+      return c.json(matrix)
+    },
+  )
+
   app.post(
     '/',
     zValidator('json', createAscentByOrganizerInputSchema, (result, c) => {
@@ -145,7 +186,11 @@ export function createOrganizerAscentRoutes(deps: OrganizerAscentRouteDeps): Hon
       const input = c.req.valid('json')
 
       const routeRow = await db.query.route.findFirst({
-        where: and(eq(route.id, input.routeId), eq(route.competitionId, competitionId), isNull(route.deletedAt)),
+        where: and(
+          eq(route.id, input.routeId),
+          eq(route.competitionId, competitionId),
+          isNull(route.deletedAt),
+        ),
       })
       if (!routeRow) throw new ApiError(404, 'Voie introuvable', "Cette voie n'existe pas.")
 

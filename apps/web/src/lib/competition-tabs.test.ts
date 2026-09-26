@@ -44,3 +44,33 @@ describe('isCompetitionTabId', () => {
     expect(isCompetitionTabId(null)).toBe(false)
   })
 })
+
+describe('competitionTabs — pastilles (Lot 20)', () => {
+  it('n’en pose aucune par défaut', () => {
+    expect(competitionTabs('contest').every((tab) => tab.badge === undefined)).toBe(true)
+  })
+
+  it('décore l’onglet demandé sans toucher aux autres', () => {
+    const tabs = competitionTabs('contest', {
+      pilotage: { count: 2, label: '2 conflits', tone: 'danger' },
+    })
+    expect(tabs.find((tab) => tab.id === 'pilotage')?.badge).toEqual({
+      count: 2,
+      label: '2 conflits',
+      tone: 'danger',
+    })
+    expect(tabs.find((tab) => tab.id === 'readiness')?.badge).toBeUndefined()
+  })
+
+  it('ignore une pastille visant un onglet absent du format', () => {
+    const tabs = competitionTabs('contest', {
+      rounds: { count: 1, label: '1 point', tone: 'warning' },
+    })
+    expect(tabs.map((tab) => tab.id)).not.toContain('rounds')
+  })
+
+  it('ne modifie pas la définition partagée des onglets', () => {
+    competitionTabs('contest', { pilotage: { count: 9, label: '9 conflits' } })
+    expect(competitionTabs('contest').find((tab) => tab.id === 'pilotage')?.badge).toBeUndefined()
+  })
+})

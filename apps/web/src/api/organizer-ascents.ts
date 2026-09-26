@@ -1,5 +1,6 @@
 import type {
   Ascent,
+  AscentMatrixResponse,
   CorrectAscentByOrganizerInput,
   CreateAscentByOrganizerInput,
   OrganizerAscentWriteResult,
@@ -30,6 +31,11 @@ export const organizerAscentsApi = {
   listForRoute: (competitionId: string, roundId: string, routeId: string) =>
     apiFetch<RouteAscentEntry[]>(
       `/competitions/${competitionId}/ascents?roundId=${roundId}&routeId=${routeId}`,
+    ),
+  /** Grille compétiteurs × voies d'un couple (tour, catégorie) — Lot 20, ADR-083. */
+  matrix: (competitionId: string, roundId: string, categoryId: string) =>
+    apiFetch<AscentMatrixResponse>(
+      `/competitions/${competitionId}/ascents/matrix?roundId=${roundId}&categoryId=${categoryId}`,
     ),
   create: (competitionId: string, input: CreateAscentByOrganizerInput) =>
     apiFetch<OrganizerAscentWriteResult>(`/competitions/${competitionId}/ascents`, {

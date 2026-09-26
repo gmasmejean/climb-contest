@@ -708,7 +708,11 @@ plus jamais une file en attente. Migration réversible (`ascent.voided_at`).
 - **La répétition générale** attendait un 401 pour le juge révoqué ; elle vérifie maintenant la
   quarantaine, et n'a plus besoin de saisie de secours.
 
-### Lot 20 — Pilotage jour J sur portable (D4, à cadrer)
+### Lot 20 — Pilotage jour J sur portable (D4, livré)
+
+> Livré le 2026-09-22. Décisions : ADR-082 (poste de pilotage multi-panneaux, sondage
+> unique, bandeau d'état, pastilles) et ADR-083 (agrégat compétiteurs × voies borné au
+> couple (tour, catégorie)).
 
 ```
 Lot 20 : tableau de bord multi-panneaux à partir de `lg` (alertes, conflits,
@@ -717,6 +721,27 @@ progression en barres, juges, journal) ; matrice compétiteurs × voies cliquabl
 journal en tableau filtrable ; bandeau d'état serveur ; pastilles dans la barre
 latérale et compteurs dans l'en-tête.
 ```
+
+Écarts au cadrage, vus en navigateur ou en écrivant le code :
+
+- **Le seuil est bien 1024 px, et il est mesuré.** Contrairement au Lot 19, rien ici n'a de
+  largeur fixe : le test e2e vérifie à 1024 px comme à 1440 px que le rail de droite commence
+  après la colonne principale, sans débordement horizontal.
+- **Trois défauts préexistants corrigés en passant**, tous trouvés en relisant le code du
+  Lot 8 : le sondage à 8 s n'existait que dans « Vue d'ensemble », donc **quitter cette
+  sous-section arrêtait tout rafraîchissement** ; le bandeau « le serveur ne répond plus »
+  y vivait aussi, laissant les quatre autres sections sans aucun avertissement ; et une case
+  en conflit s'affichait vide, donc indiscernable d'un passage jamais saisi.
+- **La pastille apparaît aussi sous 1024 px**, sur la barre d'onglets horizontale. C'est une
+  information et non une mise en page, mais c'est un écart à « le rendu mobile ne change pas »
+  (ADR-072 point 1), assumé et écrit dans ADR-082.
+- **Le panneau Conflits nomme les compétiteurs concernés** plutôt que d'afficher un simple
+  compte, et **une phrase dit sur quoi les saisies diffèrent** — non demandé, mais un compte
+  seul ne dit pas de quel dossard il s'agit (même constat qu'au Lot 21).
+- **Le formulaire de correction / saisie de secours a été extrait** (`AscentEditDialog`) pour
+  que la grille et la liste par voie ne divergent pas. Seule refactorisation du lot.
+- **L'angle mort des conflits subsiste dans la liste par voie** du Lot 8 (sous 1024 px) :
+  non touchée pour rester dans le périmètre → `TODO.md`.
 
 ---
 

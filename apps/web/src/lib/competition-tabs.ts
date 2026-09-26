@@ -1,4 +1,5 @@
 import type { Competition } from '@climbcontest/contracts'
+import type { TabBadge, TabItem } from '@climbcontest/ui'
 
 /**
  * Onglets de la page compétition (ADR-072). L'identifiant est aussi le segment
@@ -17,8 +18,16 @@ const TABS = [
   { id: 'exports', label: 'Exports', group: 'Jour J' },
 ] as const
 
-export type CompetitionTab = (typeof TABS)[number]
-export type CompetitionTabId = CompetitionTab['id']
+type CompetitionTabDefinition = (typeof TABS)[number]
+export type CompetitionTabId = CompetitionTabDefinition['id']
+
+/** Un onglet prêt à passer à `Tabs`, pastille comprise (Lot 20). */
+export interface CompetitionTab extends TabItem {
+  id: CompetitionTabId
+}
+
+/** Pastilles par onglet. Une entrée absente = rien à signaler. */
+export type CompetitionTabBadges = Partial<Record<CompetitionTabId, TabBadge | undefined>>
 
 export const DEFAULT_COMPETITION_TAB: CompetitionTabId = 'infos'
 
@@ -26,9 +35,19 @@ export function isCompetitionTabId(value: unknown): value is CompetitionTabId {
   return TABS.some((tab) => tab.id === value)
 }
 
-/** Les tours n'existent qu'au format à phases. */
-export function competitionTabs(format: Competition['format'] | undefined): CompetitionTab[] {
-  return TABS.filter((tab) => tab.id !== 'rounds' || format === 'phases')
+/**
+ * Les tours n'existent qu'au format à phases. `badges` décore les onglets sans
+ * toucher à leur ordre ni à leurs libellés — la fonction reste pure, et c'est
+ * l'appelant qui sait ce qu'il y a à compter.
+ */
+export function competitionTabs(
+  format: Competition['format'] | undefined,
+  badges: CompetitionTabBadges = {},
+): CompetitionTab[] {
+  return TABS.filter((tab) => tab.id !== 'rounds' || format === 'phases').map((tab) => {
+    const badge = badges[tab.id]
+    return badge === undefined ? { ...tab } : { ...tab, badge }
+  })
 }
 
 /**
