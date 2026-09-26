@@ -3188,7 +3188,9 @@ machine, `docs/EXPLOITATION.md` § 3), avec Mailpit à la place d'un vrai SMTP e
 L'utilisateur veut qu'un push sur une branche `production` mette à jour son VPS (Fedora 44
 vierge, domaine prêt). Choix faits en conversation : images construites par GitHub Actions et
 publiées sur ghcr.io (le dépôt est public, les images aussi), Postgres en conteneur sur le VPS,
-sauvegarde de la base **juste avant** chaque migration, fournisseur SMTP recommandé : Brevo.
+sauvegarde de la base **juste avant** chaque migration, fournisseur SMTP : **Mailjet**, en TLS
+direct sur le port 465 (Brevo puis la messagerie OVH du domaine ont été envisagés ; le choix
+final revient à l'utilisateur, le code n'en dépend pas).
 Précise ADR-009 (déploiement Docker Compose sur VPS) sans le remplacer.
 
 **Décision :**
@@ -3267,9 +3269,17 @@ dossier simulant `/opt/climbcontest`) :
 - actionlint et shellcheck sans remarque.
 
 **Non vérifié :** le workflow GitHub lui-même (il ne tourne qu'une fois poussé), le certificat
-Let's Encrypt réel, le relais Brevo, l'installation Fedora 44 de Docker CE, la visibilité par
-défaut des paquets ghcr.io. Je pense qu'ils naissent privés même pour un dépôt public ; la doc
-dit quoi faire si c'est le cas.
+Let's Encrypt réel, l'envoi réel par Mailjet, la visibilité par défaut des paquets ghcr.io. Je
+pense qu'ils naissent privés même pour un dépôt public ; la doc dit quoi faire si c'est le cas.
+
+**Installation du VPS réel (2026-09-26)**, faite en session sur la demande de l'utilisateur, en
+suivant `docs/EXPLOITATION.md` § 9 avec deux écarts voulus par lui : la connexion SSH **par mot de
+passe reste permise** pour `fedora` (compensée par fail2ban : 5 échecs en 10 min → 1 h de
+bannissement ; 294 tentatives de robots relevées dans les trois premières heures), et `fedora`
+garde son `sudo` sans mot de passe, réglage d'origine de l'image OVH. Fait : mise à jour et
+redémarrage, firewalld (SSH, HTTP, HTTPS, 443/udp), LLMNR et mDNS coupés, `PermitRootLogin no`,
+mises à jour de sécurité automatiques, Docker CE 29.8.1, utilisateur `deploy` sans mot de passe
+(refus vérifié), `.env` aux secrets générés sur place.
 
 **Alternatives écartées :**
 - Construire sur le VPS (`git pull` + `docker compose build` par SSH) : plus simple, mais un
