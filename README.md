@@ -39,6 +39,15 @@ Ouvrez ensuite <http://localhost:8080> :
 Pour tout arrêter : `docker compose down` (ajoutez `-v` pour effacer aussi
 les données Postgres).
 
+**En production**, rien ne se fait à la main sur le serveur : un push sur la
+branche `production` teste, construit et déploie l'application sur le VPS
+(HTTPS, vrai SMTP, sauvegarde avant chaque migration). Installation du serveur,
+mise en production et retour arrière : `docs/EXPLOITATION.md` § 9 (ADR-084).
+
+```sh
+git push origin main:production
+```
+
 ## Développement (sans Docker pour le code, avec Docker pour Postgres)
 
 Prérequis : Node.js 22, pnpm 9 (`corepack enable` suffit à l'installer), et
@@ -144,7 +153,7 @@ répétition générale (`pnpm rehearsal`) joue aussi le cas du juge révoqué.
 
 ### Mise à jour de l'application
 
-Après un redéploiement (`docker compose up --build -d`), un navigateur qui
+Après un redéploiement (push sur `production`, ou `docker compose up --build -d` en local), un navigateur qui
 **recharge la page** télécharge la nouvelle version en arrière-plan, l'active et
 recharge la page une fois, tout seul, quelques secondes plus tard (mesuré : ~3 s
 en local). Recharger ne perd aucune saisie (ADR-061) : celles déjà confirmées

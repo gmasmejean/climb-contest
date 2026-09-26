@@ -3180,6 +3180,105 @@ permettre depuis ce formulaire d'ajouter un PIN à un juge qui n'en a pas (hors 
 
 ---
 
+## ADR-084 — Déploiement automatique sur un VPS à chaque push sur `production`
+
+**Date :** 2026-09-26
+**Contexte :** le déploiement était manuel (`git pull` puis `docker compose up --build -d` sur la
+machine, `docs/EXPLOITATION.md` § 3), avec Mailpit à la place d'un vrai SMTP et sans HTTPS.
+L'utilisateur veut qu'un push sur une branche `production` mette à jour son VPS (Fedora 44
+vierge, domaine prêt). Choix faits en conversation : images construites par GitHub Actions et
+publiées sur ghcr.io (le dépôt est public, les images aussi), Postgres en conteneur sur le VPS,
+sauvegarde de la base **juste avant** chaque migration, fournisseur SMTP recommandé : Brevo.
+Précise ADR-009 (déploiement Docker Compose sur VPS) sans le remplacer.
+
+**Décision :**
+
+1. **Chaîne** (`.github/workflows/deploy.yml`) : push sur `production` → la CI complète
+   (`ci.yml`, devenue réutilisable par `workflow_call` ; son déclencheur `push` exclut
+   `production` pour ne pas tourner deux fois) → deux images publiées sur ghcr.io, étiquetées
+   par sha et `production` → copie de la configuration par `scp` → `deploy.sh <sha>` par `ssh` →
+   `curl https://<domaine>/health` depuis l'extérieur. Un seul déploiement à la fois
+   (`concurrency`), **jamais annulé en cours** : une migration interrompue est pire qu'un
+   déploiement en retard.
+2. **Rien n'est construit sur le VPS.** Il ne fait que tirer des images : un petit serveur n'a
+   pas à compiler le monorepo, et une version est un tag qu'on peut redéployer tel quel.
+3. **Compose de production séparé** (`infra/deploy/compose.yaml`) plutôt qu'une surcharge du
+   compose de dev, qui reste inchangé. Il en diffère sur trop de points pour qu'une surcharge
+   reste lisible : images au lieu de builds, pas de Mailpit ni de seed, Postgres non publié
+   (Docker contourne firewalld), SMTP réel, sauvegarde toujours active, `restart:
+   unless-stopped` et rotation des journaux partout, HTTPS. La boucle de sauvegarde est
+   dupliquée à l'identique entre les deux fichiers.
+4. **Image web autonome** (étape `web` d'`api.Dockerfile`) : Caddy avec l'appli et le
+   `Caddyfile` dedans, au lieu du couple `web-build` + volume `web-dist` du dev. Revenir à une
+   version ramène le front **et** ses en-têtes. Pas de volume partagé qui accumule les anciens
+   fichiers (TODO.md, Lot 10) ; en contrepartie, les anciens fichiers hachés disparaissent au
+   déploiement. Un navigateur resté sur l'ancienne version les a dans le précache de son
+   service worker (tous les `js`/`css` y sont), donc le risque se limite à un appareil qui
+   n'avait pas fini de précacher : il rechargera.
+5. **Le `Caddyfile` est commun** : son adresse devient `{$SITE_ADDRESS::80}`. Sans variable, rien
+   ne change (`:80`, dev) ; avec `SITE_ADDRESS=mon-domaine.fr`, Caddy obtient le certificat et
+   redirige le HTTP. Vérifié avec `caddy adapt` dans les deux cas. Une variable **vide** est une
+   erreur : le compose de production l'exige (`${SITE_ADDRESS:?}`).
+6. **`deploy.sh` sauvegarde avant de toucher à quoi que ce soit.** Ordre : tirer les images,
+   démarrer Postgres, `backup.sh` (existant, relu par `pg_restore --list`), **puis** écrire
+   `IMAGE_TAG` dans le `.env`, migrer, remplacer API et Caddy, attendre `/health` (`--wait`,
+   healthcheck en Node : `node:22-slim` n'a ni curl ni wget). Si la sauvegarde échoue, le
+   script s'arrête et la version en place reste intacte, `.env` compris.
+7. **Pas de retour arrière automatique.** Une migration déjà appliquée peut rendre l'ancienne
+   image incompatible avec la base ; revenir sans le savoir serait pire que rester en panne
+   avec un message clair. `deploy.sh` garde la version précédente dans `.previous-tag`, affiche
+   les journaux et la commande de retour. La doc décrit trois cas : sans migration, avec
+   migrations (`migrate-down.ts N` avec l'image en place, puis l'ancienne version : aucune
+   saisie perdue), base abîmée (`restore.sh`).
+8. **Les secrets restent sur le VPS**, dans `/opt/climbcontest/.env` (`chmod 600`), que la CI
+   ne lit pas. GitHub ne détient que l'accès SSH : secrets d'un environnement `production`
+   réservé à la branche `production`, avec l'empreinte du serveur **épinglée**
+   (`VPS_KNOWN_HOSTS`) plutôt que découverte à la volée. Les images étant publiques,
+   `.dockerignore` exclut désormais tout `.env` du contexte de build : jusqu'ici,
+   `apps/api/.env` local finissait dans l'image construite sur un poste.
+9. **Utilisateur `deploy` dans le groupe `docker`**, ce qui équivaut à root sur la machine :
+   assumé pour un VPS dédié à l'application. La clé ne vit que sur le poste de l'utilisateur
+   et dans les secrets GitHub. La restreindre par une commande forcée est noté dans TODO.md.
+
+**Conséquences :** nouveaux `infra/deploy/compose.yaml`, `infra/deploy/deploy.sh`,
+`infra/deploy/.env.example`, `.github/workflows/deploy.yml` ; `api.Dockerfile` (étape `web`,
+placée **avant** `runtime` qui reste la cible par défaut du compose de dev), `Caddyfile`,
+`.dockerignore`, `ci.yml` ; `docs/EXPLOITATION.md` § 9 (installation pas à pas du VPS, mise en
+production, retour arrière). Aucun code applicatif touché, aucune migration.
+
+Vérifié ici, sur une pile de production jouée en local (images poussées dans un registre local,
+dossier simulant `/opt/climbcontest`) :
+- premier déploiement sur base vide (14 migrations) ;
+- mise à jour vers une version portant une migration de plus : la sauvegarde d'avant contient
+  bien la donnée témoin, `.previous-tag` est à jour ;
+- retour arrière avec `migrate-down.ts 1`, puis l'ancienne version : la saisie faite entre-temps
+  est conservée ;
+- API qui plante : échec détecté en 7 s, avec journaux et commande de retour ;
+- sauvegarde impossible : arrêt, version et `.env` inchangés ;
+- image absente, version invalide : message clair ;
+- `restore.sh` avec `COMPOSE_DIR` ;
+- e2e sur cette pile, derrière Caddy : inscription avec e-mail reçu via les variables SMTP du
+  `.env` (avec identifiants), juge hors ligne, classement public en direct ;
+- HTTPS avec `SITE_ADDRESS=localhost` (autorité locale de Caddy) : redirection 308, HTTP/2,
+  HTTP/3 annoncé, flux SSE servi en `text/event-stream` ;
+- compose de dev toujours fonctionnel ;
+- actionlint et shellcheck sans remarque.
+
+**Non vérifié :** le workflow GitHub lui-même (il ne tourne qu'une fois poussé), le certificat
+Let's Encrypt réel, le relais Brevo, l'installation Fedora 44 de Docker CE, la visibilité par
+défaut des paquets ghcr.io. Je pense qu'ils naissent privés même pour un dépôt public ; la doc
+dit quoi faire si c'est le cas.
+
+**Alternatives écartées :**
+- Construire sur le VPS (`git pull` + `docker compose build` par SSH) : plus simple, mais un
+  build pnpm + Vite sur un petit VPS, sans artefact de version pour revenir en arrière.
+- Surcharger le compose de dev (`docker-compose.override.yml`) : trop de différences (point 3).
+- Retour arrière automatique en cas d'échec : dangereux après une migration (point 7).
+- Watchtower ou tirage périodique côté VPS : pas de lien entre CI et déploiement, pas de
+  sauvegarde avant migration, échec silencieux.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

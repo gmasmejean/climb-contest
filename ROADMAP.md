@@ -717,3 +717,20 @@ progression en barres, juges, journal) ; matrice compétiteurs × voies cliquabl
 journal en tableau filtrable ; bandeau d'état serveur ; pastilles dans la barre
 latérale et compteurs dans l'en-tête.
 ```
+
+---
+
+## Lot 22 — Déploiement automatique sur le VPS (livré côté dépôt)
+
+> Hors série, à la demande de l'utilisateur le 2026-09-26. Décision : ADR-084. Reste à faire par
+> l'utilisateur : l'installation initiale du VPS (`docs/EXPLOITATION.md` § 9), puis un premier
+> push sur `production`, qui validera le workflow en vrai.
+
+```
+Lot 22 : un push sur la branche `production` rejoue la CI, publie les images api
+et web sur ghcr.io, et les déploie sur le VPS par SSH (`deploy.sh`) : sauvegarde
+de la base avant migration (arrêt si elle échoue), migrations, remplacement de
+l'API et de Caddy, vérification de /health en HTTPS. Compose de production
+séparé, HTTPS automatique par Caddy, vrai SMTP, pas de retour arrière
+automatique (procédure documentée).
+```
