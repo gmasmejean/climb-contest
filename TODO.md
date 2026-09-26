@@ -380,7 +380,8 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   format d'un élément de file (`queue-payload.ts`) change, il faudra une
   `version(2)` avec migration, testée avec des éléments écrits par la version
   précédente — désormais que la mise à jour s'active sans attendre une file vide.
-- **Le volume `web-dist` accumule les anciens fichiers hachés** : `web-build` fait
+- **Le volume `web-dist` accumule les anciens fichiers hachés** *(compose de dev
+  seulement depuis le Lot 22 : la production sert une image web autonome, ADR-084)* : `web-build` fait
   `cp -r` sans rien supprimer (153 fichiers dans `assets/` après quelques
   déploiements). Inoffensif, mais ça grossit ; à nettoyer (`rm -rf` avant la copie,
   en gardant à l'esprit qu'un navigateur encore sur l'ancienne version peut
@@ -603,4 +604,22 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   adresse publique pour tous les juges le matin).
 - **L'état « file pas encore relue » de l'écran « accès révoqué »** n'a pas de test de composant
   (le moteur est un singleton déjà hydraté en test) ; seul `SyncEngine.isHydrated` est testé.
+
+## Depuis le déploiement automatique (Lot 22, ADR-084)
+
+- **Copier les sauvegardes hors du VPS.** Les dumps d'avant déploiement (`/opt/climbcontest/backups`)
+  et ceux du service `backup` (volume `backups-data`) sont sur le même disque que la base. Piste :
+  `rclone` vers un stockage objet, ou un `scp` tiré depuis une autre machine. La doc dit comment
+  les rapatrier à la main en attendant.
+- **Restreindre la clé SSH de déploiement** par une commande forcée (`command=` dans
+  `authorized_keys`, avec un petit aiguillage sur `SSH_ORIGINAL_COMMAND` pour les `scp`) : l'utilisateur
+  `deploy` est dans le groupe `docker`, donc la clé vaut un accès root.
+- **Surveillance externe** de `https://<domaine>/health` (Uptime Kuma, UptimeRobot…) : rien ne
+  prévient aujourd'hui si le serveur tombe entre deux déploiements.
+- **Mises à jour des images `postgres` et `caddy`** : épinglées dans les deux compose, à monter à la
+  main (Dependabot `docker` pourrait les proposer). Changer de version majeure de Postgres demande un
+  `pg_dump`/restauration, pas un simple changement de tag.
+- **Garde-fou « compétition en cours »** : rien n'empêche de pousser `production` un jour de
+  compétition. La doc le déconseille ; un contrôle dans `deploy.sh` (compétition au statut « en
+  cours ») est envisageable.
 

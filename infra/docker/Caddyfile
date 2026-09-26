@@ -1,4 +1,12 @@
-:80 {
+# Adresse du site : `:80` (HTTP simple) par défaut, pour le dev. En production,
+# SITE_ADDRESS=mon-domaine.fr → Caddy obtient et renouvelle seul le certificat
+# HTTPS (Let's Encrypt) et redirige le HTTP (Lot 22, ADR-084). Plusieurs
+# adresses possibles, séparées par des virgules : une adresse en `www.` est
+# redirigée vers la même sans `www.`.
+{$SITE_ADDRESS::80} {
+	@www header_regexp www Host ^www\.(.+)$
+	redir @www https://{re.www.1}{uri} permanent
+
 	handle /api/* {
 		reverse_proxy api:3000
 	}

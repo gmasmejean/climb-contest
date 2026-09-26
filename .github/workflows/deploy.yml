@@ -1,0 +1,135 @@
+# Déploiement automatique (Lot 22, ADR-084) : chaque push sur `production`
+#   1. passe la CI complète (ci.yml : typecheck, lint, test, build) ;
+#   2. construit et publie les images api et web sur ghcr.io, taguées par sha ;
+#   3. copie la configuration sur le VPS et y lance deploy.sh <sha> ;
+#   4. vérifie /health depuis l'extérieur, en HTTPS.
+#
+# Configuration côté GitHub (Settings → Environments → production, limité à
+# la branche `production`) — voir docs/EXPLOITATION.md § Déploiement automatique :
+#   secrets   VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_KNOWN_HOSTS
+#   variables APP_URL (https://mon-domaine.fr), VPS_SSH_PORT (facultatif, 22)
+
+name: Deploy
+
+on:
+  push:
+    branches: [production]
+  # Relancer le déploiement de `production` sans nouveau commit (VPS
+  # réinstallé, échec passager…).
+  workflow_dispatch:
+
+# Un seul déploiement à la fois, et jamais annulé en cours de route : une
+# migration interrompue est pire qu'un déploiement en retard.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # ghcr.io exige des minuscules.
+  IMAGE_REPO: ghcr.io/gmasmejean/climb-contest
+  DEPLOY_DIR: /opt/climbcontest
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  images:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image API (et migrations)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: infra/docker/api.Dockerfile
+          target: runtime
+          push: true
+          tags: |
+            ${{ env.IMAGE_REPO }}-api:${{ github.sha }}
+            ${{ env.IMAGE_REPO }}-api:production
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=climbcontest
+          cache-to: type=gha,mode=max,scope=climbcontest
+
+      - name: Image web (Caddy + appli)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: infra/docker/api.Dockerfile
+          target: web
+          push: true
+          tags: |
+            ${{ env.IMAGE_REPO }}-web:${{ github.sha }}
+            ${{ env.IMAGE_REPO }}-web:production
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: |
+            type=gha,scope=climbcontest
+            type=gha,scope=climbcontest-web
+          cache-to: type=gha,mode=max,scope=climbcontest-web
+
+  deploy:
+    needs: images
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # L'empreinte du serveur est épinglée (secret VPS_KNOWN_HOSTS) plutôt que
+      # découverte à la volée : un serveur usurpé ferait échouer le déploiement.
+      - name: Clé SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          {
+            echo "Host vps"
+            echo "  HostName $VPS_HOST"
+            echo "  User $VPS_USER"
+            echo "  Port $VPS_SSH_PORT"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  IdentitiesOnly yes"
+            echo "  StrictHostKeyChecking yes"
+          } > ~/.ssh/config
+
+      - name: Copie de la configuration
+        run: |
+          scp infra/deploy/compose.yaml infra/deploy/deploy.sh infra/deploy/.env.example \
+            infra/scripts/backup.sh infra/scripts/restore.sh \
+            "vps:$DEPLOY_DIR/"
+
+      - name: Déploiement sur le VPS
+        # Chemin et version sont développés ici, côté runner : c'est voulu.
+        run: |
+          # shellcheck disable=SC2029
+          ssh vps "$DEPLOY_DIR/deploy.sh $GITHUB_SHA"
+
+      - name: Vérification publique (HTTPS)
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: curl -fsS --retry 12 --retry-all-errors --retry-delay 5 "$APP_URL/health"
