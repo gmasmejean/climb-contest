@@ -745,11 +745,12 @@ latérale et compteurs dans l'en-tête.
 
 ---
 
-## Lot 22 — Déploiement automatique sur le VPS (livré côté dépôt)
+## Lot 22 — Déploiement automatique sur le VPS (livré, en production)
 
-> Hors série, à la demande de l'utilisateur le 2026-09-26. Décision : ADR-084. Reste à faire par
-> l'utilisateur : l'installation initiale du VPS (`docs/EXPLOITATION.md` § 9), puis un premier
-> push sur `production`, qui validera le workflow en vrai.
+> Hors série, à la demande de l'utilisateur le 2026-09-26. Décision : ADR-084. VPS installé le
+> même jour ; premier push sur `production` (`0f527ed`) déployé en 10 min (CI 6 min, images
+> 3 min, VPS 1 min) : https://climbcontest.fr, certificats Let's Encrypt pour le domaine et
+> `www`, sauvegarde d'avant migration écrite, vérifié en navigateur à 360 et 1440 px.
 
 ```
 Lot 22 : un push sur la branche `production` rejoue la CI, publie les images api
