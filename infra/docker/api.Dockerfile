@@ -40,6 +40,15 @@ RUN pnpm --filter @climbcontest/web build
 FROM source AS build
 RUN pnpm --filter @climbcontest/api build
 
+# Image web de production (Lot 22, ADR-084) : Caddy avec le build de l'appli et
+# sa configuration embarqués. Une version = une image : revenir en arrière
+# ramène le front ET ses en-têtes, sans volume partagé qui accumule les vieux
+# fichiers. Le compose de dev garde son propre chemin (`web-build` + volume).
+# Placée AVANT `runtime` : la dernière étape reste la cible par défaut.
+FROM caddy:2.11.4-alpine AS web
+COPY infra/docker/Caddyfile /etc/caddy/Caddyfile
+COPY --from=web-build /app/apps/web/dist /srv
+
 FROM base AS runtime
 ENV NODE_ENV=production
 COPY --from=source /app/node_modules ./node_modules

@@ -5,3 +5,6 @@
 **/.turbo
 .git
 *.tsbuildinfo
+# Aucun secret local ne doit finir dans une image (les images de production
+# sont publiques sur ghcr.io, Lot 22).
+**/.env
