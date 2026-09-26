@@ -3218,7 +3218,9 @@ Précise ADR-009 (déploiement Docker Compose sur VPS) sans le remplacer.
 5. **Le `Caddyfile` est commun** : son adresse devient `{$SITE_ADDRESS::80}`. Sans variable, rien
    ne change (`:80`, dev) ; avec `SITE_ADDRESS=mon-domaine.fr`, Caddy obtient le certificat et
    redirige le HTTP. Vérifié avec `caddy adapt` dans les deux cas. Une variable **vide** est une
-   erreur : le compose de production l'exige (`${SITE_ADDRESS:?}`).
+   erreur : le compose de production l'exige (`${SITE_ADDRESS:?}`). La variable peut lister
+   plusieurs noms (`"climbcontest.fr, www.climbcontest.fr"`) : un nom en `www.` reçoit une
+   redirection permanente vers le même sans `www.`, testée avec un vrai Caddy.
 6. **`deploy.sh` sauvegarde avant de toucher à quoi que ce soit.** Ordre : tirer les images,
    démarrer Postgres, `backup.sh` (existant, relu par `pg_restore --list`), **puis** écrire
    `IMAGE_TAG` dans le `.env`, migrer, remplacer API et Caddy, attendre `/health` (`--wait`,
