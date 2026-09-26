@@ -7,6 +7,11 @@
 	@www header_regexp www Host ^www\.(.+)$
 	redir @www https://{re.www.1}{uri} permanent
 
+	# HSTS sur les fichiers de l'appli, en HTTPS seulement (le dev en `:80` n'en
+	# reçoit pas). Même valeur que celle que l'API pose déjà sur ses réponses
+	# (`secureHeaders` de Hono) : les deux ne doivent pas se contredire.
+	@https protocol https
+
 	handle /api/* {
 		reverse_proxy api:3000
 	}
@@ -29,6 +34,7 @@
 			Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		}
+		header @https Strict-Transport-Security "max-age=15552000; includeSubDomains"
 
 		root * /srv
 		encode gzip
