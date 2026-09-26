@@ -657,10 +657,8 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **Garde-fou « compétition en cours »** : rien n'empêche de pousser `production` un jour de
   compétition. La doc le déconseille ; un contrôle dans `deploy.sh` (compétition au statut « en
   cours ») est envisageable.
-- **Aucune page « introuvable »** : une adresse inconnue (ex. `/connexion` au lieu de `/login`)
-  affiche une page **blanche**, sans message ni lien. Constaté en production le 2026-09-26 ;
-  antérieur au Lot 22 (`apps/web/src/router.ts` n'a pas de route attrape-tout). Contraire à la
-  règle « les erreurs disent quoi faire ».
-- **Pas d'en-tête HSTS** (`Strict-Transport-Security`) : Caddy redirige bien le HTTP vers le
-  HTTPS, mais un navigateur ne s'en souvient pas. À ajouter au `Caddyfile` en production
-  seulement (en dev, sur `:80`, il n'a pas de sens), en commençant par une durée courte.
+- ~~**Aucune page « introuvable »**~~ Résolu (ADR-085) : route attrape-tout `not-found`, page
+  « Page introuvable » qui rappelle l'adresse tapée et ramène à l'accueil, sans appel réseau.
+- ~~**Pas d'en-tête HSTS**~~ Constat à corriger : l'API le posait déjà sur toutes ses réponses,
+  donc dès la première visite. Caddy le pose maintenant aussi sur les fichiers de l'appli, en
+  HTTPS seulement et avec la même valeur (ADR-085).

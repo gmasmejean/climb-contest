@@ -3419,6 +3419,37 @@ mises à jour de sécurité automatiques, Docker CE 29.8.1, utilisateur `deploy`
 
 ---
 
+## ADR-085 — Page « introuvable » et HSTS sur les fichiers de l'appli
+
+**Date :** 2026-09-26
+**Contexte :** deux défauts vus en vérifiant le premier déploiement (TODO.md § Lot 22). Une
+adresse inconnue (`/connexion` au lieu de `/login`) affichait une page **blanche**. Les fichiers
+servis par Caddy ne portaient pas `Strict-Transport-Security`. Pour ce second point, le constat
+initial était incomplet : l'API pose déjà cet en-tête (`secureHeaders` de Hono, `max-age=15552000;
+includeSubDomains`) sur toutes ses réponses, et l'appli l'appelle à chaque chargement. Le
+navigateur recevait donc HSTS dès la première visite ; il ne manquait que sur les fichiers
+statiques.
+
+**Décision :**
+
+1. **Route attrape-tout** `/:pathMatch(.*)*` → `not-found`, déclarée en dernier (les routes
+   connues gagnent, testé). La page dit « Page introuvable », rappelle l'adresse tapée, propose
+   de la vérifier ou de demander le lien à l'organisateur, et offre « Retour à l'accueil ».
+   `skipOrganizerSession` : **aucune requête réseau**, elle s'affiche hors ligne (vérifié en
+   navigateur). Le serveur répond toujours 200 (`try_files` vers `index.html`) : un vrai 404 HTTP
+   demanderait que Caddy connaisse les routes de l'appli, sans bénéfice ici (rien à indexer).
+2. **HSTS dans le `Caddyfile`**, dans le bloc des fichiers de l'appli, **en HTTPS seulement**
+   (`@https protocol https`) : le dev en `:80` n'en reçoit pas. **Même valeur que l'API**, pour
+   que les deux ne se contredisent pas. Pas de `preload` : l'inscription dans les navigateurs se
+   défait très difficilement, et `includeSubDomains` suffit (`www` a son certificat).
+
+**Conséquences :** `apps/web/src/router.ts`, nouvelle page `apps/web/src/pages/NotFound.vue` et
+son test, trois cas dans `router.test.ts` ; `infra/docker/Caddyfile`. Vérifié : en-tête présent
+en HTTPS, absent en HTTP (Caddy réel) ; page à 360 et 1440 px, sans débordement ni appel API,
+bouton de 48 px, clic qui ramène à l'accueil (Chromium).
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,
