@@ -13,6 +13,7 @@ vi.mock('./pages/public/PublicRoomScreen.vue', () => stub)
 vi.mock('./pages/judge/JudgeAccess.vue', () => stub)
 vi.mock('./pages/judge/JudgeLayout.vue', () => ({ default: { template: '<router-view />' } }))
 vi.mock('./pages/judge/JudgeHome.vue', () => stub)
+vi.mock('./pages/NotFound.vue', () => stub)
 
 const organizer = organizerSchema.parse({
   id: '00000000-0000-4000-8000-000000000001',
@@ -159,5 +160,41 @@ describe('router — onglet de la page compétition dans l’URL (ADR-072)', () 
     await router.push('/competitions/abc/pilotage')
 
     expect(router.currentRoute.value.name).toBe('login')
+  })
+})
+
+describe('router — adresse inconnue', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  it('affiche la page introuvable en gardant l’adresse tapée, sans appel réseau', async () => {
+    const { router, bootstrapSession } = await freshRouter({ refreshSucceeds: true })
+
+    await router.push('/connexion')
+
+    expect(router.currentRoute.value.name).toBe('not-found')
+    expect(router.currentRoute.value.fullPath).toBe('/connexion')
+    expect(bootstrapSession).not.toHaveBeenCalled()
+  })
+
+  it('attrape aussi les chemins trop longs sous les routes connues', async () => {
+    const { router } = await freshRouter({ refreshSucceeds: true })
+
+    await router.push('/competitions/abc/routes/en-trop')
+    expect(router.currentRoute.value.name).toBe('not-found')
+
+    await router.push('/j/home/en-trop')
+    expect(router.currentRoute.value.name).toBe('not-found')
+  })
+
+  it('laisse les routes connues gagner sur l’attrape-tout', async () => {
+    const { router } = await freshRouter({ refreshSucceeds: true })
+
+    await router.push('/c/mon-slug')
+    expect(router.currentRoute.value.name).toBe('public-competition')
+
+    await router.push('/j/un-jeton')
+    expect(router.currentRoute.value.name).toBe('judge-access')
   })
 })

@@ -116,6 +116,14 @@ const router = createRouter({
         },
       ],
     },
+    {
+      // Toute autre adresse : une page qui le dit, au lieu d'une page blanche.
+      // Pas de session organisateur à restaurer : elle s'affiche sans réseau.
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('./pages/NotFound.vue'),
+      meta: { skipOrganizerSession: true },
+    },
   ],
 })
 
