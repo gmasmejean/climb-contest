@@ -2,12 +2,17 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    # `production` passe par deploy.yml, qui appelle ce workflow avant de
+    # publier les images (Lot 22) : pas besoin de le tester deux fois.
+    branches: ['**', '!production']
   pull_request:
     branches: [main]
+  workflow_call:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # `github.workflow` vaut « Deploy » quand deploy.yml appelle ce workflow :
+  # le groupe diffère de celui d'un push ordinaire.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
