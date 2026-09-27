@@ -80,6 +80,7 @@ describe('migrations', () => {
         'judge',
         'judge_route',
         'organization',
+        'organization_member_log',
         'round',
         'round_category',
         'round_qualifier',
@@ -112,7 +113,7 @@ describe('migrations', () => {
       const afterUp = await client.query(
         "select table_name from information_schema.tables where table_schema = 'public' and table_name != '_migrations_applied'",
       )
-      expect(afterUp.rows.length).toBe(20)
+      expect(afterUp.rows.length).toBe(21)
     })
   })
 })
@@ -384,10 +385,12 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
   it('le up réplique l’ancien statut sur chaque catégorie du tour, le down garde `open` en priorité', async () => {
     const fixture = await seedCompetitionAndCategories()
     await withRawClient(async (client) => {
-      // 0011 (Lot 15), 0012 (Lot 21), 0013 (juge, ADR-081) et 0014
-      // (organisation, ADR-086) ont été posées par-dessus 0010 : cinq crans.
-      // À réviser si une migration est ajoutée après 0014.
-      expect(await revertLastMigrations(client, 5)).toEqual([
+      // 0011 (Lot 15), 0012 (Lot 21), 0013 (juge, ADR-081), 0014
+      // (organisation, ADR-086) et 0015 (membres, ADR-087) ont été posées
+      // par-dessus 0010 : six crans. À réviser si une migration est ajoutée
+      // après 0015.
+      expect(await revertLastMigrations(client, 6)).toEqual([
+        '0015_lot24_members.sql',
         '0014_lot23_rename_club_to_organization.sql',
         '0013_judge_email.sql',
         '0012_lot21_ascent_voided_at.sql',
@@ -423,7 +426,7 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
         [openId, u16.id],
       )
-      await revertLastMigrations(client, 5)
+      await revertLastMigrations(client, 6)
       const back = await client.query<{ id: string; status: string }>(
         'select id, status from round where id = any($1)',
         [[openId, closedId, draftId]],
@@ -658,12 +661,17 @@ describe('migration 0014_lot23_rename_club_to_organization (ADR-086)', () => {
       const owningTables = ['competition', 'competition_deletion_log', 'user']
 
       expect(await tableExists('organization')).toBe(true)
-      expect(await columnsNamed('organization_id')).toEqual(owningTables)
+      expect(await columnsNamed('organization_id')).toEqual(
+        expect.arrayContaining(owningTables),
+      )
 
-      expect(await revertLastMigrations(client, 1)).toEqual([
-        '0014_lot23_rename_club_to_organization.sql',
-      ])
-      expect(await tableExists('organization')).toBe(false)
+      // Un cran à la fois : 0014 n'est plus forcément la dernière migration.
+      const reverted: string[] = []
+      while (await tableExists('organization')) {
+        reverted.push(...(await revertLastMigrations(client, 1)))
+        expect(reverted.length).toBeLessThan(20)
+      }
+      expect(reverted.at(-1)).toBe('0014_lot23_rename_club_to_organization.sql')
       expect(await tableExists('club')).toBe(true)
       expect(await columnsNamed('club_id')).toEqual(owningTables)
       expect(await columnsNamed('organization_id')).toEqual([])
@@ -674,7 +682,9 @@ describe('migration 0014_lot23_rename_club_to_organization (ADR-086)', () => {
 
       await applyPendingMigrations(client)
       expect(await tableExists('club')).toBe(false)
-      expect(await columnsNamed('organization_id')).toEqual(owningTables)
+      expect(await columnsNamed('organization_id')).toEqual(
+        expect.arrayContaining(owningTables),
+      )
       const constraints = await client.query<{ conname: string }>(
         "select conname from pg_constraint where conname like '%club%' union all select indexname from pg_indexes where schemaname = 'public' and indexname like '%club%'",
       )
@@ -686,6 +696,50 @@ describe('migration 0014_lot23_rename_club_to_organization (ADR-086)', () => {
       .from(organization)
       .where(sql`${organization.id} = ${demoOrganization.id}`)
     expect(back?.slug).toBe(demoOrganization.slug)
+  })
+})
+
+describe('migration 0015_lot24_members (ADR-087)', () => {
+  it('refuse une action inconnue au journal des membres', async () => {
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
+    await expect(
+      handle.db.execute(sql`
+        insert into organization_member_log (id, organization_id, actor_user_id, target_user_id, target_email, target_display_name, action)
+        values (gen_random_uuid(), ${demoOrganization.id}, ${demoUser.id}, gen_random_uuid(), 'x@test.local', 'X', 'promoted')
+      `),
+    ).rejects.toThrow()
+  })
+
+  it('est réversible : le down retire le journal et user.deactivated_at, le up les rétablit', async () => {
+    await withRawClient(async (client) => {
+      const hasDeactivatedAt = async () =>
+        (
+          await client.query(
+            "select 1 from information_schema.columns where table_name = 'user' and column_name = 'deactivated_at'",
+          )
+        ).rows.length === 1
+      const hasLog = async () =>
+        (
+          await client.query(
+            "select 1 from information_schema.tables where table_name = 'organization_member_log'",
+          )
+        ).rows.length === 1
+
+      expect(await hasDeactivatedAt()).toBe(true)
+      expect(await hasLog()).toBe(true)
+
+      let guard = 0
+      while (await hasLog()) {
+        expect((await revertLastMigrations(client, 1)).length).toBe(1)
+        guard += 1
+        expect(guard).toBeLessThan(20)
+      }
+      expect(await hasDeactivatedAt()).toBe(false)
+
+      await applyPendingMigrations(client)
+      expect(await hasDeactivatedAt()).toBe(true)
+      expect(await hasLog()).toBe(true)
+    })
   })
 })
 

@@ -99,6 +99,13 @@
       "when": 1790500000000,
       "tag": "0014_lot23_rename_club_to_organization",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790504637277,
+      "tag": "0015_lot24_members",
+      "breakpoints": true
     }
   ]
 }

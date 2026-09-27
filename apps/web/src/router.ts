@@ -22,6 +22,19 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      // Lot 24 (ADR-087) : ni `guestOnly` ni `requiresAuth` — accepter une
+      // invitation remplace la session éventuellement ouverte sur l'appareil.
+      path: '/accept-invite',
+      name: 'accept-invite',
+      component: () => import('./pages/AcceptInvite.vue'),
+    },
+    {
+      path: '/organization/members',
+      name: 'organization-members',
+      component: () => import('./pages/organization/OrganizationMembers.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       // Page d'accueil publique (ADR-070) : pas d'authentification requise,
       // mais PAS de `skipOrganizerSession` non plus — la session organisateur
       // est restaurée au F5 pour afficher l'état connecté dans l'en-tête. Si

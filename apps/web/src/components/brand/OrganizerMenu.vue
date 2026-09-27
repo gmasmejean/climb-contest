@@ -103,6 +103,14 @@ async function onLogout(): Promise<void> {
       >
         Mes compétitions
       </RouterLink>
+      <RouterLink
+        :to="{ name: 'organization-members' }"
+        role="menuitem"
+        class="flex min-h-12 items-center rounded-md px-3 text-base hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"
+        @click="close"
+      >
+        Membres de l’organisation
+      </RouterLink>
       <button
         type="button"
         role="menuitem"

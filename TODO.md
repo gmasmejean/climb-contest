@@ -24,7 +24,8 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   d'écran pour la consommer ce lot (contrainte des trois écrans de ce lot).
   En pratique, un organisateur invité ne peut activer son compte que via un
   appel API direct tant que cet écran n'existe pas.
-  **Prévu au Lot 24** (ADR-086), avec l'écran d'envoi des invitations.
+  ~~**Prévu au Lot 24**~~ Résolu au Lot 24 (ADR-087) : `/accept-invite` et l'écran
+  « Membres de l'organisation ».
 - **Limitation de débit en mémoire, par processus.** `hono-rate-limiter` avec
   un `MemoryStore` suffit pour une seule instance API. Si l'API tourne un
   jour derrière plusieurs workers/instances (cf. ADR-014 sur `LISTEN/NOTIFY`
@@ -678,3 +679,12 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   bénévole doit vraiment aider deux structures avec le même e-mail.
 - **Adresses hors de France** : la BAN ne couvre que la France ; ailleurs, saisie manuelle sans
   carte.
+- **Le journal des membres n'a pas d'écran** (Lot 24, ADR-087 point 7) : les invitations,
+  changements de rôle et désactivations sont tracés en base (`organization_member_log`), mais
+  seul un accès à la base permet de les lire. Un historique en bas de l'écran « Membres » suffirait.
+- **Un compte désactivé garde son jeton d'accès jusqu'à 15 minutes** sur les routes qui ne
+  relisent pas la base (toutes sauf celles des owners, ADR-087 point 8). Si ce délai devient
+  gênant, `requireOrganizer` pourrait relire `deactivated_at`, au prix d'une lecture par requête.
+- **Relancer une invitation n'a pas de limite de débit** : un owner pourrait envoyer beaucoup
+  d'e-mails à la même adresse. Sans enjeu entre membres d'une même organisation ; à borner si
+  l'inscription ouverte attire des abus (voir « Validation admin » plus haut).

@@ -64,6 +64,7 @@ describe('organizerSchema', () => {
       pendingTokenHash: 'should-never-leak',
       pendingTokenPurpose: null,
       pendingTokenExpiresAt: null,
+      deactivatedAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     }

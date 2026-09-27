@@ -82,6 +82,15 @@ de définir le mot de passe). Validation admin des créations d'organisation et
 zone publique de recherche organisation/compétition : besoins identifiés, pas dans le
 périmètre actuel (voir `TODO.md`).
 
+**Membres (ADR-087, Lot 24) :** l'écran « Membres de l'organisation » liste
+chaque compte avec son rôle et son statut (invité, invitation expirée, actif,
+désactivé) ; tout membre le voit. Un `owner` y invite, relance ou annule une
+invitation, change un rôle, désactive ou réactive un compte — jamais le sien.
+L'organisation garde toujours au moins un `owner` actif. Désactiver coupe les
+sessions et refuse la connexion, sans rien effacer ; c'est réversible. L'invité
+active son compte depuis le lien reçu (`/accept-invite`) en choisissant son mot
+de passe.
+
 Il peut :
 
 **Préparer**
@@ -356,6 +365,14 @@ user                                   -- organisateurs uniquement
   pending_token_purpose (nullable:      -- invitation — un seul mécanisme
     'email_verification' | 'invitation')
   pending_token_expires_at (nullable)
+  deactivated_at (nullable)             -- ADR-087 : non nul = connexion refusée
+
+organization_member_log                 -- ADR-087 : actions d'un owner sur les membres
+  id, organization_id → organization, actor_user_id → user,
+  target_user_id (uuid, PAS de FK), target_email, target_display_name,
+  action ('invited' | 'invitation_resent' | 'invitation_cancelled' |
+          'role_changed' | 'deactivated' | 'reactivated'),
+  details (jsonb — rôle : { from, to }), created_at
 
 competition
   id, organization_id → organization
@@ -715,6 +732,15 @@ Base : `/api/v1`. JSON. Erreurs au format RFC 9457 (`application/problem+json`).
 POST   /auth/login                       { email, password }
 POST   /auth/refresh
 POST   /auth/logout
+POST   /auth/invitations                 { email, displayName, role } — owner
+POST   /auth/invitations/accept          { token, password }
+
+GET    /organization/members             tout membre — Lot 24, ADR-087
+POST   /organization/members/:memberId/invitation   relancer (nouveau lien) — owner
+DELETE /organization/members/:memberId/invitation   annuler — owner
+PATCH  /organization/members/:memberId   { role } — owner
+POST   /organization/members/:memberId/deactivate   — owner, jamais soi-même
+POST   /organization/members/:memberId/reactivate   — owner
 
 GET    /competitions
 POST   /competitions
