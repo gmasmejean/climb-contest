@@ -5,6 +5,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import PublicCompetition from './PublicCompetition.vue'
 
+vi.mock('../../lib/leaflet-map', () => ({
+  createLocationMap: vi.fn(() => ({ destroy: vi.fn() })),
+}))
+
 class FakeEventSource {
   addEventListener(): void {}
   close(): void {}
@@ -24,6 +28,21 @@ const meta = {
     endsOn: '2026-05-01',
     format: 'contest',
     status: 'running',
+  },
+  organization: {
+    name: 'Club Roc',
+    type: 'club',
+    description: 'Club d’escalade associatif.',
+    contactEmail: 'contact@club-roc.test',
+    contactPhone: null,
+    websiteUrl: 'https://club-roc.test',
+    address: {
+      label: '8 Boulevard du Port 80000 Amiens',
+      postcode: '80000',
+      city: 'Amiens',
+      latitude: 49.897442,
+      longitude: 2.290084,
+    },
   },
   categories: [
     { id: 'cat-1', label: 'U16 Femme', displayOrder: 0 },
@@ -84,6 +103,20 @@ describe('PublicCompetition', () => {
     expect(wrapper.text()).toContain('Coupe du club')
     expect(wrapper.text()).toContain('Salle Roc')
     expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('cat-1')
+  })
+
+  it('montre l’organisation sous le classement, avec son adresse et son contact (ADR-088)', async () => {
+    const wrapper = mount(PublicCompetition, { global: { plugins: [router, VueQueryPlugin] } })
+    await flush()
+
+    const card = wrapper.get('[data-testid="organization-card"]')
+    expect(card.text()).toContain('Organisé par')
+    expect(card.get('h2').text()).toBe('Club Roc')
+    expect(card.text()).toContain('8 Boulevard du Port 80000 Amiens')
+    expect(card.text()).toContain('contact@club-roc.test')
+    // Après les onglets et leur contenu : le classement reste en tête de page.
+    const html = wrapper.html()
+    expect(html.indexOf('data-testid="organization-card"')).toBeGreaterThan(html.indexOf('role="tablist"'))
   })
 
   it('mémorise la catégorie choisie dans le stockage local, par compétition', async () => {

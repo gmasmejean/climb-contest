@@ -13,6 +13,7 @@ import {
 import PublicRanking from './PublicRanking.vue'
 import PublicRoutes from './PublicRoutes.vue'
 import BrandShell from '../../components/brand/BrandShell.vue'
+import OrganizationCard from '../../components/OrganizationCard.vue'
 
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
@@ -173,6 +174,9 @@ const lastUpdatedLabel = computed(() => {
           :slug="slug"
           :category-id="selectedCategoryId"
         />
+
+        <!-- ADR-088 : sous les résultats, que le spectateur vient voir d'abord. -->
+        <OrganizationCard :organization="meta.organization" eyebrow="Organisé par" class="mt-4" />
       </template>
     </main>
   </BrandShell>

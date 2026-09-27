@@ -25,6 +25,21 @@ const meta = {
     format: 'contest',
     status: 'running',
   },
+  organization: {
+    name: 'Club Roc',
+    type: 'club',
+    description: 'Club d’escalade associatif.',
+    contactEmail: 'contact@club-roc.test',
+    contactPhone: null,
+    websiteUrl: 'https://club-roc.test',
+    address: {
+      label: '8 Boulevard du Port 80000 Amiens',
+      postcode: '80000',
+      city: 'Amiens',
+      latitude: 49.897442,
+      longitude: 2.290084,
+    },
+  },
   categories: [
     { id: 'cat-1', label: 'U16 Femme', displayOrder: 0 },
     { id: 'cat-2', label: 'Sénior Homme', displayOrder: 1 },

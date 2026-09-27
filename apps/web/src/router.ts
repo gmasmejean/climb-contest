@@ -29,6 +29,12 @@ const router = createRouter({
       component: () => import('./pages/AcceptInvite.vue'),
     },
     {
+      path: '/organization',
+      name: 'organization-profile',
+      component: () => import('./pages/organization/OrganizationProfile.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/organization/members',
       name: 'organization-members',
       component: () => import('./pages/organization/OrganizationMembers.vue'),
