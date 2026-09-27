@@ -367,7 +367,7 @@ const dangerRowActionClass =
         <span class="text-sm text-gray-900">
           Conserver les accès en clair, consultables à tout moment
           <span class="block text-xs text-gray-600">
-            Pratique pour un club sans enjeu important — moins sûr si la base de données venait à
+            Pratique pour une organisation sans enjeu important — moins sûr si la base de données venait à
             fuiter. Désactiver efface aussitôt le lien et le PIN déjà stockés pour les juges de
             cette compétition ; les juges créés ensuite ne montreront leur accès qu'une seule fois.
           </span>

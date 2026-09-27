@@ -17,7 +17,7 @@ vi.mock('./pages/NotFound.vue', () => stub)
 
 const organizer = organizerSchema.parse({
   id: '00000000-0000-4000-8000-000000000001',
-  clubId: '00000000-0000-4000-8000-000000000002',
+  organizationId: '00000000-0000-4000-8000-000000000002',
   email: 'orga@club.test',
   displayName: 'Orga Test',
   role: 'owner',

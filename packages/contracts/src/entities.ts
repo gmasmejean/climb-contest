@@ -14,11 +14,11 @@ import {
   ascent,
   ascentEvent,
   category,
-  club,
   competition,
   competitor,
   judge,
   judgeRoute,
+  organization,
   round,
   roundRoute,
   route,
@@ -31,7 +31,7 @@ import { z } from 'zod'
 
 import { routePhotoHoldsSchema } from './route-photo'
 
-export const clubSchema = createSelectSchema(club)
+export const organizationSchema = createSelectSchema(organization)
 
 /**
  * Les colonnes à choix fermé sont des `text` + `CHECK` SQL en base

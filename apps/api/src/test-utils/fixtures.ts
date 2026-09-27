@@ -10,7 +10,7 @@ function unique(prefix: string): string {
 }
 
 /**
- * Inscrit, vérifie et connecte un organisateur (owner d'un nouveau club) —
+ * Inscrit, vérifie et connecte un organisateur (owner d'une nouvelle organisation) —
  * boilerplate commun à tous les tests de routes protégées par
  * `requireOrganizer`. Réutilise le flux HTTP réel plutôt que d'insérer
  * directement en base, pour rester représentatif (comme `auth.test.ts`).
@@ -18,16 +18,16 @@ function unique(prefix: string): string {
 export async function registerLoggedInOrganizer(
   app: App,
   mailer: FakeMailer,
-  overrides: { email?: string; password?: string; clubName?: string } = {},
+  overrides: { email?: string; password?: string; organizationName?: string } = {},
 ): Promise<{ accessToken: string; email: string }> {
   const email = overrides.email ?? `${unique('organizer')}@club-demo.test`
   const password = overrides.password ?? 'un-mot-de-passe-solide'
-  const clubName = overrides.clubName ?? unique('Club')
+  const organizationName = overrides.organizationName ?? unique('Club')
 
   await app.request('/api/v1/auth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password, displayName: 'Alex', clubName }),
+    body: JSON.stringify({ email, password, displayName: 'Alex', organizationName }),
   })
   const token = mailer.lastTokenFor(email)
   await app.request('/api/v1/auth/verify-email', {

@@ -78,7 +78,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "round_qualifier", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "round_qualifier", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
   )
 })
 
@@ -173,7 +173,7 @@ describe('GET /competitions/:id/exports/competition.json', () => {
     expect(text).not.toMatch(/accessToken|pinHash|passwordHash|refreshToken|pinPlain/i)
   })
 
-  it('exige une authentification, et 404 pour une compétition d’un autre club', async () => {
+  it('exige une authentification, et 404 pour une compétition d’une autre organisation', async () => {
     const s = await richScenario()
     expect((await app.request(exportUrl(s))).status).toBe(401)
     const other = await registerLoggedInOrganizer(app, mailer)
@@ -384,7 +384,7 @@ describe('POST /competitions/import', () => {
     expect(await handle.db.select().from(competition)).toHaveLength(1)
   })
 
-  it('la copie appartient au club de celui qui importe, pas au club d’origine', async () => {
+  it('la copie appartient à l’organisation de celui qui importe, pas à celle d’origine', async () => {
     const s = await richScenario()
     const { backup } = await exportBackup(s)
     const other = await registerLoggedInOrganizer(app, mailer)

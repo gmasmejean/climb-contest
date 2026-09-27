@@ -95,7 +95,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "round_qualifier", "asset", "asset_upload", "ascent", "ascent_event", "activity_log", "judge", "judge_route", "competition_deletion_log" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "round_qualifier", "asset", "asset_upload", "ascent", "ascent_event", "activity_log", "judge", "judge_route", "competition_deletion_log" cascade`,
   )
   await rm(storageRoot, { recursive: true, force: true })
 })
@@ -147,7 +147,7 @@ async function logActions(competitionId: string): Promise<string[]> {
   return rows.map((row) => row.action)
 }
 
-/** Un collègue du même club, rôle « organizer » (pas propriétaire). */
+/** Un collègue de la même organisation, rôle « organizer » (pas propriétaire). */
 async function colleagueToken(owner: JudgeFixture): Promise<string> {
   const email = `collegue-${crypto.randomUUID()}@club.test`
   await app.request('/api/v1/auth/invitations', {
@@ -206,7 +206,7 @@ describe('mise à la corbeille', () => {
     }
   })
 
-  it('est ouverte à tout organisateur du club, pas seulement au propriétaire', async () => {
+  it('est ouverte à tout organisateur de l’organisation, pas seulement au propriétaire', async () => {
     const f = await closedFixture()
     const colleague = await colleagueToken(f)
     expect((await trash(f.competition.id, colleague)).status).toBe(200)
@@ -216,7 +216,7 @@ describe('mise à la corbeille', () => {
     expect((await permanently(f.competition.id, colleague)).status).toBe(204)
   })
 
-  it('répond 404 pour un autre club, sans rien révéler', async () => {
+  it('répond 404 pour une autre organisation, sans rien révéler', async () => {
     const f = await closedFixture()
     const { accessToken: stranger } = await registerLoggedInOrganizer(app, mailer)
     expect((await trash(f.competition.id, stranger)).status).toBe(404)
@@ -418,7 +418,7 @@ describe('suppression définitive', () => {
   }
 
   it('efface tout — lignes et fichiers — sans toucher aux autres compétitions', async () => {
-    // Un voisin, d'un autre club, avec ses propres données : il doit sortir intact.
+    // Un voisin, d'une autre organisation, avec ses propres données : il doit sortir intact.
     const neighbour = await setUpPhasesScenario(app, mailer, 2)
     await playQualification(app, neighbour)
     const neighbourCounts = await rowCounts()
@@ -436,7 +436,7 @@ describe('suppression définitive', () => {
       expect(doomedRows[table], `la table ${table} devrait être peuplée`).toBeGreaterThan(0)
     }
 
-    // Une seconde compétition du MÊME club, elle aussi préservée.
+    // Une seconde compétition de la MÊME organisation, elle aussi préservée.
     const sibling = await createTestCompetition(app, doomed.organizerToken, {
       startsOn: '2099-01-01',
       endsOn: '2099-01-01',

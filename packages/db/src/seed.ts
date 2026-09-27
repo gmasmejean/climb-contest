@@ -12,11 +12,11 @@ import { createDatabase } from './client'
 import { hashPassword, hashToken, randomPin, randomToken } from './crypto'
 import {
   category,
-  club,
   competition,
   competitor,
   judge,
   judgeRoute,
+  organization,
   round,
   roundCategory,
   roundRoute,
@@ -33,23 +33,26 @@ async function main(): Promise<void> {
   const { db, close } = createDatabase(databaseUrl)
 
   try {
-    const existing = await db.query.club.findFirst({ where: eq(club.slug, 'club-demo') })
+    const existing = await db.query.organization.findFirst({
+      where: eq(organization.slug, 'club-demo'),
+    })
     if (existing) {
-      console.log('Le club de démonstration existe déjà — seed ignoré.')
+      console.log('L’organisation de démonstration existe déjà — seed ignoré.')
       return
     }
 
-    const [demoClub] = await db
-      .insert(club)
+    const [demoOrganization] = await db
+      .insert(organization)
       .values({ name: 'Club Démo Escalade', slug: 'club-demo' })
       .returning()
-    if (!demoClub) throw new Error('Échec de la création du club de démonstration.')
+    if (!demoOrganization)
+      throw new Error('Échec de la création de l’organisation de démonstration.')
 
     const ownerPassword = 'ChangeMoi123!'
     const [owner] = await db
       .insert(user)
       .values({
-        clubId: demoClub.id,
+        organizationId: demoOrganization.id,
         email: 'organisateur@club-demo.test',
         passwordHash: await hashPassword(ownerPassword),
         displayName: 'Alex Organisateur',
@@ -62,7 +65,7 @@ async function main(): Promise<void> {
     const [demoCompetition] = await db
       .insert(competition)
       .values({
-        clubId: demoClub.id,
+        organizationId: demoOrganization.id,
         name: 'Open du Club Démo 2026',
         venue: 'Salle Démo',
         startsOn: '2026-11-14',

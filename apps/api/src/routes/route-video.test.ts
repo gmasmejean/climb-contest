@@ -89,7 +89,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "asset", "asset_upload", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "asset", "asset_upload", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
   )
   await rm(storageRoot, { recursive: true, force: true })
 })
@@ -547,7 +547,7 @@ describe('contrôle d’accès', () => {
     ).toBe(401)
   })
 
-  it('un autre club reçoit 404 sur chaque opération, jamais 403', async () => {
+  it('une autre organisation reçoit 404 sur chaque opération, jamais 403', async () => {
     const f = await createJudgeFixture(app, mailer)
     const { uploadId } = await start(f, 1000)
     const other = await registerLoggedInOrganizer(app, mailer)
@@ -568,7 +568,7 @@ describe('contrôle d’accès', () => {
     expect(responses.map((r) => r.status)).toEqual([404, 404, 404, 404, 404, 404])
   })
 
-  it('une voie d’une autre compétition du même club est introuvable', async () => {
+  it('une voie d’une autre compétition de la même organisation est introuvable', async () => {
     const f = await createJudgeFixture(app, mailer)
     const g = await createJudgeFixture(app, mailer)
     const url = `/api/v1/competitions/${f.competition.id}/routes/${g.route.id}/video/uploads`

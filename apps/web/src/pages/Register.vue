@@ -9,7 +9,7 @@ import BrandShell from '../components/brand/BrandShell.vue'
 
 const router = useRouter()
 
-const form = reactive({ email: '', password: '', displayName: '', clubName: '' })
+const form = reactive({ email: '', password: '', displayName: '', organizationName: '' })
 const errors = reactive<Partial<Record<keyof typeof form, string>>>({})
 const submitting = ref(false)
 const formError = ref('')
@@ -56,7 +56,13 @@ async function onSubmit(): Promise<void> {
       </h1>
 
       <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
-        <TextField v-model="form.clubName" label="Nom du club" required :error="errors.clubName" />
+        <TextField
+          v-model="form.organizationName"
+          label="Nom de l'organisation"
+          hint="Votre club, votre salle ou la structure qui organise."
+          required
+          :error="errors.organizationName"
+        />
         <TextField
           v-model="form.displayName"
           label="Votre nom"

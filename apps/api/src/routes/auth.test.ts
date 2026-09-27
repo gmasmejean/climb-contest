@@ -1,6 +1,7 @@
 import { applyPendingMigrations, createDatabase, type DatabaseHandle } from '@climbcontest/db'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { sql } from 'drizzle-orm'
+import { SignJWT } from 'jose'
 import pg from 'pg'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
@@ -56,7 +57,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  await handle.db.execute(sql`truncate table "user", "club", "session" cascade`)
+  await handle.db.execute(sql`truncate table "user", "organization", "session" cascade`)
 })
 
 function cookieHeaderFrom(response: Response): string {
@@ -68,7 +69,7 @@ async function registerAndVerify(email: string, password = 'un-mot-de-passe-soli
   await app.request('/api/v1/auth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password, displayName: 'Alex', clubName: 'Club Démo' }),
+    body: JSON.stringify({ email, password, displayName: 'Alex', organizationName: 'Club Démo' }),
   })
   const token = mailer.lastTokenFor(email)
   const verifyResponse = await app.request('/api/v1/auth/verify-email', {
@@ -88,7 +89,7 @@ describe('POST /auth/register', () => {
         email: 'alex@club-demo.test',
         password: 'un-mot-de-passe-solide',
         displayName: 'Alex',
-        clubName: 'Club Démo',
+        organizationName: 'Club Démo',
       }),
     })
     expect(response.status).toBe(201)
@@ -105,7 +106,7 @@ describe('POST /auth/register', () => {
         email: 'deja@club-demo.test',
         password: 'un-mot-de-passe-solide',
         displayName: 'Alex',
-        clubName: 'Club Démo',
+        organizationName: 'Club Démo',
       }),
     })
     expect(response.status).toBe(409)
@@ -119,7 +120,7 @@ describe('vérification et connexion', () => {
     await app.request('/api/v1/auth/register', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password, displayName: 'Alex', clubName: 'Club Démo' }),
+      body: JSON.stringify({ email, password, displayName: 'Alex', organizationName: 'Club Démo' }),
     })
 
     const before = await app.request('/api/v1/auth/login', {
@@ -154,7 +155,7 @@ describe('vérification et connexion', () => {
         email,
         password: 'un-mot-de-passe-solide',
         displayName: 'Alex',
-        clubName: 'Club Démo',
+        organizationName: 'Club Démo',
       }),
     })
     const token = mailer.lastTokenFor(email)
@@ -217,6 +218,42 @@ describe('refresh token — rotation et détection de réutilisation', () => {
       headers: { cookie: thirdCookie },
     })
     expect(afterReuse.status).toBe(401)
+  })
+
+  it('un jeton émis avant le renommage (claim `clubId`, ADR-086) vaut 401, et le refresh en redonne un valable', async () => {
+    const email = 'avant-renommage@club-demo.test'
+    const password = 'un-mot-de-passe-solide'
+    await registerAndVerify(email, password)
+    const loginResponse = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    const { user } = (await loginResponse.json()) as {
+      user: { id: string; organizationId: string }
+    }
+
+    const legacyToken = await new SignJWT({ clubId: user.organizationId, role: 'owner' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(user.id)
+      .setIssuedAt()
+      .setExpirationTime('15m')
+      .sign(new TextEncoder().encode(env.JWT_ACCESS_SECRET))
+    const refused = await app.request('/api/v1/competitions', {
+      headers: { authorization: `Bearer ${legacyToken}` },
+    })
+    expect(refused.status).toBe(401)
+
+    const refreshed = await app.request('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { cookie: cookieHeaderFrom(loginResponse) },
+    })
+    expect(refreshed.status).toBe(200)
+    const { accessToken } = (await refreshed.json()) as { accessToken: string }
+    const accepted = await app.request('/api/v1/competitions', {
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+    expect(accepted.status).toBe(200)
   })
 
   it('refuse un refresh sans cookie', async () => {

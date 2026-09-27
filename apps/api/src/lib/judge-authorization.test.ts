@@ -1,10 +1,10 @@
 import {
   applyPendingMigrations,
-  club,
   competition,
   createDatabase,
   judge,
   judgeRoute,
+  organization,
   route,
   user,
   type DatabaseHandle,
@@ -34,15 +34,15 @@ afterAll(async () => {
 })
 
 async function setupTwoCompetitionsWithJudge() {
-  const [demoClub] = await handle.db
-    .insert(club)
-    .values({ name: 'Club Test', slug: `club-${crypto.randomUUID()}` })
+  const [demoOrganization] = await handle.db
+    .insert(organization)
+    .values({ name: 'Club Test', slug: `orga-${crypto.randomUUID()}` })
     .returning()
-  if (!demoClub) throw new Error('club insert failed')
+  if (!demoOrganization) throw new Error('organization insert failed')
   const [demoUser] = await handle.db
     .insert(user)
     .values({
-      clubId: demoClub.id,
+      organizationId: demoOrganization.id,
       email: `${crypto.randomUUID()}@test.local`,
       displayName: 'Test',
       role: 'owner',
@@ -53,7 +53,7 @@ async function setupTwoCompetitionsWithJudge() {
   const [competitionA] = await handle.db
     .insert(competition)
     .values({
-      clubId: demoClub.id,
+      organizationId: demoOrganization.id,
       name: 'Compétition A',
       venue: 'Salle',
       startsOn: '2026-01-01',
@@ -67,7 +67,7 @@ async function setupTwoCompetitionsWithJudge() {
   const [competitionB] = await handle.db
     .insert(competition)
     .values({
-      clubId: demoClub.id,
+      organizationId: demoOrganization.id,
       name: 'Compétition B',
       venue: 'Salle',
       startsOn: '2026-01-01',

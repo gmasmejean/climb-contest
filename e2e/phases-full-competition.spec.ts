@@ -32,7 +32,7 @@ async function registerAndVerifyOrganizer(request: APIRequestContext) {
   const password = 'un-mot-de-passe-solide'
   await apiJson(request, '/api/v1/auth/register', {
     method: 'POST',
-    data: { email, password, displayName: 'Phases E2E', clubName: `Club phases ${stamp}` },
+    data: { email, password, displayName: 'Phases E2E', organizationName: `Club phases ${stamp}` },
   })
   const messages = await request
     .get(`${MAILPIT_URL}/api/v1/messages?limit=1`)

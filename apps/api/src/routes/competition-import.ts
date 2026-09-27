@@ -29,7 +29,7 @@ export interface CompetitionImportRouteDeps {
  * Aperçu puis validation, comme l'import CSV (ADR-024) : le serveur revalide
  * tout dans les deux modes, et n'écrit rien tant que `mode` n'est pas
  * `commit`. Réservé à un organisateur connecté ; la compétition créée
- * appartient à son club.
+ * appartient à son organisation.
  */
 export function createCompetitionImportRoutes(deps: CompetitionImportRouteDeps): Hono {
   const app = new Hono()
@@ -108,7 +108,7 @@ export function createCompetitionImportRoutes(deps: CompetitionImportRouteDeps):
       const result = await importBackup(
         db,
         parsed.data,
-        { clubId: organizer.clubId, userId: organizer.sub },
+        { organizationId: organizer.organizationId, userId: organizer.sub },
         now(),
       )
       return c.json(importBackupResultSchema.parse(result), 201)

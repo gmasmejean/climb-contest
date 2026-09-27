@@ -33,7 +33,7 @@ export function requireOwner() {
       throw new ApiError(
         403,
         'Accès refusé',
-        'Seul le propriétaire du club peut effectuer cette action.',
+        'Seul le propriétaire de l’organisation peut effectuer cette action.',
       )
     }
     await next()

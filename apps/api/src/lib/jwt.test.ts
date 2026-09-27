@@ -12,7 +12,7 @@ const judge = createJudgeTokenSigner(JUDGE_SECRET)
 const inOneHour = () => Math.floor(Date.now() / 1000) + 3600
 
 async function organizerToken(alg: string, secret = ORGANIZER_SECRET) {
-  return new SignJWT({ clubId: 'club-1', role: 'owner' })
+  return new SignJWT({ organizationId: 'org-1', role: 'owner' })
     .setProtectedHeader({ alg })
     .setSubject('user-1')
     .setExpirationTime(inOneHour())
@@ -21,8 +21,8 @@ async function organizerToken(alg: string, secret = ORGANIZER_SECRET) {
 
 describe('jeton d’accès organisateur', () => {
   it('accepte un jeton signé par le serveur', async () => {
-    const token = await organizer.sign({ sub: 'user-1', clubId: 'club-1', role: 'owner' })
-    await expect(organizer.verify(token)).resolves.toEqual({ sub: 'user-1', clubId: 'club-1', role: 'owner' })
+    const token = await organizer.sign({ sub: 'user-1', organizationId: 'org-1', role: 'owner' })
+    await expect(organizer.verify(token)).resolves.toEqual({ sub: 'user-1', organizationId: 'org-1', role: 'owner' })
   })
 
   it.each([['HS384'], ['HS512']])(
@@ -39,13 +39,13 @@ describe('jeton d’accès organisateur', () => {
   it('refuse un jeton non signé (alg none)', async () => {
     const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')
     const payload = Buffer.from(
-      JSON.stringify({ sub: 'user-1', clubId: 'club-1', role: 'owner', exp: inOneHour() }),
+      JSON.stringify({ sub: 'user-1', organizationId: 'org-1', role: 'owner', exp: inOneHour() }),
     ).toString('base64url')
     await expect(organizer.verify(`${header}.${payload}.`)).rejects.toThrow()
   })
 
   it('refuse un jeton expiré', async () => {
-    const expired = await new SignJWT({ clubId: 'club-1', role: 'owner' })
+    const expired = await new SignJWT({ organizationId: 'org-1', role: 'owner' })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject('user-1')
       .setExpirationTime(Math.floor(Date.now() / 1000) - 10)
@@ -58,8 +58,17 @@ describe('jeton d’accès organisateur', () => {
     await expect(organizer.verify(judgeToken)).rejects.toThrow()
   })
 
+  it('refuse un jeton émis avant le renommage (claim `clubId`, ADR-086) : 401, le client se rattrape par refresh', async () => {
+    const token = await new SignJWT({ clubId: 'org-1', role: 'owner' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('user-1')
+      .setExpirationTime(inOneHour())
+      .sign(encode(ORGANIZER_SECRET))
+    await expect(organizer.verify(token)).rejects.toThrow()
+  })
+
   it('refuse un rôle inconnu', async () => {
-    const token = await new SignJWT({ clubId: 'club-1', role: 'admin' })
+    const token = await new SignJWT({ organizationId: 'org-1', role: 'admin' })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject('user-1')
       .setExpirationTime(inOneHour())
@@ -84,7 +93,7 @@ describe('jeton d’accès juge', () => {
   })
 
   it('refuse un jeton organisateur', async () => {
-    const token = await organizer.sign({ sub: 'user-1', clubId: 'club-1', role: 'owner' })
+    const token = await organizer.sign({ sub: 'user-1', organizationId: 'org-1', role: 'owner' })
     await expect(judge.verify(token)).rejects.toThrow()
   })
 })

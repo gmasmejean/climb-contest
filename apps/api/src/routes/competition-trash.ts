@@ -21,8 +21,8 @@ export interface CompetitionTrashRouteDeps {
 }
 
 /**
- * Corbeille des compétitions (Lot 11, ADR-063). Ouverte à TOUT organisateur du
- * club — contrairement à la purge RGPD, réservée au propriétaire (ADR-051), qui
+ * Corbeille des compétitions (Lot 11, ADR-063). Ouverte à TOUT organisateur de
+ * l'organisation — contrairement à la purge RGPD, réservée au propriétaire (ADR-051), qui
  * reste inchangée.
  *
  * À monter AVANT `createCompetitionRoutes` : `GET /trash` doit être vu avant
@@ -38,7 +38,10 @@ export function createCompetitionTrashRoutes(deps: CompetitionTrashRouteDeps): H
   app.get('/trash', async (c) => {
     const organizer = c.get('organizer')
     const rows = await db.query.competition.findMany({
-      where: and(eq(competition.clubId, organizer.clubId), isNotNull(competition.deletedAt)),
+      where: and(
+        eq(competition.organizationId, organizer.organizationId),
+        isNotNull(competition.deletedAt),
+      ),
       orderBy: [desc(competition.deletedAt)],
     })
     return c.json(rows.map((row) => competitionSchema.parse(row)))

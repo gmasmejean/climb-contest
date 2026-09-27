@@ -65,7 +65,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "round_qualifier", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "round_qualifier", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
   )
 })
 
@@ -195,7 +195,7 @@ describe('accès aux exports', () => {
   })
 
   it.each(['results.csv', 'results.pdf'])(
-    '%s d’une compétition d’un autre club répond 404, jamais 403',
+    '%s d’une compétition d’une autre organisation répond 404, jamais 403',
     async (file) => {
       const s = await setUpPhasesScenario(app, mailer, 2)
       const other = await registerLoggedInOrganizer(app, mailer)

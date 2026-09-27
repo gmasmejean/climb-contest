@@ -87,7 +87,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "asset", "asset_upload", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "asset", "asset_upload", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
   )
   await rm(storageRoot, { recursive: true, force: true })
 })
@@ -234,7 +234,7 @@ describe('PUT /routes/:rid/photo', () => {
     expect(response.status).toBe(401)
   })
 
-  it('un autre club reçoit 404, jamais 403, sur chaque opération', async () => {
+  it('une autre organisation reçoit 404, jamais 403, sur chaque opération', async () => {
     const { f } = await withPhoto()
     const other = await registerLoggedInOrganizer(app, mailer)
     const token = other.accessToken
@@ -522,7 +522,7 @@ describe('GET /route-sheets.pdf', () => {
     expect(response.status).toBe(409)
   })
 
-  it('n’imprime pas les fiches d’une autre compétition (404 pour un autre club)', async () => {
+  it('n’imprime pas les fiches d’une autre compétition (404 pour une autre organisation)', async () => {
     const { f } = await withPhoto()
     const other = await registerLoggedInOrganizer(app, mailer)
     const response = await app.request(sheetsUrl(f), {

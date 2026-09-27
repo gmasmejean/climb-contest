@@ -62,7 +62,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round" cascade`,
   )
 })
 
@@ -154,7 +154,7 @@ describe('POST /competitions', () => {
 })
 
 describe('GET /competitions', () => {
-  it("isole les compétitions par club — n'affiche jamais celles d'un autre club", async () => {
+  it("isole les compétitions par organisation — n'affiche jamais celles d'une autre organisation", async () => {
     const orgA = await registerLoggedInOrganizer(app, mailer)
     const orgB = await registerLoggedInOrganizer(app, mailer)
     const compA = await createTestCompetition(app, orgA.accessToken, { name: 'Comp A' })
@@ -167,7 +167,7 @@ describe('GET /competitions', () => {
     expect(bodyA.map((row) => row.id)).toEqual([compA.id])
   })
 
-  it("refuse (404) l'accès à la compétition d'un autre club", async () => {
+  it("refuse (404) l'accès à la compétition d'une autre organisation", async () => {
     const orgA = await registerLoggedInOrganizer(app, mailer)
     const orgB = await registerLoggedInOrganizer(app, mailer)
     const compA = await createTestCompetition(app, orgA.accessToken)

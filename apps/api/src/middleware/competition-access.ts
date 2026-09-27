@@ -16,9 +16,9 @@ declare module 'hono' {
 export type CompetitionScope = 'active' | 'trashed' | 'any'
 
 /**
- * Charge la compétition du chemin (`:id`) et vérifie qu'elle appartient au
- * club de l'organisateur authentifié. Toujours 404 en cas d'échec — jamais
- * 403 — pour ne pas révéler l'existence d'une compétition d'un autre club.
+ * Charge la compétition du chemin (`:id`) et vérifie qu'elle appartient à
+ * l'organisation de l'organisateur authentifié. Toujours 404 en cas d'échec —
+ * jamais 403 — pour ne pas révéler l'existence d'une compétition d'une autre organisation.
  * S'applique après `requireOrganizer`.
  *
  * Par défaut (`scope: 'active'`), une compétition à la corbeille est
@@ -42,7 +42,11 @@ export function requireCompetitionAccess(db: Database, options: { scope?: Compet
       throw new ApiError(404, 'Compétition introuvable', "Cette compétition n'existe pas.")
     }
     const row = await db.query.competition.findFirst({
-      where: and(eq(competition.id, id), eq(competition.clubId, organizer.clubId), trashFilter),
+      where: and(
+        eq(competition.id, id),
+        eq(competition.organizationId, organizer.organizationId),
+        trashFilter,
+      ),
     })
     if (!row) {
       throw new ApiError(404, 'Compétition introuvable', "Cette compétition n'existe pas.")
