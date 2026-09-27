@@ -106,6 +106,13 @@
       "when": 1790504637277,
       "tag": "0015_lot24_members",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790532833636,
+      "tag": "0016_lot25_organization_profile",
+      "breakpoints": true
     }
   ]
 }
