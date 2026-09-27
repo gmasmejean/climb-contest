@@ -1,15 +1,23 @@
 <script setup lang="ts">
 import { registerInputSchema } from '@climbcontest/contracts'
-import { Button, TextField } from '@climbcontest/ui'
+import { Button, Select, TextField } from '@climbcontest/ui'
 import { reactive, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import { ApiError, apiFetch } from '../api/client'
 import BrandShell from '../components/brand/BrandShell.vue'
+import { ORGANIZATION_TYPE_OPTIONS } from '../lib/organization-profile'
 
 const router = useRouter()
 
-const form = reactive({ email: '', password: '', displayName: '', organizationName: '' })
+// ADR-088 point 6 : le type est demandé, présélectionné sur « Club ».
+const form = reactive({
+  email: '',
+  password: '',
+  displayName: '',
+  organizationName: '',
+  organizationType: 'club',
+})
 const errors = reactive<Partial<Record<keyof typeof form, string>>>({})
 const submitting = ref(false)
 const formError = ref('')
@@ -62,6 +70,12 @@ async function onSubmit(): Promise<void> {
           hint="Votre club, votre salle ou la structure qui organise."
           required
           :error="errors.organizationName"
+        />
+        <Select
+          v-model="form.organizationType"
+          label="Type d'organisation"
+          :options="ORGANIZATION_TYPE_OPTIONS"
+          :error="errors.organizationType"
         />
         <TextField
           v-model="form.displayName"

@@ -42,6 +42,10 @@ export default defineConfig({
         // installé sur le téléphone d'un juge. Ils passent par le cache à la
         // demande (`runtimeCaching` ci-dessous, destinations `image`/`font`).
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Leaflet (ADR-088) : seulement sur les écrans qui montrent une carte,
+        // jamais sur ceux du juge. Mis en cache à la première carte affichée
+        // (`static-assets` ci-dessous), pas précaché sur chaque téléphone.
+        globIgnores: ['**/leaflet-map-*'],
         // Lot 6 (SPEC.md § 6.3) : réponse réseau d'abord avec repli cache
         // pour les données API (utile au premier chargement du bootstrap
         // juge, ou aux écrans organisateur/public en réseau instable) ;
@@ -64,8 +68,10 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: ({ request }: { request: Request }) =>
-              ['style', 'script', 'font', 'image'].includes(request.destination),
+            // Même domaine seulement (ADR-088) : les tuiles de carte de l'IGN
+            // sont des images d'un autre domaine, qu'on ne garde pas en cache.
+            urlPattern: ({ request, sameOrigin }: { request: Request; sameOrigin: boolean }) =>
+              sameOrigin && ['style', 'script', 'font', 'image'].includes(request.destination),
             handler: 'CacheFirst',
             options: {
               cacheName: 'static-assets',

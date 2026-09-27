@@ -10,6 +10,7 @@ describe('registerInputSchema', () => {
       password: 'un-mot-de-passe-solide',
       displayName: 'Alex Organisateur',
       organizationName: 'Club Démo',
+      organizationType: 'club',
     })
     expect(result.success).toBe(true)
   })
@@ -20,6 +21,7 @@ describe('registerInputSchema', () => {
       password: 'trop-court',
       displayName: 'Alex',
       organizationName: 'Club Démo',
+      organizationType: 'club',
     })
     expect(result.success).toBe(false)
   })
@@ -30,8 +32,29 @@ describe('registerInputSchema', () => {
       password: 'un-mot-de-passe-solide',
       displayName: 'Alex',
       organizationName: 'Club Démo',
+      organizationType: 'club',
     })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('registerInputSchema — type d’organisation (ADR-088)', () => {
+  const base = {
+    email: 'alex@club-demo.test',
+    password: 'un-mot-de-passe-solide',
+    displayName: 'Alex',
+    organizationName: 'Bloc Salle',
+  }
+
+  it('accepte une salle', () => {
+    expect(registerInputSchema.safeParse({ ...base, organizationType: 'gym' }).success).toBe(true)
+  })
+
+  it('refuse une inscription sans type, ou avec un type inconnu', () => {
+    expect(registerInputSchema.safeParse(base).success).toBe(false)
+    expect(registerInputSchema.safeParse({ ...base, organizationType: 'association' }).success).toBe(
+      false,
+    )
   })
 })
 

@@ -386,10 +386,11 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
     const fixture = await seedCompetitionAndCategories()
     await withRawClient(async (client) => {
       // 0011 (Lot 15), 0012 (Lot 21), 0013 (juge, ADR-081), 0014
-      // (organisation, ADR-086) et 0015 (membres, ADR-087) ont été posées
-      // par-dessus 0010 : six crans. À réviser si une migration est ajoutée
-      // après 0015.
-      expect(await revertLastMigrations(client, 6)).toEqual([
+      // (organisation, ADR-086), 0015 (membres, ADR-087) et 0016 (fiche,
+      // ADR-088) ont été posées par-dessus 0010 : sept crans. À réviser si une
+      // migration est ajoutée après 0016.
+      expect(await revertLastMigrations(client, 7)).toEqual([
+        '0016_lot25_organization_profile.sql',
         '0015_lot24_members.sql',
         '0014_lot23_rename_club_to_organization.sql',
         '0013_judge_email.sql',
@@ -426,7 +427,7 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
         [openId, u16.id],
       )
-      await revertLastMigrations(client, 6)
+      await revertLastMigrations(client, 7)
       const back = await client.query<{ id: string; status: string }>(
         'select id, status from round where id = any($1)',
         [[openId, closedId, draftId]],
@@ -740,6 +741,89 @@ describe('migration 0015_lot24_members (ADR-087)', () => {
       expect(await hasDeactivatedAt()).toBe(true)
       expect(await hasLog()).toBe(true)
     })
+  })
+})
+
+describe('migration 0016_lot25_organization_profile (ADR-088)', () => {
+  it('fait des organisations existantes des clubs et refuse un type inconnu', async () => {
+    const { demoOrganization } = await insertOrganizationAndUser()
+    expect(demoOrganization.type).toBe('club')
+    await expect(
+      handle.db.execute(
+        sql`update organization set type = 'association' where id = ${demoOrganization.id}`,
+      ),
+    ).rejects.toThrow()
+  })
+
+  it('refuse une latitude sans longitude, hors bornes, ou une adresse sans libellé', async () => {
+    const { demoOrganization } = await insertOrganizationAndUser()
+    const attempt = (fields: Partial<typeof organization.$inferInsert>) =>
+      handle.db
+        .update(organization)
+        .set(fields)
+        .where(sql`${organization.id} = ${demoOrganization.id}`)
+    await expect(attempt({ addressLabel: 'Amiens', latitude: 49.9 })).rejects.toThrow()
+    await expect(
+      attempt({ addressLabel: 'Amiens', latitude: 91, longitude: 2.3 }),
+    ).rejects.toThrow()
+    await expect(attempt({ postcode: '80000' })).rejects.toThrow()
+    await expect(
+      attempt({
+        addressLabel: '8 Boulevard du Port 80000 Amiens',
+        postcode: '80000',
+        city: 'Amiens',
+        latitude: 49.897442,
+        longitude: 2.290084,
+        banId: '80021_6590_00008',
+      }),
+    ).resolves.toBeDefined()
+    // Saisie manuelle : le libellé seul, sans position (ADR-088 point 2).
+    await expect(
+      attempt({
+        addressLabel: 'Gymnase Jules-Verne, Amiens',
+        postcode: null,
+        city: null,
+        latitude: null,
+        longitude: null,
+        banId: null,
+      }),
+    ).resolves.toBeDefined()
+  })
+
+  it('est réversible : le down retire les colonnes de la fiche, le up les rétablit', async () => {
+    const { demoOrganization } = await insertOrganizationAndUser()
+    await withRawClient(async (client) => {
+      const hasType = async () =>
+        (
+          await client.query(
+            "select 1 from information_schema.columns where table_name = 'organization' and column_name = 'type'",
+          )
+        ).rows.length === 1
+
+      expect(await hasType()).toBe(true)
+      let guard = 0
+      while (await hasType()) {
+        expect((await revertLastMigrations(client, 1)).length).toBe(1)
+        guard += 1
+        expect(guard).toBeLessThan(20)
+      }
+      const { rows: profileColumns } = await client.query(
+        "select column_name from information_schema.columns where table_name = 'organization' and column_name in ('description', 'address_label', 'latitude', 'ban_id')",
+      )
+      expect(profileColumns).toEqual([])
+      const kept = await client.query('select slug from organization where id = $1', [
+        demoOrganization.id,
+      ])
+      expect(kept.rows).toEqual([{ slug: demoOrganization.slug }])
+
+      await applyPendingMigrations(client)
+      expect(await hasType()).toBe(true)
+    })
+    const [back] = await handle.db
+      .select()
+      .from(organization)
+      .where(sql`${organization.id} = ${demoOrganization.id}`)
+    expect(back?.type).toBe('club')
   })
 })
 

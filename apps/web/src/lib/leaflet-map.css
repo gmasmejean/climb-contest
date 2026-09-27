@@ -1,0 +1,9 @@
+/* Cibles tactiles de 48 px au moins (CLAUDE.md) : Leaflet dessine ses boutons
+   de zoom à 30 px sur écran tactile, 26 px sinon. */
+.leaflet-bar a,
+.leaflet-touch .leaflet-bar a {
+  width: 48px;
+  height: 48px;
+  line-height: 48px;
+  font-size: 24px;
+}

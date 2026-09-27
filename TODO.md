@@ -688,3 +688,12 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - **Relancer une invitation n'a pas de limite de débit** : un owner pourrait envoyer beaucoup
   d'e-mails à la même adresse. Sans enjeu entre membres d'une même organisation ; à borner si
   l'inscription ouverte attire des abus (voir « Validation admin » plus haut).
+- **Zod signale une violation CSP à chaque chargement** (repéré au Lot 25) : au démarrage, Zod 4
+  teste `new Function` pour savoir s'il peut compiler ses schémas ; la CSP (sans
+  `'unsafe-eval'`, à raison) le refuse, Zod se replie sans rien casser, mais le navigateur
+  journalise une erreur `script-src eval`. `z.config({ jitless: true })` dans `apps/web/src/main.ts`
+  supprime le test ; à mesurer (validation un peu plus lente) avant de l'activer.
+- **Le formulaire de la fiche d'organisation n'a pas de brouillon local** (Lot 25) : une
+  description longue est perdue si la page se recharge avant l'enregistrement. `useFormDraft`
+  suppose un formulaire rempli au montage, pas après une requête ; à adapter si le besoin se
+  confirme.

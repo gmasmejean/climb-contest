@@ -28,6 +28,7 @@ async function registerAndVerifyOrganizer(request: APIRequestContext) {
       password,
       displayName: 'Pilote E2E',
       organizationName: `Club pilotage ${Date.now()}`,
+      organizationType: 'club',
     },
   })
 

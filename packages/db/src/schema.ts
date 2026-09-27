@@ -13,6 +13,7 @@ import {
   boolean,
   check,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -38,12 +39,42 @@ const timestamps = {
 
 // ADR-086 : la structure organisatrice (club, salle ou autre). Anciennement
 // `club` ; le club d'affiliation d'un compétiteur reste `competitor.club_name`.
-export const organization = pgTable('organization', {
-  id: id(),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().unique(),
-  ...timestamps,
-})
+// ADR-088 : la fiche publique (type, description, contact, site, adresse).
+// L'adresse est un libellé, avec ou sans position : sans proposition BAN
+// choisie, seul le libellé est renseigné (pas de carte).
+export const organization = pgTable(
+  'organization',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique(),
+    type: text('type').notNull().default('club'),
+    description: text('description'),
+    contactEmail: text('contact_email'),
+    contactPhone: text('contact_phone'),
+    websiteUrl: text('website_url'),
+    addressLabel: text('address_label'),
+    postcode: text('postcode'),
+    city: text('city'),
+    latitude: doublePrecision('latitude'),
+    longitude: doublePrecision('longitude'),
+    banId: text('ban_id'),
+    ...timestamps,
+  },
+  (table) => [
+    check('organization_type_check', sql`${table.type} IN ('club', 'gym', 'other')`),
+    check(
+      'organization_position_check',
+      // Un CHECK passe quand il vaut NULL : les IS NOT NULL explicites empêchent
+      // une latitude sans longitude de passer par un `BETWEEN` qui vaudrait NULL.
+      sql`(${table.latitude} IS NULL AND ${table.longitude} IS NULL) OR (${table.latitude} IS NOT NULL AND ${table.longitude} IS NOT NULL AND ${table.latitude} BETWEEN -90 AND 90 AND ${table.longitude} BETWEEN -180 AND 180)`,
+    ),
+    check(
+      'organization_address_check',
+      sql`${table.addressLabel} IS NOT NULL OR (${table.postcode} IS NULL AND ${table.city} IS NULL AND ${table.latitude} IS NULL AND ${table.banId} IS NULL)`,
+    ),
+  ],
+)
 
 export const user = pgTable(
   'user',

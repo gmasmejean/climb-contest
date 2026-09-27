@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { competitionFormatSchema, competitionStatusSchema } from './competition'
+import { publicOrganizationSchema } from './organization'
 import { httpUrlSchema } from './route'
 import { roundStatusSchema, roundTypeSchema } from './round'
 
@@ -63,6 +64,8 @@ export type PublicCompetition = z.infer<typeof publicCompetitionSchema>
 export const publicCompetitionMetaSchema = z
   .object({
     competition: publicCompetitionSchema,
+    // ADR-088 : l'encart « Organisation », sous le classement.
+    organization: publicOrganizationSchema,
     categories: z.array(publicCategorySchema),
     rounds: z.array(publicRoundSchema),
   })

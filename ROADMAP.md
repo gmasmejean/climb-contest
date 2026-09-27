@@ -806,7 +806,13 @@ ADR-020). Actions tracées au journal. E2E : invitation reçue dans Mailpit,
 acceptée, connexion, puis désactivation.
 ```
 
-### Lot 25 — Fiche de l'organisation, adresse et carte (à faire)
+### Lot 25 — Fiche de l'organisation, adresse et carte (livré)
+
+> Livré le 2026-09-27 sur la branche `lot-25-fiche-organisation`. Décision : ADR-088. Écarts au
+> cadrage : le géocodage appelle directement `data.geopf.fr/geocodage` (l'ancienne adresse BAN y
+> redirige) ; l'encart est un bloc `organization` à côté de `competition` dans `GET
+> /public/:slug` ; « Itinéraire » ouvre Google Maps ; la règle de cache des images du service
+> worker est restreinte au même domaine, pour ne pas garder les tuiles.
 
 ```
 Lot 25 : champs de l'organisation — type (club / salle / autre), description,
