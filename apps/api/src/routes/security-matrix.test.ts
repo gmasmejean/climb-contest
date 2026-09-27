@@ -51,7 +51,7 @@ export function classify(method: string, routePath: string): Kind | 'unclassifie
   if (
     routePath === '/api/v1/competitions' ||
     routePath === '/api/v1/competitions/import' ||
-    // Corbeille (Lot 11) : la liste des compétitions supprimées DU CLUB, sans `:id`.
+    // Corbeille (Lot 11) : la liste des compétitions supprimées DE L'ORGANISATION, sans `:id`.
     routePath === '/api/v1/competitions/trash'
   )
     return 'organizer'
@@ -90,7 +90,7 @@ interface World {
   judgeJwt: string
 }
 let mine: World
-let otherClubToken: string
+let otherOrganizationToken: string
 
 const uuid = () => crypto.randomUUID()
 const mailer = new FakeMailer()
@@ -216,7 +216,7 @@ beforeAll(async () => {
   }
 
   mine = await buildWorld('contest')
-  otherClubToken = (await registerLoggedInOrganizer(app, mailer)).accessToken
+  otherOrganizationToken = (await registerLoggedInOrganizer(app, mailer)).accessToken
 }, 240_000)
 
 afterAll(async () => {
@@ -276,9 +276,9 @@ describe('frontière organisateur', () => {
     }
   })
 
-  it('une compétition d’un AUTRE club : 404 partout (jamais 403, jamais 200)', async () => {
+  it('une compétition d’un AUTRE organisation : 404 partout (jamais 403, jamais 200)', async () => {
     for (const r of routes.filter(inKind('organizer-competition'))) {
-      const response = await api(r.method, concrete(r.path, mine), otherClubToken, BODY.any)
+      const response = await api(r.method, concrete(r.path, mine), otherOrganizationToken, BODY.any)
       expect(response.status, label(r)).toBe(404)
     }
   })
@@ -402,7 +402,7 @@ describe('les lectures (GET) ne modifient rien', () => {
   async function counts(): Promise<string> {
     const tables = [
       'user',
-      'club',
+      'organization',
       'session',
       'competition',
       'category',
@@ -452,9 +452,9 @@ describe('les lectures (GET) ne modifient rien', () => {
  * borner une requête à `competition_id`. `requireCompetitionAccess` protège le
  * `:id` du chemin ; rien ne protège un identifiant IMBRIQUÉ (`:competitorId`…)
  * ni une référence dans le CORPS, sauf chaque route elle-même. Ici, DEUX
- * compétitions du MÊME club : A1 est celle qu'on attaque, A2 celle qu'on vise.
+ * compétitions de la MÊME organisation : A1 est celle qu'on attaque, A2 celle qu'on vise.
  */
-describe('isolement entre deux compétitions du même club', () => {
+describe('isolement entre deux compétitions de la même organisation', () => {
   interface Victim {
     competitionId: string
     categoryId: string

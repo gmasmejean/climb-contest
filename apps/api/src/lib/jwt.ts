@@ -4,7 +4,7 @@ export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 
 export interface AccessTokenClaims {
   sub: string
-  clubId: string
+  organizationId: string
   role: 'owner' | 'organizer'
 }
 
@@ -24,7 +24,7 @@ export function createAccessTokenSigner(secret: string): AccessTokenSigner {
 
   return {
     async sign(claims) {
-      return new SignJWT({ clubId: claims.clubId, role: claims.role })
+      return new SignJWT({ organizationId: claims.organizationId, role: claims.role })
         .setProtectedHeader({ alg: 'HS256' })
         .setSubject(claims.sub)
         .setIssuedAt()
@@ -34,15 +34,15 @@ export function createAccessTokenSigner(secret: string): AccessTokenSigner {
     async verify(token) {
       // Seul HS256 est émis : seul HS256 est accepté (pas HS384/HS512, même avec le bon secret).
       const { payload } = await jwtVerify(token, key, { algorithms: ['HS256'] })
-      const { sub, clubId, role } = payload
+      const { sub, organizationId, role } = payload
       if (
         typeof sub !== 'string' ||
-        typeof clubId !== 'string' ||
+        typeof organizationId !== 'string' ||
         (role !== 'owner' && role !== 'organizer')
       ) {
         throw new InvalidAccessTokenError()
       }
-      return { sub, clubId, role }
+      return { sub, organizationId, role }
     },
   }
 }

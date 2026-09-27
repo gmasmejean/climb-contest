@@ -9,7 +9,7 @@ export const registerInputSchema = z.object({
   email: z.email(),
   password: passwordSchema,
   displayName: z.string().trim().min(1).max(120),
-  clubName: z.string().trim().min(1).max(120),
+  organizationName: z.string().trim().min(1).max(120),
 })
 export type RegisterInput = z.infer<typeof registerInputSchema>
 

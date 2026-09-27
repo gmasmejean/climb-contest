@@ -62,7 +62,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round", "category", "competitor" cascade`,
   )
 })
 
@@ -248,8 +248,8 @@ describe('POST /competitions/:id/categories/reorder', () => {
   })
 })
 
-describe('isolation multi-club', () => {
-  it("refuse d'accéder aux catégories d'une compétition d'un autre club", async () => {
+describe('isolation multi-organisation', () => {
+  it("refuse d'accéder aux catégories d'une compétition d'une autre organisation", async () => {
     const { competition } = await setup()
     const other = await registerLoggedInOrganizer(app, mailer)
 

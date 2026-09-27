@@ -232,7 +232,7 @@ const dateOrNull = (iso: string | null) => (iso ? new Date(iso) : null)
 export async function importBackup(
   db: Database,
   backup: CompetitionBackup,
-  importer: { clubId: string; userId: string },
+  importer: { organizationId: string; userId: string },
   now: Date,
 ): Promise<{ competitionId: string }> {
   const remap = new Map<string, string>()
@@ -264,7 +264,7 @@ export async function importBackup(
     const c = backup.competition
     await tx.insert(competition).values({
       id: competitionId,
-      clubId: importer.clubId,
+      organizationId: importer.organizationId,
       name: c.name,
       venue: c.venue,
       startsOn: c.startsOn,

@@ -36,7 +36,9 @@ const timestamps = {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }
 
-export const club = pgTable('club', {
+// ADR-086 : la structure organisatrice (club, salle ou autre). Anciennement
+// `club` ; le club d'affiliation d'un compétiteur reste `competitor.club_name`.
+export const organization = pgTable('organization', {
   id: id(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
@@ -47,9 +49,9 @@ export const user = pgTable(
   'user',
   {
     id: id(),
-    clubId: uuid('club_id')
+    organizationId: uuid('organization_id')
       .notNull()
-      .references(() => club.id),
+      .references(() => organization.id),
     email: text('email').notNull().unique(),
     // ADR-017 : null tant qu'une invitation n'a pas été acceptée.
     passwordHash: text('password_hash'),
@@ -91,9 +93,9 @@ export const competition = pgTable(
   'competition',
   {
     id: id(),
-    clubId: uuid('club_id')
+    organizationId: uuid('organization_id')
       .notNull()
-      .references(() => club.id),
+      .references(() => organization.id),
     name: text('name').notNull(),
     venue: text('venue').notNull(),
     startsOn: date('starts_on').notNull(),
@@ -586,9 +588,9 @@ export const competitionDeletionLog = pgTable(
   {
     id: id(),
     competitionId: uuid('competition_id').notNull(),
-    clubId: uuid('club_id')
+    organizationId: uuid('organization_id')
       .notNull()
-      .references(() => club.id),
+      .references(() => organization.id),
     competitionName: text('competition_name').notNull(),
     action: text('action').notNull(),
     actorUserId: uuid('actor_user_id')
@@ -601,6 +603,6 @@ export const competitionDeletionLog = pgTable(
       'competition_deletion_log_action_check',
       sql`${table.action} IN ('trashed', 'restored', 'deleted')`,
     ),
-    index('competition_deletion_log_club_id_idx').on(table.clubId, table.createdAt),
+    index('competition_deletion_log_organization_id_idx').on(table.organizationId, table.createdAt),
   ],
 )

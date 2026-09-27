@@ -9,7 +9,7 @@ describe('registerInputSchema', () => {
       email: 'alex@club-demo.test',
       password: 'un-mot-de-passe-solide',
       displayName: 'Alex Organisateur',
-      clubName: 'Club Démo',
+      organizationName: 'Club Démo',
     })
     expect(result.success).toBe(true)
   })
@@ -19,7 +19,7 @@ describe('registerInputSchema', () => {
       email: 'alex@club-demo.test',
       password: 'trop-court',
       displayName: 'Alex',
-      clubName: 'Club Démo',
+      organizationName: 'Club Démo',
     })
     expect(result.success).toBe(false)
   })
@@ -29,7 +29,7 @@ describe('registerInputSchema', () => {
       email: 'pas-un-email',
       password: 'un-mot-de-passe-solide',
       displayName: 'Alex',
-      clubName: 'Club Démo',
+      organizationName: 'Club Démo',
     })
     expect(result.success).toBe(false)
   })
@@ -53,7 +53,7 @@ describe('organizerSchema', () => {
   it('ne laisse jamais transiter le hash de mot de passe ou les jetons en attente', () => {
     const row = {
       id: '0189dcd5-5311-7d40-8db0-9496a2eef37b',
-      clubId: '0189dcd5-5311-7d40-8db0-9496a2eef370',
+      organizationId: '0189dcd5-5311-7d40-8db0-9496a2eef370',
       email: 'alex@club-demo.test',
       passwordHash: '$argon2id$secret',
       displayName: 'Alex',

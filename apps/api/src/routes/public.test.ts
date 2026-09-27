@@ -78,7 +78,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "ascent", "ascent_event", "judge", "judge_route" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "ascent", "ascent_event", "judge", "judge_route" cascade`,
   )
 })
 
@@ -183,7 +183,7 @@ describe('GET /public/:slug', () => {
     expect(response.status).toBe(200)
     const text = await response.text()
     expect(text).not.toContain('scoringConfig')
-    expect(text).not.toContain('clubId')
+    expect(text).not.toContain('organizationId')
     const body = JSON.parse(text) as { competition: { slug: string; format: string }; rounds: unknown[] }
     expect(body.competition.slug).toBe(fixture.competition.publicSlug)
     // Round implicite du contest jamais exposé (ADR-023).

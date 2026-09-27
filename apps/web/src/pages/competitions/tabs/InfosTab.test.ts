@@ -8,7 +8,7 @@ import InfosTab from './InfosTab.vue'
 
 const competition: Competition = {
   id: 'c1',
-  clubId: 'club1',
+  organizationId: 'club1',
   name: 'Coupe du club',
   venue: 'Salle Roc',
   startsOn: '2026-06-10',

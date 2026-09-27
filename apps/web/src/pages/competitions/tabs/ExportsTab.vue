@@ -170,7 +170,7 @@ async function purge(): Promise<void> {
         </p>
 
         <p v-if="!isOwner" class="text-sm text-gray-700">
-          Ces deux actions sont réservées au propriétaire du club.
+          Ces deux actions sont réservées au propriétaire de l’organisation.
         </p>
         <div v-else class="flex flex-wrap gap-3">
           <Button variant="secondary" :disabled="busy !== null" @click="downloadPersonalData">

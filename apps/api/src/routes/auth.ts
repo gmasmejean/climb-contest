@@ -9,9 +9,9 @@ import {
   type AuthResponse,
 } from '@climbcontest/contracts'
 import {
-  club,
   hashPassword,
   hashToken,
+  organization,
   randomToken,
   session,
   user,
@@ -72,7 +72,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
     })
     const accessToken = await accessTokenSigner.sign({
       sub: row.id,
-      clubId: row.clubId,
+      organizationId: row.organizationId,
       role: row.role === 'owner' ? 'owner' : 'organizer',
     })
     const response: AuthResponse = { accessToken, user: organizerSchema.parse(row) }
@@ -95,26 +95,26 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
         throw new ApiError(409, 'Compte existant', 'Un compte existe déjà avec cet e-mail.')
       }
 
-      const baseSlug = slugify(input.clubName) || 'club'
+      const baseSlug = slugify(input.organizationName) || 'organisation'
       let slug = baseSlug
-      let createdClub: typeof club.$inferSelect | undefined
-      for (let attempt = 0; attempt < 5 && !createdClub; attempt += 1) {
+      let createdOrganization: typeof organization.$inferSelect | undefined
+      for (let attempt = 0; attempt < 5 && !createdOrganization; attempt += 1) {
         try {
-          const [row] = await db.insert(club).values({ name: input.clubName, slug }).returning()
-          createdClub = row
+          const [row] = await db.insert(organization).values({ name: input.organizationName, slug }).returning()
+          createdOrganization = row
         } catch {
           slug = `${baseSlug}-${randomToken(4).toLowerCase()}`
         }
       }
-      if (!createdClub) {
-        throw new ApiError(500, 'Erreur interne', 'Impossible de créer le club.')
+      if (!createdOrganization) {
+        throw new ApiError(500, 'Erreur interne', 'Impossible de créer l’organisation.')
       }
 
       const verificationToken = randomToken(32)
       const [createdUser] = await db
         .insert(user)
         .values({
-          clubId: createdClub.id,
+          organizationId: createdOrganization.id,
           email: input.email,
           passwordHash: await hashPassword(input.password),
           displayName: input.displayName,
@@ -321,17 +321,17 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
         throw new ApiError(409, 'Compte existant', 'Un compte existe déjà avec cet e-mail.')
       }
 
-      const [inviter, currentClub] = await Promise.all([
+      const [inviter, currentOrganization] = await Promise.all([
         db.query.user.findFirst({ where: eq(user.id, organizer.sub) }),
-        db.query.club.findFirst({ where: eq(club.id, organizer.clubId) }),
+        db.query.organization.findFirst({ where: eq(organization.id, organizer.organizationId) }),
       ])
-      if (!inviter || !currentClub) {
+      if (!inviter || !currentOrganization) {
         throw new ApiError(401, 'Session invalide', 'Compte introuvable.')
       }
 
       const invitationToken = randomToken(32)
       await db.insert(user).values({
-        clubId: organizer.clubId,
+        organizationId: organizer.organizationId,
         email: input.email,
         displayName: input.displayName,
         role: input.role,
@@ -344,7 +344,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
       const acceptUrl = `${env.PUBLIC_APP_URL}/accept-invite?token=${invitationToken}`
       const { subject, html } = invitationEmail(
         input.displayName,
-        currentClub.name,
+        currentOrganization.name,
         inviter.displayName,
         acceptUrl,
       )

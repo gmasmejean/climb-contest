@@ -18,15 +18,15 @@ export function verificationEmail(
 
 export function invitationEmail(
   displayName: string,
-  clubName: string,
+  organizationName: string,
   inviterName: string,
   acceptUrl: string,
 ): { subject: string; html: string } {
   return {
-    subject: `${inviterName} vous invite à rejoindre ${clubName} sur ClimbContest`,
+    subject: `${inviterName} vous invite à rejoindre ${organizationName} sur ClimbContest`,
     html: `
       <p>Bonjour ${displayName},</p>
-      <p>${inviterName} vous invite à devenir organisateur du club « ${clubName} » sur ClimbContest.</p>
+      <p>${inviterName} vous invite à devenir organisateur de « ${organizationName} » sur ClimbContest.</p>
       <p>Définissez votre mot de passe en cliquant sur le lien ci-dessous :</p>
       <p><a href="${acceptUrl}">${acceptUrl}</a></p>
       <p>Ce lien est valable 7 jours.</p>

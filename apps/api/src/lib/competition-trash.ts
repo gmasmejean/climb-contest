@@ -103,7 +103,7 @@ export async function trashCompetition(
     }
     await tx.insert(competitionDeletionLog).values({
       competitionId: row.id,
-      clubId: row.clubId,
+      organizationId: row.organizationId,
       competitionName: row.name,
       action: 'trashed',
       actorUserId,
@@ -139,7 +139,7 @@ export async function restoreCompetition(
     }
     await tx.insert(competitionDeletionLog).values({
       competitionId: row.id,
-      clubId: row.clubId,
+      organizationId: row.organizationId,
       competitionName: row.name,
       action: 'restored',
       actorUserId,
@@ -248,7 +248,7 @@ export async function permanentlyDeleteCompetition(
 
     await tx.insert(competitionDeletionLog).values({
       competitionId,
-      clubId: current.clubId,
+      organizationId: current.organizationId,
       competitionName: current.name,
       action: 'deleted',
       actorUserId,

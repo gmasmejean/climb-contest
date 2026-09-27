@@ -5,7 +5,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createDatabase, type DatabaseHandle } from './client'
 import { applyPendingMigrations, revertLastMigrations } from './migrate-shared'
-import { ascent, asset, category, club, competition, competitor, round, route, user } from './schema'
+import {
+  ascent,
+  asset,
+  category,
+  competition,
+  competitor,
+  organization,
+  round,
+  route,
+  user,
+} from './schema'
 
 let container: StartedPostgreSqlContainer
 let handle: DatabaseHandle
@@ -31,23 +41,23 @@ afterAll(async () => {
   await container.stop()
 })
 
-async function insertClubAndUser() {
-  const [demoClub] = await handle.db
-    .insert(club)
+async function insertOrganizationAndUser() {
+  const [demoOrganization] = await handle.db
+    .insert(organization)
     .values({ name: 'Club Test', slug: `club-test-${crypto.randomUUID()}` })
     .returning()
-  if (!demoClub) throw new Error('club insert failed')
+  if (!demoOrganization) throw new Error('organization insert failed')
   const [demoUser] = await handle.db
     .insert(user)
     .values({
-      clubId: demoClub.id,
+      organizationId: demoOrganization.id,
       email: `${crypto.randomUUID()}@test.local`,
       displayName: 'Test',
       role: 'owner',
     })
     .returning()
   if (!demoUser) throw new Error('user insert failed')
-  return { demoClub, demoUser }
+  return { demoOrganization, demoUser }
 }
 
 describe('migrations', () => {
@@ -64,12 +74,12 @@ describe('migrations', () => {
         'asset',
         'asset_upload',
         'category',
-        'club',
         'competition',
         'competition_deletion_log',
         'competitor',
         'judge',
         'judge_route',
+        'organization',
         'round',
         'round_category',
         'round_qualifier',
@@ -261,23 +271,23 @@ describe('migration 0009_lot11_competition_deletion_log (ADR-063)', () => {
   }
 
   it('garde une trace même quand la compétition n’existe plus (pas de clé étrangère)', async () => {
-    const { demoClub, demoUser } = await insertClubAndUser()
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
     await handle.db.execute(sql`
-      insert into competition_deletion_log (id, competition_id, club_id, competition_name, action, actor_user_id)
-      values (gen_random_uuid(), gen_random_uuid(), ${demoClub.id}, 'Coupe supprimée', 'deleted', ${demoUser.id})
+      insert into competition_deletion_log (id, competition_id, organization_id, competition_name, action, actor_user_id)
+      values (gen_random_uuid(), gen_random_uuid(), ${demoOrganization.id}, 'Coupe supprimée', 'deleted', ${demoUser.id})
     `)
     const rows = await handle.db.execute(
-      sql`select action from competition_deletion_log where club_id = ${demoClub.id}`,
+      sql`select action from competition_deletion_log where organization_id = ${demoOrganization.id}`,
     )
     expect(rows.rows).toEqual([{ action: 'deleted' }])
   })
 
   it('refuse une action inconnue', async () => {
-    const { demoClub, demoUser } = await insertClubAndUser()
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
     await expect(
       handle.db.execute(sql`
-        insert into competition_deletion_log (id, competition_id, club_id, competition_name, action, actor_user_id)
-        values (gen_random_uuid(), gen_random_uuid(), ${demoClub.id}, 'Coupe', 'exploded', ${demoUser.id})
+        insert into competition_deletion_log (id, competition_id, organization_id, competition_name, action, actor_user_id)
+        values (gen_random_uuid(), gen_random_uuid(), ${demoOrganization.id}, 'Coupe', 'exploded', ${demoUser.id})
       `),
     ).rejects.toThrow()
   })
@@ -304,14 +314,15 @@ describe('migration 0009_lot11_competition_deletion_log (ADR-063)', () => {
 })
 
 describe('migration 0010_lot12_round_category (ADR-065)', () => {
-  // Deux catégories, trois tours : `open` (U16 + U18), `closed` (U16 seulement),
-  // `draft` (U18). Écrit avec `round.status`, donc AVANT la migration 0010.
-  async function seedOldSchemaRounds(client: pg.Client) {
-    const { demoClub, demoUser } = await insertClubAndUser()
+  // Compétition et catégories écrites par Drizzle, donc AVANT d'annuler les
+  // migrations : une fois 0014 annulée, la table s'appelle de nouveau `club` et
+  // le schéma Drizzle (`organization`) ne sait plus y écrire.
+  async function seedCompetitionAndCategories() {
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
     const [comp] = await handle.db
       .insert(competition)
       .values({
-        clubId: demoClub.id,
+        organizationId: demoOrganization.id,
         name: 'Migration 0010',
         venue: 'Salle',
         startsOn: '2026-01-01',
@@ -330,6 +341,16 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         { competitionId: comp.id, label: 'U18', sex: 'M', displayOrder: 1 },
       ])
       .returning()
+    if (!u16 || !u18) throw new Error('category insert failed')
+    return { comp, u16, u18 }
+  }
+
+  // Deux catégories, trois tours : `open` (U16 + U18), `closed` (U16 seulement),
+  // `draft` (U18). Écrit avec `round.status`, donc AVANT la migration 0010.
+  async function seedOldSchemaRounds(
+    client: pg.Client,
+    { comp, u16, u18 }: Awaited<ReturnType<typeof seedCompetitionAndCategories>>,
+  ) {
     // SQL brut : à ce stade 0011 est annulée, or le schéma Drizzle sait déjà
     // écrire `photo_asset_id` / `photo_holds`, colonnes qui n'existent pas encore.
     const routeInsert = await client.query<{ id: string }>(
@@ -337,14 +358,14 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
       [crypto.randomUUID(), comp.id],
     )
     const routeRow = routeInsert.rows[0]
-    if (!u16 || !u18 || !routeRow) throw new Error('fixture insert failed')
+    if (!routeRow) throw new Error('fixture insert failed')
 
     async function insertRound(order: number, type: string, status: string, categoryIds: string[]) {
       const roundId = crypto.randomUUID()
       await client.query(
         `insert into round (id, competition_id, type, style, display_order, status)
          values ($1, $2, $3, 'onsight', $4, $5)`,
-        [roundId, comp?.id, type, order, status],
+        [roundId, comp.id, type, order, status],
       )
       for (const categoryId of categoryIds) {
         await client.query(
@@ -361,17 +382,19 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
   }
 
   it('le up réplique l’ancien statut sur chaque catégorie du tour, le down garde `open` en priorité', async () => {
+    const fixture = await seedCompetitionAndCategories()
     await withRawClient(async (client) => {
-      // 0011 (Lot 15), 0012 (Lot 21) et 0013 (juge, ADR-081) ont été posées
-      // par-dessus 0010 : quatre crans. À réviser si une migration est ajoutée
-      // après 0013.
-      expect(await revertLastMigrations(client, 4)).toEqual([
+      // 0011 (Lot 15), 0012 (Lot 21), 0013 (juge, ADR-081) et 0014
+      // (organisation, ADR-086) ont été posées par-dessus 0010 : cinq crans.
+      // À réviser si une migration est ajoutée après 0014.
+      expect(await revertLastMigrations(client, 5)).toEqual([
+        '0014_lot23_rename_club_to_organization.sql',
         '0013_judge_email.sql',
         '0012_lot21_ascent_voided_at.sql',
         '0011_lot15_route_photo.sql',
         '0010_lot12_round_category.sql',
       ])
-      const { openId, closedId, draftId, u16, u18 } = await seedOldSchemaRounds(client)
+      const { openId, closedId, draftId, u16, u18 } = await seedOldSchemaRounds(client, fixture)
 
       await applyPendingMigrations(client)
       const { rows: migrated } = await client.query<{
@@ -400,7 +423,7 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
         [openId, u16.id],
       )
-      await revertLastMigrations(client, 4)
+      await revertLastMigrations(client, 5)
       const back = await client.query<{ id: string; status: string }>(
         'select id, status from round where id = any($1)',
         [[openId, closedId, draftId]],
@@ -419,11 +442,11 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
   })
 
   it('refuse un statut inconnu sur round_category', async () => {
-    const { demoClub, demoUser } = await insertClubAndUser()
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
     const [comp] = await handle.db
       .insert(competition)
       .values({
-        clubId: demoClub.id,
+        organizationId: demoOrganization.id,
         name: 'Statut inconnu',
         venue: 'Salle',
         startsOn: '2026-01-01',
@@ -456,11 +479,11 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
 
 describe('migration 0011_lot15_route_photo (ADR-066)', () => {
   async function seedRouteWithPhoto() {
-    const { demoClub, demoUser } = await insertClubAndUser()
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
     const [comp] = await handle.db
       .insert(competition)
       .values({
-        clubId: demoClub.id,
+        organizationId: demoOrganization.id,
         name: 'Migration 0011',
         venue: 'Salle',
         startsOn: '2026-01-01',
@@ -614,13 +637,65 @@ describe('migration 0013_judge_email (ADR-081)', () => {
   })
 })
 
+describe('migration 0014_lot23_rename_club_to_organization (ADR-086)', () => {
+  it('est réversible sans perte : le down rend `club` et `club_id`, le up les renomme de nouveau', async () => {
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
+    await withRawClient(async (client) => {
+      const tableExists = async (name: string) =>
+        (
+          await client.query(
+            "select 1 from information_schema.tables where table_schema = 'public' and table_name = $1",
+            [name],
+          )
+        ).rows.length === 1
+      const columnsNamed = async (name: string) =>
+        (
+          await client.query<{ table_name: string }>(
+            "select table_name from information_schema.columns where table_schema = 'public' and column_name = $1 order by table_name",
+            [name],
+          )
+        ).rows.map((row) => row.table_name)
+      const owningTables = ['competition', 'competition_deletion_log', 'user']
+
+      expect(await tableExists('organization')).toBe(true)
+      expect(await columnsNamed('organization_id')).toEqual(owningTables)
+
+      expect(await revertLastMigrations(client, 1)).toEqual([
+        '0014_lot23_rename_club_to_organization.sql',
+      ])
+      expect(await tableExists('organization')).toBe(false)
+      expect(await tableExists('club')).toBe(true)
+      expect(await columnsNamed('club_id')).toEqual(owningTables)
+      expect(await columnsNamed('organization_id')).toEqual([])
+      const kept = await client.query('select u.id from "user" u join club c on c.id = u.club_id where u.id = $1', [
+        demoUser.id,
+      ])
+      expect(kept.rows).toHaveLength(1)
+
+      await applyPendingMigrations(client)
+      expect(await tableExists('club')).toBe(false)
+      expect(await columnsNamed('organization_id')).toEqual(owningTables)
+      const constraints = await client.query<{ conname: string }>(
+        "select conname from pg_constraint where conname like '%club%' union all select indexname from pg_indexes where schemaname = 'public' and indexname like '%club%'",
+      )
+      expect(constraints.rows).toEqual([])
+    })
+
+    const [back] = await handle.db
+      .select()
+      .from(organization)
+      .where(sql`${organization.id} = ${demoOrganization.id}`)
+    expect(back?.slug).toBe(demoOrganization.slug)
+  })
+})
+
 describe('contraintes et colonne calculée ascent', () => {
   async function setupAscentFixture() {
-    const { demoClub, demoUser } = await insertClubAndUser()
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
     const [demoCompetition] = await handle.db
       .insert(competition)
       .values({
-        clubId: demoClub.id,
+        organizationId: demoOrganization.id,
         name: 'Comp',
         venue: 'Salle',
         startsOn: '2026-01-01',
@@ -738,11 +813,11 @@ describe('contraintes et colonne calculée ascent', () => {
 
 describe('unicité compétiteur', () => {
   it('refuse deux compétiteurs avec le même dossard dans la même compétition', async () => {
-    const { demoClub, demoUser } = await insertClubAndUser()
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
     const [demoCompetition] = await handle.db
       .insert(competition)
       .values({
-        clubId: demoClub.id,
+        organizationId: demoOrganization.id,
         name: 'Comp bib',
         venue: 'Salle',
         startsOn: '2026-01-01',
@@ -780,11 +855,11 @@ describe('unicité compétiteur', () => {
   })
 
   it('autorise plusieurs compétiteurs sans dossard (bib null) dans la même compétition (ADR-022)', async () => {
-    const { demoClub, demoUser } = await insertClubAndUser()
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
     const [demoCompetition] = await handle.db
       .insert(competition)
       .values({
-        clubId: demoClub.id,
+        organizationId: demoOrganization.id,
         name: 'Comp bib null',
         venue: 'Salle',
         startsOn: '2026-01-01',

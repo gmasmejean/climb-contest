@@ -23,7 +23,7 @@ export interface GdprRouteDeps {
 
 /**
  * Export et purge des données personnelles d'une compétition (ROADMAP.md
- * Lot 9, DECISIONS.md ADR-051) — réservés au PROPRIÉTAIRE du club : ce sont
+ * Lot 9, DECISIONS.md ADR-051) — réservés au PROPRIÉTAIRE de l'organisation : ce sont
  * des actions sur des données de mineurs, dont la dernière est irréversible.
  */
 export function createGdprRoutes(deps: GdprRouteDeps): Hono {

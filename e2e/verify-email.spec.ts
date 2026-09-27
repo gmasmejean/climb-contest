@@ -11,7 +11,7 @@ test('inscription, vérification par e-mail puis connexion', async ({ page, requ
   const password = 'un-mot-de-passe-solide'
 
   await page.goto('/register')
-  await page.getByLabel('Nom du club').fill('Club E2E Vérif')
+  await page.getByLabel("Nom de l'organisation").fill('Club E2E Vérif')
   await page.getByLabel('Votre nom').fill('E2E Testeur')
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Mot de passe').fill(password)

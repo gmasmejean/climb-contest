@@ -91,7 +91,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "club", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "asset", "asset_upload", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
+    sql`truncate table "user", "organization", "session", "competition", "round", "category", "competitor", "route", "route_category", "round_route", "asset", "asset_upload", "ascent", "ascent_event", "activity_log", "judge", "judge_route" cascade`,
   )
   await rm(storageRoot, { recursive: true, force: true })
 })
@@ -194,7 +194,7 @@ function purge(f: JudgeFixture, confirmName: string, token = f.organizerToken) {
   })
 }
 
-/** Un collègue du même club, rôle « organizer » (pas propriétaire). */
+/** Un collègue de la même organisation, rôle « organizer » (pas propriétaire). */
 async function colleagueToken(owner: JudgeFixture): Promise<string> {
   const email = `collegue-${crypto.randomUUID()}@club.test`
   await app.request('/api/v1/auth/invitations', {
@@ -281,7 +281,7 @@ describe('GET /competitions/:id/gdpr-export', () => {
     expect(body.retention.status).toBe('purge_due')
   })
 
-  it('est réservé au propriétaire : un collègue du club reçoit 403', async () => {
+  it('est réservé au propriétaire : un collègue de l’organisation reçoit 403', async () => {
     const { f } = await populated()
     const colleague = await colleagueToken(f)
     const response = await app.request(`${base(f)}/gdpr-export`, {
@@ -527,7 +527,7 @@ describe('DELETE /competitions/:id/personal-data', () => {
     expect(text).toContain('(données supprimées)')
   })
 
-  it('ne touche pas aux autres compétitions du même club', async () => {
+  it('ne touche pas aux autres compétitions de la même organisation', async () => {
     const { f } = await populated()
     const other = (await (
       await app.request('/api/v1/competitions', {
@@ -573,7 +573,7 @@ describe('DELETE /competitions/:id/personal-data', () => {
     expect(comp?.purgedAt).toBeNull()
   })
 
-  it('refuse à un autre club : 404, rien ne change', async () => {
+  it('refuse à une autre organisation : 404, rien ne change', async () => {
     const { f } = await populated()
     const other = await registerLoggedInOrganizer(app, mailer)
     const response = await purge(f, String(f.competition['name']), other.accessToken)

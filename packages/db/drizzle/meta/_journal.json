@@ -92,6 +92,13 @@
       "when": 1790074815756,
       "tag": "0013_judge_email",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0014_lot23_rename_club_to_organization",
+      "breakpoints": true
     }
   ]
 }

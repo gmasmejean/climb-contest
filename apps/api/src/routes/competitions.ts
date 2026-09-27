@@ -33,7 +33,7 @@ export interface CompetitionRouteDeps {
  * Longueur du `public_slug` (SPEC.md §6.4 : 22 caractères base62, non
  * devinable). `randomToken` a une telle entropie qu'une collision est
  * négligeable — pas de boucle de nouvelle tentative comme pour le slug
- * (lisible par un humain, donc bien plus collision-prone) du club dans
+ * (lisible par un humain, donc bien plus collision-prone) de l'organisation dans
  * `routes/auth.ts`.
  */
 const PUBLIC_SLUG_LENGTH = 22
@@ -66,7 +66,10 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
   app.get('/', async (c) => {
     const organizer = c.get('organizer')
     const rows = await db.query.competition.findMany({
-      where: and(eq(competition.clubId, organizer.clubId), isNull(competition.deletedAt)),
+      where: and(
+        eq(competition.organizationId, organizer.organizationId),
+        isNull(competition.deletedAt),
+      ),
       orderBy: [desc(competition.startsOn)],
     })
     return c.json(rows.map((row) => competitionSchema.parse(row)))
@@ -112,7 +115,7 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
         const [row] = await tx
           .insert(competition)
           .values({
-            clubId: organizer.clubId,
+            organizationId: organizer.organizationId,
             name: input.name,
             venue: input.venue,
             startsOn: input.startsOn,

@@ -23,7 +23,12 @@ async function registerAndVerifyOrganizer(request: APIRequestContext) {
   const password = 'un-mot-de-passe-solide'
   await apiJson(request, '/api/v1/auth/register', {
     method: 'POST',
-    data: { email, password, displayName: 'Pilote E2E', clubName: `Club pilotage ${Date.now()}` },
+    data: {
+      email,
+      password,
+      displayName: 'Pilote E2E',
+      organizationName: `Club pilotage ${Date.now()}`,
+    },
   })
 
   const messages = await request.get(`${MAILPIT_URL}/api/v1/messages?limit=1`).then((r) => r.json())

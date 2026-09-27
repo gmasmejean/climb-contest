@@ -3,7 +3,7 @@ import { z } from 'zod'
 /**
  * RGPD (ROADMAP.md Lot 9, DECISIONS.md ADR-051) : les compétiteurs sont
  * majoritairement mineurs. Export et purge sont MANUELS, réservés au
- * propriétaire du club ; l'application se contente de rappeler quand une
+ * propriétaire de l'organisation ; l'application se contente de rappeler quand une
  * compétition a dépassé la durée de conservation proposée.
  */
 
