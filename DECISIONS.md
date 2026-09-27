@@ -3562,6 +3562,60 @@ au fil des lots, pas avant : ce qui est écrit dans la spec doit exister.
 
 ---
 
+## ADR-087 — Membres de l'organisation : invitations, rôles, désactivation
+
+**Date :** 2026-09-27
+**Contexte :** Lot 24 (ROADMAP.md), cadré par ADR-086 points 6 à 8. L'API savait créer et
+accepter une invitation, mais aucun écran ne s'en servait ; rien ne permettait de relancer ou
+d'annuler une invitation, de changer un rôle, ni de retirer l'accès d'un membre parti.
+
+**Décision :**
+
+1. **Routes** sous `/api/v1/organization`, toutes derrière `requireOrganizer` :
+   `GET /members` (tout membre) ; réservées aux owners : `POST` et `DELETE
+   /members/:memberId/invitation` (relancer, annuler), `PATCH /members/:memberId` (rôle),
+   `POST /members/:memberId/deactivate` et `/reactivate`. L'invitation elle-même reste
+   `POST /auth/invitations` (inchangée hors messages d'erreur), l'acceptation `POST
+   /auth/invitations/accept`.
+2. **Statut d'un membre, calculé, jamais stocké** : `invited` (pas encore de mot de passe, jeton
+   valable), `invitation_expired`, `active`, `deactivated` (`user.deactivated_at` non nul).
+3. **Relancer une invitation** émet un nouveau jeton de 7 jours : l'ancien lien ne vaut plus.
+4. **Annuler une invitation supprime la ligne `user`** jamais activée. Ce compte n'a ni mot de
+   passe, ni session, ni compétition, ni saisie : rien d'autre ne le référence. C'est ce qui rend
+   l'annulation réversible : la même adresse peut être invitée de nouveau. La trace reste dans le
+   journal des membres (point 7).
+5. **Désactiver n'est possible que pour un compte activé, et jamais pour soi-même.** Une
+   invitation en attente s'annule, elle ne se désactive pas. La désactivation révoque toutes les
+   sessions ; la connexion (après vérification du mot de passe, pour ne rien révéler sans lui) et
+   le refresh la refusent, avec un message qui dit à qui s'adresser. Le jeton d'accès en cours
+   reste valable jusqu'à son expiration (15 min, ADR-086 point 8).
+6. **Le dernier owner actif** ne peut être ni rétrogradé ni désactivé. La vérification se fait
+   dans une transaction qui verrouille (`FOR UPDATE`) les membres de l'organisation : deux owners
+   qui se rétrogradent l'un l'autre au même instant ne laissent pas l'organisation sans owner.
+7. **Journal des membres** : table `organization_member_log` (qui, sur qui, quoi, quand ; pour un
+   changement de rôle, l'ancien et le nouveau). Le journal d'activité existant ne convient pas :
+   il est rattaché à une compétition. `target_user_id` n'a pas de clé étrangère, pour survivre à
+   une invitation annulée ; l'e-mail et le nom de la cible y sont recopiés. Pas d'écran de
+   lecture dans ce lot (même choix que `competition_deletion_log`) → `TODO.md`.
+8. **Les droits d'owner sont revérifiés en base** : `requireOwner` relit le rôle et la
+   désactivation du compte au lieu de faire confiance au jeton. Une rétrogradation prend donc
+   effet tout de suite sur les actions sensibles (membres, invitations, export et purge RGPD). Ce
+   ne sont que quelques routes, peu appelées : une lecture de plus ne coûte rien.
+9. **Adresse déjà prise** : message distinct selon qu'elle appartient déjà à l'organisation
+   (« … fait déjà partie de votre organisation », avec « réactivez son compte » s'il est
+   désactivé) ou à une autre (« une personne ne peut appartenir qu'à une seule organisation »,
+   ADR-086 point 2). Un owner apprend donc qu'une adresse a un compte ailleurs : c'était déjà le
+   cas avant (409 « Un compte existe déjà »).
+10. **Écrans** : `/organization/members`, atteint depuis le menu organisateur (« Membres de
+    l'organisation »). Un organizer voit la liste sans les actions. L'owner ne voit pas d'action
+    sur sa propre ligne : il se rétrograde en passant par un autre owner, ce qui évite de perdre
+    la page par mégarde. Annuler une invitation et désactiver demandent une confirmation.
+    `/accept-invite?token=` : le jeton est retiré de l'adresse au chargement, l'invité choisit son
+    mot de passe, est connecté et arrive sur ses compétitions. Page ouverte même connecté :
+    accepter remplace la session.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

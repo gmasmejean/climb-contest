@@ -421,6 +421,17 @@ ADR-066.
   - **Le journal est un tableau triable**, avec un filtre par dates en plus du type et de
     l'acteur ; le détail brut n'apparaît qu'au-delà de 1280 px.
 
+## Membres de l'organisation
+
+Menu → **Membres de l'organisation** (`/organization/members`). Chaque compte y
+apparaît avec son rôle et son statut. Un **propriétaire** invite un membre (nom,
+e-mail, rôle) : la personne reçoit un lien valable 7 jours, choisit son mot de
+passe sur `/accept-invite` et retrouve toutes les compétitions de
+l'organisation. Il peut relancer ou annuler une invitation, changer un rôle,
+désactiver un compte (connexion refusée, sessions fermées, rien n'est effacé) et
+le réactiver. L'organisation garde toujours au moins un propriétaire actif, et
+personne ne désactive son propre compte (ADR-087).
+
 ## Liste des compétitions et corbeille
 
 La connexion mène directement à **Mes compétitions** (`/competitions`,

@@ -786,7 +786,12 @@ client se rattrape par refresh : testé. Glossaire de SPEC.md mis à jour
 (« Organisation » ajoutée, « Club » redéfini).
 ```
 
-### Lot 24 — Membres de l'organisation (à faire)
+### Lot 24 — Membres de l'organisation (livré)
+
+> Livré le 2026-09-27 sur la branche `lot-24-membres`. Décision : ADR-087. Écarts au cadrage :
+> l'invitation reste `POST /auth/invitations` (les autres routes sont sous
+> `/api/v1/organization/members`) ; annuler une invitation supprime le compte jamais activé,
+> pour que l'adresse puisse être réinvitée ; `requireOwner` relit désormais le rôle en base.
 
 ```
 Lot 24 : écran « Organisation › Membres » (depuis OrganizerMenu) : liste des
