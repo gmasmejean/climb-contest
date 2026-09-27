@@ -91,6 +91,15 @@ sessions et refuse la connexion, sans rien effacer ; c'est réversible. L'invit�
 active son compte depuis le lien reçu (`/accept-invite`) en choisissant son mot
 de passe.
 
+**Fiche de l'organisation (ADR-088, Lot 25) :** type (club, salle ou autre, demandé
+à l'inscription), description, contact public (e-mail, téléphone, site en `https`)
+et adresse. L'adresse s'autocomplète par la Base Adresse Nationale ; choisir une
+proposition la localise (carte), une saisie libre est gardée telle quelle, sans
+carte. Seul un `owner` la modifie ; tout membre la lit. Elle s'affiche en encart,
+sous le classement, sur la page publique de chaque compétition de l'organisation.
+Le contact est public : le formulaire le rappelle, pour qu'on n'y mette pas les
+coordonnées personnelles d'un bénévole.
+
 Il peut :
 
 **Préparer**
@@ -354,7 +363,12 @@ métier, jamais de `DELETE` physique sur des données de compétition.
 
 ```
 organization                           -- ADR-086 : anciennement `club`
-  id, name, slug, created_at
+  id, name, slug, type ('club' | 'gym' | 'other', ADR-088), description (nullable),
+  contact_email, contact_phone, website_url (nullables, publics),
+  address_label, postcode, city, latitude, longitude, ban_id
+                                       -- adresse : libellé seul (saisie libre) ou
+                                       -- résultat BAN complet ; tout nul sans libellé
+  created_at
 
 user                                   -- organisateurs uniquement
   id, organization_id → organization, email (unique), password_hash (nullable),
@@ -735,6 +749,9 @@ POST   /auth/logout
 POST   /auth/invitations                 { email, displayName, role } — owner
 POST   /auth/invitations/accept          { token, password }
 
+GET    /organization                     fiche de l'organisation, tout membre — Lot 25, ADR-088
+PATCH  /organization                     { name?, type?, description?, contactEmail?,
+                                           contactPhone?, websiteUrl?, address? } — owner
 GET    /organization/members             tout membre — Lot 24, ADR-087
 POST   /organization/members/:memberId/invitation   relancer (nouveau lien) — owner
 DELETE /organization/members/:memberId/invitation   annuler — owner
@@ -848,7 +865,8 @@ GET    /judge/me                         identité + voies du juge authentifié
 GET    /judge/bootstrap                  tout ce dont le juge a besoin, en un appel
 POST   /judge/ascents/batch              [{ id, ... }] → état par élément
 
-GET    /public/:slug                     métadonnées de la compétition
+GET    /public/:slug                     métadonnées de la compétition, et encart
+                                         `organization` (sans identifiant, ADR-088)
 GET    /public/:slug/rankings?category=  classement publié
 GET    /public/:slug/routes?category=
 GET    /public/:slug/routes/:rid/video   vidéo téléversée, avec Range (Lot 9)

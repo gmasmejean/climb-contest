@@ -219,7 +219,8 @@ La charte aquarelle de l'accueil s'applique à toute l'application (ADR-071).
 
 `/c/<slug>` (sans authentification) affiche le classement d'une catégorie,
 la liste des voies (avec lecteur vidéo YouTube/Vimeo intégré si
-reconnu), et l'état de chaque tour en format phases. `/c/<slug>/salle` est
+reconnu), l'état de chaque tour en format phases, et, en dessous, la fiche de
+l'organisation (voir plus bas). `/c/<slug>/salle` est
 une variante plein écran, gros caractères, qui défile automatiquement d'une
 catégorie à l'autre — à brancher sur le vidéoprojecteur de la salle.
 
@@ -431,6 +432,24 @@ l'organisation. Il peut relancer ou annuler une invitation, changer un rôle,
 désactiver un compte (connexion refusée, sessions fermées, rien n'est effacé) et
 le réactiver. L'organisation garde toujours au moins un propriétaire actif, et
 personne ne désactive son propre compte (ADR-087).
+
+## Fiche de l'organisation
+
+Menu → **Fiche de l'organisation** (`/organization`). Un **propriétaire** y renseigne
+le type (club, salle ou autre), une description, l'adresse et un contact public
+(e-mail, téléphone, site web) ; les autres membres voient la fiche telle que le
+public la verra. Elle apparaît en encart, sous le classement, sur la page publique de
+chaque compétition (ADR-088).
+
+- **Adresse** : autocomplétée par la Base Adresse Nationale
+  (`data.geopf.fr/geocodage`, appelée depuis le navigateur, France seulement).
+  Choisir une proposition affiche une carte ; une adresse tapée sans choisir (ou
+  quand le service ne répond pas) est gardée telle quelle, sans carte.
+- **Carte** : Leaflet sur les tuiles Plan IGN (`data.geopf.fr/wmts`), chargée
+  seulement sur les écrans qui en montrent une, hors précache du service worker.
+  Hors ligne, l'adresse reste affichée avec le lien « Itinéraire » (Google Maps).
+- **CSP** : `connect-src` et `img-src` n'ouvrent que `https://data.geopf.fr`
+  (`infra/docker/Caddyfile`).
 
 ## Liste des compétitions et corbeille
 

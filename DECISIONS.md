@@ -3518,11 +3518,11 @@ Décisions prises en conversation, découpées en cinq lots (ROADMAP.md, Lots 23
 
 **À vérifier pendant les lots (non certain au moment d'écrire) :**
 
-- l'URL exacte du service BAN : `api-adresse.data.gouv.fr` migre vers la Géoplateforme
-  (`data.geopf.fr/geocodage`) ;
-- les conditions d'usage et l'attribution exacte des tuiles IGN Plan v2 ;
-- que la règle `CacheFirst` des images du service worker (`apps/web/vite.config.ts`) ne capture
-  pas les tuiles d'un autre domaine ;
+- ~~l'URL exacte du service BAN~~ vérifié au Lot 25 (ADR-088) : `data.geopf.fr/geocodage` ;
+- ~~les conditions d'usage et l'attribution exacte des tuiles IGN Plan v2~~ vérifié au Lot 25
+  (ADR-088) : Licence Ouverte, sans clé ni limite, source citée ;
+- ~~que la règle `CacheFirst` des images du service worker ne capture pas les tuiles d'un autre
+  domaine~~ elle les capturait : restreinte au même domaine au Lot 25 (ADR-088) ;
 - `drizzle-kit generate` pose une question interactive face à un renommage : le SQL du Lot 23
   sera probablement écrit à la main, le snapshot régénéré ensuite.
 
@@ -3613,6 +3613,103 @@ d'annuler une invitation, de changer un rôle, ni de retirer l'accès d'un membr
     `/accept-invite?token=` : le jeton est retiré de l'adresse au chargement, l'invité choisit son
     mot de passe, est connecté et arrive sur ses compétitions. Page ouverte même connecté :
     accepter remplace la session.
+
+---
+
+## ADR-088 — Fiche de l'organisation : champs, adresse BAN, carte IGN
+
+**Date :** 2026-09-27
+**Contexte :** Lot 25 (ROADMAP.md), cadré par ADR-086 points 3 à 5 et 10. Les deux points « à
+vérifier » d'ADR-086 sur le géocodage et les tuiles sont levés ici.
+
+**Vérifications faites (2026-09-27) :**
+
+- `api-adresse.data.gouv.fr` répond désormais par une redirection vers
+  `https://data.geopf.fr/geocodage/search` (Géoplateforme de l'IGN). On appelle directement
+  cette adresse. Pas de clé, CORS ouvert (`Access-Control-Allow-Origin: *`), limite de
+  **50 requêtes/s par adresse IP** (réponse 429 avec `Retry-After` au-delà). La requête doit
+  faire entre 3 et 200 caractères et commencer par une lettre ou un chiffre (sinon 400).
+- Tuiles **Plan IGN v2** en WMTS sur le même domaine
+  (`https://data.geopf.fr/wmts?…LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2…TILEMATRIXSET=PM…`) :
+  sans clé, **non soumises à limite d'usage**, sous Licence Ouverte Etalab 2.0 (conditions
+  générales de cartes.gouv.fr). La licence demande de citer la source : attribution « © IGN –
+  Plan IGN » avec lien, plus Leaflet.
+- La règle `CacheFirst` des images du service worker (`vite.config.ts`) visait toutes les
+  images, **y compris celles d'un autre domaine** : elle aurait mis en cache les tuiles. Elle
+  est restreinte au même domaine (`sameOrigin`) ; aujourd'hui aucune image, police, feuille de
+  style ou script ne vient d'ailleurs, donc rien d'autre ne change.
+
+**Décision :**
+
+1. **Colonnes sur `organization`** : `type` (`'club' | 'gym' | 'other'`, `NOT NULL DEFAULT
+   'club'`, CHECK ; les organisations existantes deviennent des clubs), `description`
+   (≤ 2 000 caractères), `contact_email`, `contact_phone`, `website_url`, et l'adresse
+   `address_label`, `postcode`, `city`, `latitude`, `longitude`, `ban_id`. Toutes facultatives.
+   CHECK en base : latitude et longitude sont nulles ensemble ou renseignées ensemble, et dans
+   leurs bornes ; une adresse sans libellé n'a ni code postal, ni ville, ni coordonnées.
+2. **Une adresse = un libellé, avec ou sans position.** Choisir une proposition de la BAN
+   remplit tout (libellé, code postal, ville, coordonnées, identifiant). Taper une adresse sans
+   choisir de proposition, ou quand le service ne répond pas, enregistre **le libellé seul** :
+   pas de carte, mais l'adresse s'affiche et le lien « Itinéraire » cherche ce texte. La saisie
+   n'est jamais bloquée par le service. `ban_id` garde l'identifiant `id` du résultat (clé
+   d'interopérabilité, présente sur tous les types de résultat).
+3. **Le même contrat d'adresse (`addressSchema`) sert à l'organisation** et servira au lieu des
+   compétitions (Lot 26). Le public en reçoit une version sans `ban_id`.
+4. **Validation** : e-mail valide ; téléphone de 6 à 30 caractères parmi chiffres, espaces,
+   `+ . - ( )`, avec au moins 6 chiffres (pas de format imposé : le club peut être frontalier) ;
+   site en `https://` seulement (un site sans préfixe reçoit `https://` dans le formulaire ; un
+   `http://` est refusé avec un message qui dit quoi faire) ; description de 2 000 caractères
+   au plus. Un champ vidé vaut `null`.
+5. **Routes** : `GET /api/v1/organization` (tout membre, pour l'écran de lecture) et `PATCH
+   /api/v1/organization` (owner, rôle relu en base par `requireOwner`, ADR-087 point 8).
+   Pas de journal des modifications de la fiche : elle ne touche ni aux droits ni aux résultats.
+6. **L'inscription demande le type** (« Club / Salle / Autre »), présélectionné sur « Club ».
+7. **Encart public** : `GET /public/:slug` renvoie un bloc `organization` à côté de
+   `competition` (nom, type, description, contact, site, adresse sans `ban_id`), schéma écrit
+   à la main et strict comme le reste du contrat public. Affiché **sous** le classement et les
+   voies : le spectateur vient d'abord pour les résultats.
+8. **Géocodage depuis le navigateur** (ADR-086 point 10) : 300 ms après la dernière frappe,
+   3 caractères au moins, 5 propositions, requête précédente annulée, réponse validée par un
+   schéma Zod (donnée externe, frontière comme une autre). Combobox au sens ARIA 1.2
+   (`role="combobox"`, liste `listbox`, flèches, Entrée, Échap), propositions de 48 px.
+   Panne, 429 ou hors ligne : « Le service d'adresses ne répond pas. Votre adresse sera
+   enregistrée telle que vous l'avez écrite, sans carte. »
+9. **Carte** : Leaflet 1.9.4, chargé à la demande depuis le seul composant de carte. Son
+   fichier n'est **pas précaché** par le service worker (même règle que les visuels de
+   l'accueil, ADR-070) : il est mis en cache à la première carte affichée. Point rond au lieu
+   de l'icône image de Leaflet (pas de fichier à servir). Sur mobile, un doigt fait défiler la
+   page, pas la carte (`dragging` désactivé au toucher, pas de zoom à la molette). Hors ligne
+   ou tuiles en échec : la carte laisse place à l'adresse en texte.
+10. **« Itinéraire »** ouvre Google Maps en lien universel
+    (`https://www.google.com/maps/dir/?api=1&destination=…`, coordonnées si on les a, sinon le
+    libellé) : il ouvre l'application installée sur Android comme sur iPhone, et le site
+    ailleurs. C'est un simple lien, rien n'est chargé depuis Google dans nos pages.
+11. **CSP** : `connect-src 'self' https://data.geopf.fr` et `img-src 'self' data: blob:
+    https://data.geopf.fr`. Rien d'autre ne s'ouvre.
+12. **Écran `/organization`** (« Fiche de l'organisation » dans le menu) : l'owner édite, un
+    organizer voit la fiche telle que le public la verra, avec la mention que seul un
+    propriétaire la modifie. Avertissement au-dessus du contact : « Ces coordonnées seront
+    visibles de tous sur la page publique de vos compétitions. Préférez l'adresse et le
+    téléphone du club à ceux d'un bénévole. »
+
+**Mise en œuvre (2026-09-27) :**
+
+- Les boutons de zoom de Leaflet passent à 48 px (30 px d'origine sur écran tactile) et
+  reçoivent des titres français (« Zoom avant », « Zoom arrière »). L'attribution reste un petit
+  texte de licence, pas une commande.
+- Le fichier de Leaflet (150 Ko, 44 Ko compressé) reste hors du précache, vérifié dans le
+  `sw.js` construit ; le précache grossit de 19 Kio pour les nouveaux écrans.
+- L'e2e intercepte les appels à la Géoplateforme (réponse BAN réelle enregistrée, tuile
+  factice) : Chromium applique la CSP **avant** l'interception (vérifié : un domaine non autorisé
+  intercepté reste bloqué), donc le parcours prouve aussi que la CSP laisse passer les deux
+  usages. Vérifié en plus à la main contre les vrais services, à 360 et 1 440 px.
+- Zod déclenche au démarrage une violation `script-src eval`, déjà présente avant ce lot et sans
+  effet → `TODO.md`.
+
+**Conséquences :** migration `0016`, réversible (le down supprime les colonnes : la fiche saisie
+est perdue, comme toute donnée d'une colonne supprimée). Un spectateur hors ligne voit l'encart
+sans carte. Une ancienne version de l'appli restée ouverte enverrait une inscription sans
+type → erreur de validation, rattrapée au rechargement (même situation qu'au Lot 23).
 
 ---
 
