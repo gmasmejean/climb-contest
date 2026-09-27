@@ -65,6 +65,9 @@ export const user = pgTable(
     pendingTokenHash: text('pending_token_hash'),
     pendingTokenPurpose: text('pending_token_purpose'),
     pendingTokenExpiresAt: timestamp('pending_token_expires_at', { withTimezone: true }),
+    // ADR-087 : non nul = compte désactivé par un owner (connexion et refresh
+    // refusés). Réversible : la réactivation remet null.
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
@@ -572,6 +575,38 @@ export const activityLog = pgTable(
     ),
     check('activity_log_actor_type_check', sql`${table.actorType} IN ('organizer', 'system')`),
     index('activity_log_competition_id_idx').on(table.competitionId),
+  ],
+)
+
+/**
+ * Lot 24 (ADR-087) — trace des actions d'un owner sur les membres de son
+ * organisation. `target_user_id` sans clé étrangère : une invitation annulée
+ * supprime la ligne `user`, la trace doit lui survivre (e-mail et nom recopiés).
+ */
+export const organizationMemberLog = pgTable(
+  'organization_member_log',
+  {
+    id: id(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organization.id),
+    actorUserId: uuid('actor_user_id')
+      .notNull()
+      .references(() => user.id),
+    targetUserId: uuid('target_user_id').notNull(),
+    targetEmail: text('target_email').notNull(),
+    targetDisplayName: text('target_display_name').notNull(),
+    action: text('action').notNull(),
+    // Changement de rôle : { from, to }. Vide pour les autres actions.
+    details: jsonb('details').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'organization_member_log_action_check',
+      sql`${table.action} IN ('invited', 'invitation_resent', 'invitation_cancelled', 'role_changed', 'deactivated', 'reactivated')`,
+    ),
+    index('organization_member_log_organization_id_idx').on(table.organizationId, table.createdAt),
   ],
 )
 
