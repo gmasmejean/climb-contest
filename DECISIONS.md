@@ -3533,6 +3533,33 @@ invité ne peut pas activer son compte) et ne dépend de rien d'autre que du ren
 réutilise les composants d'adresse et de carte du Lot 25. SPEC.md (§1, §3.1, §5) sera mis à jour
 au fil des lots, pas avant : ce qui est écrit dans la spec doit exister.
 
+**Mise en œuvre du Lot 23 (renommage, 2026-09-27) :**
+
+- **Migration `0014_lot23_rename_club_to_organization`**, écrite à la main : `RENAME` de la
+  table, des trois colonnes `club_id` (`user`, `competition`, `competition_deletion_log`), de la
+  clé primaire, de la contrainte d'unicité du slug, des trois clés étrangères et de l'index, aux
+  noms exacts que Drizzle génère. Aucune donnée ne bouge ; le down fait l'inverse, testé up → down
+  → up sans perte (et plus aucun nom en `club` dans `pg_constraint` ni `pg_indexes`). Le snapshot
+  Drizzle 0014 est dérivé du 0013 par script (la commande `generate` pose une question
+  interactive sur les renommages) ; `drizzle-kit generate` répond ensuite « No schema changes ».
+- **Claim JWT `organizationId`.** Un jeton émis avant le déploiement (claim `clubId`) est refusé
+  comme invalide → 401 → le client refait un refresh (`apiFetch`), qui émet un jeton neuf depuis
+  la base : au pire une requête de plus dans les 15 minutes qui suivent. Testé côté API (401 puis
+  refresh puis 200). Le web ne lit jamais `organizationId` : les réponses mises en cache par le
+  service worker avec l'ancien nom de champ sont sans effet.
+- **Inscription** : le champ `clubName` devient `organizationName` (« Nom de l'organisation »,
+  avec l'aide « Votre club, votre salle ou la structure qui organise. »). Une ancienne version
+  de l'appli restée ouverte enverrait `clubName` et recevrait une erreur de validation : accepté,
+  l'inscription est rare et la page se met à jour au rechargement (Lot 10).
+- **Textes** : « propriétaire de l'organisation » (message 403, onglet Exports), e-mail
+  d'invitation « organisateur de « Nom » ». Les tests et commentaires qui parlent de l'isolement
+  entre structures disent « organisation ».
+- **Laissés tels quels, volontairement** : le club d'affiliation du compétiteur (colonne
+  `club_name`, champ public `club`, colonne `club` des exports CSV/PDF et de l'import CSV,
+  `clubName` de la sauvegarde JSON) ; le slug `club-demo` et les adresses `@club-demo.test` du
+  seed et des tests (ce sont des données : l'organisation de démonstration est un club) ; les
+  commentaires où « club » désigne un vrai club (« une compétition de club »).
+
 ---
 
 ## Points encore ouverts (non tranchés dans ce Lot 0)

@@ -289,7 +289,7 @@ toujours facultatif) se change depuis l'onglet Compétiteurs. Voir
 ## Données personnelles (RGPD)
 
 Les compétiteurs sont souvent mineurs. Dans l'onglet **Exports**, le
-**propriétaire** du club peut exporter tout ce qui identifie une personne, puis
+**propriétaire** de l'organisation peut exporter tout ce qui identifie une personne, puis
 **supprimer** les données personnelles d'une compétition : noms, années de
 naissance, clubs, licences, vidéos, photos de voie et motifs saisis. Les résultats restent, sans
 personne derrière ; la ligne de la compétition reste comme trace de la purge.
@@ -439,7 +439,7 @@ Supprimer se fait **en deux temps** (ADR-063). **Sélectionner**, cocher, puis
 compétition « En cours ». La page **Corbeille** permet de **restaurer**, ou de
 **supprimer définitivement** (une confirmation) : fichiers et lignes de toute la
 compétition disparaissent, seule une trace sans donnée personnelle reste
-(`competition_deletion_log`). Tout organisateur du club peut le faire. Une
+(`competition_deletion_log`). Tout organisateur de l'organisation peut le faire. Une
 compétition à la corbeille n'est plus accessible aux juges ni au public ; les
 saisies d'un juge restent dans son téléphone et remontent après restauration. Rien
 n'est supprimé automatiquement. La purge RGPD (ci-dessus) est une autre action.

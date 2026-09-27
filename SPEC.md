@@ -16,7 +16,8 @@ la colonne « Terme métier ». Aucun synonyme n'est introduit ailleurs.
 
 | Terme métier (FR)   | Terme code (EN) | Définition                                                               |
 | ------------------- | --------------- | ------------------------------------------------------------------------ |
-| Club                | `club`          | Structure organisatrice. Possède des utilisateurs et des compétitions.   |
+| Organisation        | `organization`  | Structure organisatrice (club, salle ou autre). Possède des utilisateurs et des compétitions (ADR-086). |
+| Club                | `club`          | Club d'affiliation d'un compétiteur (texte libre, `competitor.club_name`). Ce n'est pas l'organisation. |
 | Compétition         | `competition`   | Un événement, à une date, dans un lieu.                                  |
 | Catégorie           | `category`      | Groupe de compétiteurs comparés entre eux (ex. « U16 Femme »).           |
 | Compétiteur         | `competitor`    | Une personne inscrite, rattachée à exactement une catégorie.             |
@@ -68,23 +69,25 @@ la colonne « Terme métier ». Aucun synonyme n'est introduit ailleurs.
 
 ### 3.1 Organisateur
 
-Compte nominatif (e-mail + mot de passe), rattaché à un club.
+Compte nominatif (e-mail + mot de passe), rattaché à une seule organisation
+(ADR-086).
 
 **Inscription (ADR-017, Lot 1) :** ouverte à tous — n'importe qui peut créer
-un compte via `/register`, ce qui crée à la fois un nouveau club et son
+un compte via `/register`, ce qui crée à la fois une nouvelle organisation et son
 premier compte (`role = 'owner'`). Le compte est activé après validation de
-l'e-mail (lien envoyé, valable 24 h). Les comptes supplémentaires d'un même
-club sont créés par invitation d'un `owner` (lien envoyé par e-mail, valable
+l'e-mail (lien envoyé, valable 24 h). Les comptes supplémentaires d'une même
+organisation sont créés par invitation d'un `owner` (lien envoyé par e-mail, valable
 7 jours, qui sert à la fois de preuve de possession de l'e-mail et de moyen
-de définir le mot de passe). Validation admin des créations de club et zone
-publique de recherche club/compétition : besoins identifiés, pas dans le
+de définir le mot de passe). Validation admin des créations d'organisation et
+zone publique de recherche organisation/compétition : besoins identifiés, pas dans le
 périmètre actuel (voir `TODO.md`).
 
 Il peut :
 
 **Préparer**
 
-- créer une compétition : nom, date(s), lieu, club, format (contest ou phases) ;
+- créer une compétition : nom, date(s), lieu, format (contest ou phases) —
+  elle appartient à l'organisation de l'organisateur ;
 - définir les catégories, soit depuis un modèle prédéfini (FFME jeunes : U12,
   U14, U16, U18, U20, Senior, Vétéran × Homme/Femme), soit en libre ;
 - saisir les compétiteurs un par un, ou les importer en masse depuis un CSV
@@ -341,11 +344,11 @@ l'index et pour la génération côté client hors ligne). Toutes les tables ont
 métier, jamais de `DELETE` physique sur des données de compétition.
 
 ```
-club
+organization                           -- ADR-086 : anciennement `club`
   id, name, slug, created_at
 
 user                                   -- organisateurs uniquement
-  id, club_id → club, email (unique), password_hash (nullable),
+  id, organization_id → organization, email (unique), password_hash (nullable),
   display_name, role ('owner' | 'organizer'), last_login_at
   email_verified_at (nullable)          -- ADR-017 : null = connexion refusée
   invited_by_user_id (nullable) → user
@@ -355,7 +358,7 @@ user                                   -- organisateurs uniquement
   pending_token_expires_at (nullable)
 
 competition
-  id, club_id → club
+  id, organization_id → organization
   name, venue, starts_on, ends_on
   discipline ('difficulty')             -- extensible : 'boulder', 'speed'
   format ('contest' | 'phases')
@@ -378,7 +381,7 @@ competition
                                          -- accès juge et public coupés
 
 competition_deletion_log                -- Lot 11, ADR-063 : trace qui survit
-  id, competition_id (uuid, PAS de FK), club_id → club,
+  id, competition_id (uuid, PAS de FK), organization_id → organization,
   competition_name, action ('trashed' | 'restored' | 'deleted'),
   actor_user_id → user, created_at
 
@@ -719,7 +722,7 @@ GET    /competitions/:id
 PATCH  /competitions/:id
 POST   /competitions/:id/status          { status }
 DELETE /competitions/:id                 met à la corbeille (409 si « En cours ») — Lot 11
-GET    /competitions/trash               la corbeille du club (déclarée avant /:id)
+GET    /competitions/trash               la corbeille de l'organisation (déclarée avant /:id)
 POST   /competitions/:id/restore         sort de la corbeille (idempotent)
 DELETE /competitions/:id/permanent       supprime tout — seulement depuis la corbeille
 
@@ -861,7 +864,7 @@ Arbitré pendant le Lot 0 — détail et justification dans `DECISIONS.md` :
 **Tranché au Lot 9 :**
 
 8. ~~Politique de conservation et de purge des données personnelles (RGPD).~~
-   Export et purge manuels, réservés au propriétaire du club, avec un rappel à
+   Export et purge manuels, réservés au propriétaire de l'organisation, avec un rappel à
    2 ans (archivage) et 5 ans (purge) — ADR-051. Rien n'est jamais supprimé
    automatiquement.
 

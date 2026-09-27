@@ -768,7 +768,10 @@ automatique (procédure documentée).
 > Cadrés le 2026-09-27. Décision : ADR-086. Un lot à la fois, dans cet ordre : le 24 ne dépend
 > que du 23, le 26 réutilise les composants d'adresse et de carte du 25.
 
-### Lot 23 — Renommage `club` → `organization` (à faire)
+### Lot 23 — Renommage `club` → `organization` (livré)
+
+> Livré le 2026-09-27 sur la branche `lot-23-organization`. Détails de mise en œuvre : ADR-086
+> § « Mise en œuvre du Lot 23 ».
 
 ```
 Lot 23 : refactorisation pure, aucun comportement nouveau. `club` devient
