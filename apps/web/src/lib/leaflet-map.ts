@@ -1,5 +1,6 @@
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import './leaflet-map.css'
 
 /**
  * Carte Leaflet sur tuiles Plan IGN v2 (ADR-088). Ce module n'est importé qu'à
@@ -36,7 +37,10 @@ export function createLocationMap(
     zoom: INITIAL_ZOOM,
     scrollWheelZoom: false,
     dragging: !L.Browser.mobile,
+    zoomControl: false,
   })
+  // Boutons de zoom en français, agrandis à 48 px (`leaflet-map.css`).
+  L.control.zoom({ zoomInTitle: 'Zoom avant', zoomOutTitle: 'Zoom arrière' }).addTo(map)
 
   let anyTileLoaded = false
   const tiles = L.tileLayer(IGN_PLAN_TILES_URL, {

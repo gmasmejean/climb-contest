@@ -160,48 +160,51 @@ const describedBy = computed(
 </script>
 
 <template>
-  <div class="relative flex flex-col gap-1">
+  <div class="flex flex-col gap-1">
     <label :for="id" class="text-sm font-medium text-gray-900">{{ label }}</label>
-    <input
-      :id="id"
-      type="text"
-      role="combobox"
-      autocomplete="off"
-      aria-autocomplete="list"
-      :aria-expanded="open"
-      :aria-controls="listboxId"
-      :aria-activedescendant="activeDescendant"
-      :aria-invalid="error ? 'true' : undefined"
-      :aria-describedby="describedBy"
-      :value="text"
-      class="min-h-12 rounded-lg border bg-white px-4 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
-      :class="error ? 'border-red-700' : 'border-gray-400'"
-      @input="onInput"
-      @keydown="onKeydown"
-      @blur="close"
-    />
-    <ul
-      v-show="open"
-      :id="listboxId"
-      role="listbox"
-      :aria-label="`Propositions pour ${label}`"
-      class="absolute top-full right-0 left-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border border-gray-300 bg-white py-1 shadow-lg"
-    >
-      <li
-        v-for="(address, index) in suggestions"
-        :id="optionId(index)"
-        :key="address.banId ?? address.label"
-        role="option"
-        :aria-selected="index === activeIndex"
-        class="flex min-h-12 cursor-pointer items-center px-4 py-2 text-base"
-        :class="
-          index === activeIndex ? 'bg-blue-50 text-blue-900' : 'text-gray-900 hover:bg-gray-100'
-        "
-        @mousedown.prevent="select(address)"
+    <!-- La liste s'ouvre juste sous le champ, par-dessus les textes d'aide. -->
+    <div class="relative">
+      <input
+        :id="id"
+        type="text"
+        role="combobox"
+        autocomplete="off"
+        aria-autocomplete="list"
+        :aria-expanded="open"
+        :aria-controls="listboxId"
+        :aria-activedescendant="activeDescendant"
+        :aria-invalid="error ? 'true' : undefined"
+        :aria-describedby="describedBy"
+        :value="text"
+        class="min-h-12 w-full rounded-lg border bg-white px-4 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+        :class="error ? 'border-red-700' : 'border-gray-400'"
+        @input="onInput"
+        @keydown="onKeydown"
+        @blur="close"
+      />
+      <ul
+        v-show="open"
+        :id="listboxId"
+        role="listbox"
+        :aria-label="`Propositions pour ${label}`"
+        class="absolute top-full right-0 left-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border border-gray-300 bg-white py-1 shadow-lg"
       >
-        {{ address.label }}
-      </li>
-    </ul>
+        <li
+          v-for="(address, index) in suggestions"
+          :id="optionId(index)"
+          :key="address.banId ?? address.label"
+          role="option"
+          :aria-selected="index === activeIndex"
+          class="flex min-h-12 cursor-pointer items-center px-4 py-2 text-base"
+          :class="
+            index === activeIndex ? 'bg-blue-50 text-blue-900' : 'text-gray-900 hover:bg-gray-100'
+          "
+          @mousedown.prevent="select(address)"
+        >
+          {{ address.label }}
+        </li>
+      </ul>
+    </div>
     <p v-if="hint && !error" :id="hintId" class="text-sm text-gray-600">{{ hint }}</p>
     <p
       v-if="status"
