@@ -24,6 +24,7 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   d'écran pour la consommer ce lot (contrainte des trois écrans de ce lot).
   En pratique, un organisateur invité ne peut activer son compte que via un
   appel API direct tant que cet écran n'existe pas.
+  **Prévu au Lot 24** (ADR-086), avec l'écran d'envoi des invitations.
 - **Limitation de débit en mémoire, par processus.** `hono-rate-limiter` avec
   un `MemoryStore` suffit pour une seule instance API. Si l'API tourne un
   jour derrière plusieurs workers/instances (cf. ADR-014 sur `LISTEN/NOTIFY`
@@ -662,3 +663,18 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
 - ~~**Pas d'en-tête HSTS**~~ Constat à corriger : l'API le posait déjà sur toutes ses réponses,
   donc dès la première visite. Caddy le pose maintenant aussi sur les fichiers de l'appli, en
   HTTPS seulement et avec la même valeur (ADR-085).
+
+## Depuis le cadrage de l'organisation (ADR-086, Lots 23 à 27)
+
+- **Supprimer un compte organisateur ou une organisation entière (RGPD).** Les Lots 23 à 27
+  prévoient de *désactiver* un compte, pas de l'effacer ; rien n'efface le nom et l'e-mail d'un
+  ancien membre, ni une organisation qui cesse d'utiliser l'appli (déjà noté au Lot 9 pour la
+  purge).
+- **Modifier son propre profil** (nom affiché, e-mail, mot de passe) et « mot de passe oublié » :
+  aucun écran ne le permet, et aucun lot ne le prévoit.
+- **Purge physique des photos d'organisation supprimées** (Lot 27) : la suppression est logique,
+  le fichier reste sur le disque.
+- **Une personne dans plusieurs organisations** : écarté (ADR-086 point 2). À rouvrir si un
+  bénévole doit vraiment aider deux structures avec le même e-mail.
+- **Adresses hors de France** : la BAN ne couvre que la France ; ailleurs, saisie manuelle sans
+  carte.

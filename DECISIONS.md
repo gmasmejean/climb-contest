@@ -3450,6 +3450,91 @@ bouton de 48 px, clic qui ramène à l'accueil (Chromium).
 
 ---
 
+## ADR-086 — L'organisation se sépare de l'organisateur ; lieu géolocalisé des compétitions
+
+**Date :** 2026-09-27
+**Contexte :** l'« organisation » existe déjà sous le nom `club` : une ligne `club (id, name,
+slug)`, des `user` qui y sont rattachés (`club_id NOT NULL`, e-mail unique, rôle `owner` ou
+`organizer`), des compétitions qui lui appartiennent (`competition.club_id`, accès ouvert à tous
+ses membres). Quatre manques, vus en usage :
+
+- le mot « club » ne couvre pas une salle privée ni une autre structure ;
+- la fiche de l'organisation est vide : pas de description, de contact, de site, de photo ni
+  d'adresse ;
+- les invitations existent côté API (ADR-017), mais aucun écran ne les envoie ni ne les accepte
+  (le lien reçu par e-mail tombe sur « Page introuvable ») ;
+- le lieu d'une compétition n'est qu'un texte libre (`venue`) ; il n'y a ni géocodage ni carte.
+
+Décisions prises en conversation, découpées en cinq lots (ROADMAP.md, Lots 23 à 27).
+
+**Décision :**
+
+1. **Renommage complet `club` → `organization`** (glossaire, base, code, claim JWT, interface
+   « Organisation »). Le glossaire ajoute « Organisation » (`organization`) et **redéfinit
+   « Club »** comme le club d'affiliation d'un compétiteur : `competitor.club_name`, le champ
+   `club` du compétiteur public et le `clubName` de la sauvegarde JSON **ne changent pas**.
+   Refactorisation pure, dans un lot à elle seule (Lot 23). Un jeton d'accès portant l'ancien
+   claim `clubId` doit valoir 401, que le client rattrape par son refresh habituel.
+2. **Une personne, une organisation.** On garde `user.organization_id` et l'e-mail unique. Pas
+   de table d'adhésion ni de sélecteur d'organisation active.
+3. **Type d'organisation** : `'club' | 'gym' | 'other'`, affiché « Club / Salle / Autre ». Texte
+   + `CHECK` (ADR-018) ; les organisations existantes deviennent `'club'`.
+4. **Fiche publique, en encart** sur la page publique d'une compétition (`/c/:slug`) : nom, type,
+   description, contact, site web, lieu avec carte, photos. **Pas de page `/o/:slug` ni de
+   recherche** : c'est le Lot 13, qui reste à cadrer (RGPD).
+5. **Contact générique.** Un e-mail et un téléphone publiés, sous un avertissement dans le
+   formulaire (« ce contact sera visible du public, préférez une adresse du club ») : ce ne doit
+   pas être le téléphone personnel d'un bénévole. Site web en `https` uniquement.
+6. **Comptes par invitation seulement** (mécanisme d'ADR-017 réutilisé : lien de 7 jours, l'invité
+   choisit son mot de passe). Pas de création directe avec mot de passe provisoire : un mot de
+   passe circulerait entre deux personnes et l'e-mail ne serait jamais prouvé.
+7. **Seuls les owners** invitent, relancent ou annulent une invitation, changent un rôle,
+   désactivent ou réactivent un compte, et modifient la fiche. Les organizers lisent la fiche et
+   la liste des membres. Plusieurs owners sont permis ; **le dernier owner actif ne peut être ni
+   rétrogradé ni désactivé**, et personne ne se désactive soi-même.
+8. **Désactiver n'est pas supprimer** (`user.deactivated_at`) : les sessions sont révoquées, la
+   connexion et le refresh refusés, les références (`competition.created_by`, journal) restent
+   valides, et c'est réversible. Le jeton d'accès en cours (15 min) reste valable jusqu'à son
+   expiration : accepté, pour ne pas lire la base à chaque requête.
+9. **Le lieu d'une compétition est une copie** faite à la création : `venue` (nom du lieu, toujours
+   obligatoire) plus une adresse structurée facultative (`address_label`, `postcode`, `city`,
+   `latitude`, `longitude`, `ban_id`), préremplies depuis l'organisation et modifiables (« Lieu de
+   l'organisation / Autre lieu »). Si l'organisation déménage, les compétitions passées gardent
+   leur vrai lieu. Pas d'entité « lieu » partagée. Les compétitions existantes restent sans
+   adresse, donc sans carte ; les anciennes sauvegardes restent importables (champs facultatifs).
+10. **Géocodage par la Base Adresse Nationale, carte Leaflet sur tuiles IGN Plan.** Gratuit, sans
+    clé, autocomplétion autorisée ; France seulement. L'appel part **du navigateur de
+    l'organisateur**, pas de l'API : aucun appel sortant nouveau côté serveur (ADR-059). Délai de
+    300 ms, 3 caractères minimum, 5 résultats, requête précédente annulée ; si le service ne
+    répond pas, message en français et **saisie manuelle toujours possible**. Leaflet est chargé
+    à la demande, sur les seuls écrans qui ont une carte : le bundle du juge ne bouge pas. Tuiles
+    non mises en cache : hors ligne, la carte laisse place à l'adresse en texte et au lien
+    « Itinéraire ». La CSP ne s'ouvre qu'à ces deux domaines (`connect-src` pour le géocodage,
+    `img-src` pour les tuiles) ; `geolocation=()` reste : pas de bouton « me localiser ».
+11. **Photos : 6 au plus**, JPEG ré-encodées dans le navigateur (même chaîne que la photo de voie,
+    ADR-066 : signature vérifiée, 8 Mio, GPS retiré), ordonnables, avec un texte alternatif.
+    Table dédiée `organization_photo` plutôt que `asset`, dont `competition_id` est obligatoire
+    et sur lequel s'appuie la purge RGPD d'une compétition. Suppression logique, annulable.
+
+**À vérifier pendant les lots (non certain au moment d'écrire) :**
+
+- l'URL exacte du service BAN : `api-adresse.data.gouv.fr` migre vers la Géoplateforme
+  (`data.geopf.fr/geocodage`) ;
+- les conditions d'usage et l'attribution exacte des tuiles IGN Plan v2 ;
+- que la règle `CacheFirst` des images du service worker (`apps/web/vite.config.ts`) ne capture
+  pas les tuiles d'un autre domaine ;
+- `drizzle-kit generate` pose une question interactive face à un renommage : le SQL du Lot 23
+  sera probablement écrit à la main, le snapshot régénéré ensuite.
+
+**Conséquences :** cinq lots dans cet ordre : 23 renommage, 24 membres (clôt l'entrée TODO
+« écran d'acceptation d'invitation »), 25 fiche de l'organisation, adresse et carte, 26 lieu des
+compétitions, 27 photos. Le Lot 24 passe avant la fiche parce qu'il corrige un vrai trou (un
+invité ne peut pas activer son compte) et ne dépend de rien d'autre que du renommage ; le Lot 26
+réutilise les composants d'adresse et de carte du Lot 25. SPEC.md (§1, §3.1, §5) sera mis à jour
+au fil des lots, pas avant : ce qui est écrit dans la spec doit exister.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

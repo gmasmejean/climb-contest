@@ -760,3 +760,80 @@ l'API et de Caddy, vérification de /health en HTTPS. Compose de production
 séparé, HTTPS automatique par Caddy, vrai SMTP, pas de retour arrière
 automatique (procédure documentée).
 ```
+
+---
+
+## Lots 23 à 27 — L'organisation, ses membres et le lieu des compétitions (à faire)
+
+> Cadrés le 2026-09-27. Décision : ADR-086. Un lot à la fois, dans cet ordre : le 24 ne dépend
+> que du 23, le 26 réutilise les composants d'adresse et de carte du 25.
+
+### Lot 23 — Renommage `club` → `organization` (à faire)
+
+```
+Lot 23 : refactorisation pure, aucun comportement nouveau. `club` devient
+`organization` partout : table, colonnes `club_id` → `organization_id` (user,
+competition, competition_deletion_log), index et contraintes, claim JWT
+`clubId` → `organizationId`, contrats (`clubName` → `organizationName` à
+l'inscription), API, web, tests, e2e ; l'interface dit « Organisation ».
+Migration réversible écrite à la main, testée up → down → up. NE PAS toucher
+au club d'affiliation du compétiteur (`competitor.club_name`, `club` public,
+`clubName` de la sauvegarde). Un jeton portant l'ancien claim vaut 401 et le
+client se rattrape par refresh : testé. Glossaire de SPEC.md mis à jour
+(« Organisation » ajoutée, « Club » redéfini).
+```
+
+### Lot 24 — Membres de l'organisation (à faire)
+
+```
+Lot 24 : écran « Organisation › Membres » (depuis OrganizerMenu) : liste des
+membres avec leur statut (invité, actif, désactivé). Owners seulement :
+inviter, relancer une invitation (nouveau jeton, l'ancien ne vaut plus),
+annuler une invitation non acceptée, changer un rôle, désactiver / réactiver
+un compte (`user.deactivated_at`, sessions révoquées, connexion et refresh
+refusés). Garde-fous : le dernier owner actif ne peut être ni rétrogradé ni
+désactivé, personne ne se désactive soi-même, e-mail déjà pris dans une autre
+organisation → message clair. Page `/accept-invite?token=` (POST par le front,
+ADR-020). Actions tracées au journal. E2E : invitation reçue dans Mailpit,
+acceptée, connexion, puis désactivation.
+```
+
+### Lot 25 — Fiche de l'organisation, adresse et carte (à faire)
+
+```
+Lot 25 : champs de l'organisation — type (club / salle / autre), description,
+e-mail et téléphone de contact (avertissement : visibles du public), site web
+(https), adresse autocomplétée par la BAN et géolocalisée. L'owner édite, les
+organizers lisent ; l'inscription demande le type. Composants réutilisables
+`AddressAutocomplete` (combobox accessible, saisie manuelle si le service ne
+répond pas) et `LocationMap` (Leaflet chargé à la demande, tuiles IGN,
+attribution, lien « Itinéraire », repli texte hors ligne). Encart
+« Organisation » sur la page publique d'une compétition. CSP ouverte aux seuls
+domaines BAN (connect-src) et tuiles IGN (img-src). Vérifier d'abord l'URL BAN
+et les conditions d'usage IGN (ADR-086).
+```
+
+### Lot 26 — Lieu des compétitions (à faire)
+
+```
+Lot 26 : la compétition garde `venue` (nom du lieu, obligatoire) et gagne une
+adresse structurée facultative (libellé, code postal, ville, latitude,
+longitude, identifiant BAN). À la création, le lieu est prérempli depuis
+l'organisation — copie, pas lien — avec le choix « Lieu de l'organisation /
+Autre lieu » ; organisation sans adresse → invitation à la renseigner. Même
+composant dans l'onglet Infos. Page publique : adresse, carte, itinéraire. Les
+compétitions existantes restent sans adresse ; la sauvegarde JSON porte les
+nouveaux champs en facultatif (anciennes sauvegardes importables, testé).
+```
+
+### Lot 27 — Photos de l'organisation (à faire)
+
+```
+Lot 27 : jusqu'à 6 photos par organisation, JPEG ré-encodées dans le navigateur
+(même chaîne que la photo de voie, ADR-066), ordonnables, avec un texte
+alternatif. Table `organization_photo` (pas `asset`), clé de stockage
+`organizations/<id>/photos/<photoId>`, 8 Mio, limite de 6 vérifiée côté
+serveur. Suppression logique avec « Annuler ». Photos publiques dans l'encart
+de la page publique (`GET /public/:slug/organization/photos/:id`, sur le modèle
+de la vidéo publique). Purge physique des fichiers supprimés : TODO.
+```
