@@ -33,7 +33,7 @@ export function createGdprRoutes(deps: GdprRouteDeps): Hono {
 
   app.use('*', requireOrganizer(accessTokenSigner), requireCompetitionAccess(db))
 
-  app.get('/gdpr-export', requireOwner(), async (c) => {
+  app.get('/gdpr-export', requireOwner(db), async (c) => {
     const competition = c.get('competition')
     const data = await buildGdprExport(db, competition, now())
     return new Response(JSON.stringify(data, null, 2), {
@@ -46,7 +46,7 @@ export function createGdprRoutes(deps: GdprRouteDeps): Hono {
 
   app.delete(
     '/personal-data',
-    requireOwner(),
+    requireOwner(db),
     zValidator('json', purgePersonalDataInputSchema, (result, c) => {
       if (!result.success)
         return problem(c, 400, 'Requête invalide', result.error.issues[0]?.message)

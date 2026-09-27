@@ -27,6 +27,7 @@ import { createHealthRoute } from './routes/health'
 import { createJudgeAscentRoutes } from './routes/judge-ascents'
 import { createJudgeAuthRoutes } from './routes/judge-auth'
 import { createJudgeRoutes } from './routes/judges'
+import { createOrganizationRoutes } from './routes/organization'
 import { createOrganizerAscentRoutes } from './routes/organizer-ascents'
 import { createPublicRoutes } from './routes/public'
 import { createQrCodesRoutes } from './routes/qrcodes'
@@ -142,6 +143,17 @@ export function createApp(deps: AppDeps): Hono {
       mailer: deps.mailer,
       env: deps.env,
       accessTokenSigner: deps.accessTokenSigner,
+    }),
+  )
+
+  app.route(
+    '/api/v1/organization',
+    createOrganizationRoutes({
+      db: deps.db,
+      mailer: deps.mailer,
+      env: deps.env,
+      accessTokenSigner: deps.accessTokenSigner,
+      now: deps.now,
     }),
   )
 

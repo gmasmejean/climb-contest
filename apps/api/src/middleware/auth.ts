@@ -1,4 +1,6 @@
-import type { Context, Next } from 'hono'
+import { user, type Database } from '@climbcontest/db'
+import { eq } from 'drizzle-orm'
+import type { Context, MiddlewareHandler, Next } from 'hono'
 
 import type { AccessTokenClaims, AccessTokenSigner } from '../lib/jwt'
 import { ApiError } from './problem'
@@ -26,10 +28,21 @@ export function requireOrganizer(signer: AccessTokenSigner) {
   }
 }
 
-export function requireOwner() {
-  return async (c: Context, next: Next) => {
+/**
+ * ADR-087 point 8 : le rôle est relu en base, pas pris dans le jeton — une
+ * rétrogradation ou une désactivation prend effet tout de suite sur ces
+ * actions sensibles, sans attendre l'expiration du jeton (15 min).
+ */
+export function requireOwner(db: Database): MiddlewareHandler {
+  return async (c, next) => {
     const organizer = c.get('organizer')
-    if (organizer.role !== 'owner') {
+    const row = await db.query.user.findFirst({ where: eq(user.id, organizer.sub) })
+    if (
+      !row ||
+      row.organizationId !== organizer.organizationId ||
+      row.role !== 'owner' ||
+      row.deactivatedAt !== null
+    ) {
       throw new ApiError(
         403,
         'Accès refusé',

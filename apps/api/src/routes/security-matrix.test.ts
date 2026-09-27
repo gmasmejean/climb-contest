@@ -47,6 +47,8 @@ export function classify(method: string, routePath: string): Kind | 'unclassifie
   if (routePath.startsWith('/api/v1/judge/')) return 'judge'
   if (ANONYMOUS_AUTH.test(routePath)) return 'anonymous'
   if (method === 'POST' && routePath === '/api/v1/auth/invitations') return 'organizer'
+  // Membres de l'organisation (Lot 24) : toujours la sienne, jamais d'`:id` de compétition.
+  if (routePath.startsWith('/api/v1/organization/')) return 'organizer'
   if (routePath.startsWith('/api/v1/competitions/:id')) return 'organizer-competition'
   if (
     routePath === '/api/v1/competitions' ||

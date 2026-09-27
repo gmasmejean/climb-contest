@@ -12,6 +12,7 @@ import {
   hashPassword,
   hashToken,
   organization,
+  organizationMemberLog,
   randomToken,
   session,
   user,
@@ -28,6 +29,7 @@ import { invitationEmail, verificationEmail } from '../lib/email-templates'
 import { clientIp } from '../lib/http'
 import type { AccessTokenSigner } from '../lib/jwt'
 import type { Mailer } from '../lib/mailer'
+import { toMember } from '../lib/members'
 import { slugify } from '../lib/slug'
 import { requireOrganizer, requireOwner } from '../middleware/auth'
 import { ApiError, problem } from '../middleware/problem'
@@ -37,7 +39,9 @@ const REFRESH_COOKIE_NAME = 'refresh_token'
 const REFRESH_COOKIE_PATH = '/api/v1/auth'
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000
-const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
+export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const DEACTIVATED_DETAIL =
+  'Ce compte a été désactivé par un responsable de votre organisation. Demandez-lui de le réactiver.'
 
 export interface AuthRouteDeps {
   db: Database
@@ -238,6 +242,10 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
           'Vérifiez votre e-mail avant de vous connecter.',
         )
       }
+      // Après le mot de passe : sans lui, on ne révèle pas qu'un compte est désactivé.
+      if (row.deactivatedAt) {
+        throw new ApiError(403, 'Compte désactivé', DEACTIVATED_DETAIL)
+      }
 
       await db.update(user).set({ lastLoginAt: new Date() }).where(eq(user.id, row.id))
       const result = await issueSession(c, row)
@@ -286,6 +294,12 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
     if (!userRow) {
       throw new ApiError(401, 'Session invalide', 'Compte introuvable.')
     }
+    if (userRow.deactivatedAt) {
+      // La désactivation révoque déjà les sessions (ADR-087) ; ceinture et bretelles.
+      await db.update(session).set({ revokedAt: new Date() }).where(eq(session.id, row.id))
+      deleteCookie(c, REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH })
+      throw new ApiError(401, 'Compte désactivé', DEACTIVATED_DETAIL)
+    }
 
     await db.update(session).set({ revokedAt: new Date() }).where(eq(session.id, row.id))
     const result = await issueSession(c, userRow)
@@ -308,7 +322,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
   app.post(
     '/invitations',
     requireOrganizer(accessTokenSigner),
-    requireOwner(),
+    requireOwner(db),
     zValidator('json', inviteInputSchema, (result, c) => {
       if (!result.success) return problem(c, 400, 'Requête invalide')
     }),
@@ -317,8 +331,22 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
       const input = c.req.valid('json')
 
       const existing = await db.query.user.findFirst({ where: eq(user.email, input.email) })
+      if (existing && existing.organizationId === organizer.organizationId) {
+        throw new ApiError(
+          409,
+          'Déjà membre',
+          existing.deactivatedAt
+            ? `${existing.displayName} fait déjà partie de votre organisation, mais son compte est désactivé : réactivez-le depuis la liste des membres.`
+            : `${existing.displayName} fait déjà partie de votre organisation.`,
+        )
+      }
       if (existing) {
-        throw new ApiError(409, 'Compte existant', 'Un compte existe déjà avec cet e-mail.')
+        // ADR-086 point 2 : une personne, une organisation.
+        throw new ApiError(
+          409,
+          'Adresse déjà utilisée',
+          "Cette adresse e-mail est déjà utilisée par une autre organisation. Une personne ne peut appartenir qu'à une seule organisation : demandez-lui une autre adresse.",
+        )
       }
 
       const [inviter, currentOrganization] = await Promise.all([
@@ -330,15 +358,30 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
       }
 
       const invitationToken = randomToken(32)
-      await db.insert(user).values({
+      const [invited] = await db
+        .insert(user)
+        .values({
+          organizationId: organizer.organizationId,
+          email: input.email,
+          displayName: input.displayName,
+          role: input.role,
+          invitedByUserId: organizer.sub,
+          pendingTokenHash: hashToken(invitationToken),
+          pendingTokenPurpose: 'invitation',
+          pendingTokenExpiresAt: new Date(Date.now() + INVITATION_TTL_MS),
+        })
+        .returning()
+      if (!invited) {
+        throw new ApiError(500, 'Erreur interne', "Impossible de créer l'invitation.")
+      }
+      await db.insert(organizationMemberLog).values({
         organizationId: organizer.organizationId,
-        email: input.email,
-        displayName: input.displayName,
-        role: input.role,
-        invitedByUserId: organizer.sub,
-        pendingTokenHash: hashToken(invitationToken),
-        pendingTokenPurpose: 'invitation',
-        pendingTokenExpiresAt: new Date(Date.now() + INVITATION_TTL_MS),
+        actorUserId: organizer.sub,
+        targetUserId: invited.id,
+        targetEmail: invited.email,
+        targetDisplayName: invited.displayName,
+        action: 'invited',
+        details: { role: invited.role },
       })
 
       const acceptUrl = `${env.PUBLIC_APP_URL}/accept-invite?token=${invitationToken}`
@@ -350,7 +393,7 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
       )
       await mailer.send(input.email, subject, html)
 
-      return c.json({ message: 'Invitation envoyée.' }, 201)
+      return c.json(toMember(invited, new Date()), 201)
     },
   )
 
