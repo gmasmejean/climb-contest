@@ -1,4 +1,4 @@
-import type { Member } from '@climbcontest/contracts'
+import type { Member, OrganizationProfile, PublicCompetitionMeta } from '@climbcontest/contracts'
 import { applyPendingMigrations, createDatabase, type DatabaseHandle } from '@climbcontest/db'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { sql } from 'drizzle-orm'
@@ -10,7 +10,11 @@ import type { Env } from '../env'
 import { createAccessTokenSigner, createJudgeTokenSigner } from '../lib/jwt'
 import type { Logger } from '../lib/logger'
 import { FakeMailer } from '../test-utils/fake-mailer'
-import { authHeaders, registerLoggedInOrganizer } from '../test-utils/fixtures'
+import {
+  authHeaders,
+  createTestCompetition,
+  registerLoggedInOrganizer,
+} from '../test-utils/fixtures'
 
 let container: StartedPostgreSqlContainer
 let handle: DatabaseHandle
@@ -62,7 +66,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   await handle.db.execute(
-    sql`truncate table "user", "organization", "session", "organization_member_log" cascade`,
+    sql`truncate table "user", "organization", "session", "organization_member_log", "competition" cascade`,
   )
 })
 
@@ -454,5 +458,152 @@ describe('désactivation', () => {
       role: 'organizer',
     })
     expect(response.status).toBe(403)
+  })
+})
+
+describe('fiche de l’organisation (ADR-088)', () => {
+  const banAddress = {
+    label: '8 Boulevard du Port 80000 Amiens',
+    postcode: '80000',
+    city: 'Amiens',
+    latitude: 49.897442,
+    longitude: 2.290084,
+    banId: '80021_6590_00008',
+  }
+  const fullProfile = {
+    name: 'Club Roc Amiens',
+    type: 'gym',
+    description: 'Salle de bloc et de difficulté.\nOuverte 7 jours sur 7.',
+    contactEmail: 'contact@club-roc.test',
+    contactPhone: '03 22 00 00 00',
+    websiteUrl: 'https://club-roc.test',
+    address: banAddress,
+  }
+
+  const getProfile = (token: string) =>
+    app.request('/api/v1/organization', { headers: authHeaders(token) })
+  const patchProfile = (token: string, body: unknown) =>
+    app.request('/api/v1/organization', {
+      method: 'PATCH',
+      headers: authHeaders(token),
+      body: JSON.stringify(body),
+    })
+
+  it('une organisation neuve est une fiche vide, du type choisi à l’inscription', async () => {
+    const owner = await registerLoggedInOrganizer(app, mailer, {
+      organizationName: 'Bloc Factory',
+      organizationType: 'gym',
+    })
+    const response = await getProfile(owner.accessToken)
+    expect(response.status).toBe(200)
+    const profile = (await response.json()) as OrganizationProfile
+    expect(profile).toMatchObject({
+      name: 'Bloc Factory',
+      type: 'gym',
+      description: null,
+      contactEmail: null,
+      contactPhone: null,
+      websiteUrl: null,
+      address: null,
+    })
+    expect(profile).not.toHaveProperty('slug')
+  })
+
+  it('l’owner la remplit ; elle apparaît dans l’encart public, sans identifiant BAN', async () => {
+    const owner = await ownerWorld()
+    const saved = await patchProfile(owner.accessToken, fullProfile)
+    expect(saved.status).toBe(200)
+    expect(await saved.json()).toMatchObject({ ...fullProfile, id: expect.any(String) })
+
+    const competition = await createTestCompetition(app, owner.accessToken)
+    const publicResponse = await app.request(
+      `/api/v1/public/${String(competition['publicSlug'])}`,
+      {
+        headers: { 'x-forwarded-for': '198.51.100.25' },
+      },
+    )
+    expect(publicResponse.status).toBe(200)
+    const meta = (await publicResponse.json()) as PublicCompetitionMeta
+    const publicAddress = {
+      label: banAddress.label,
+      postcode: banAddress.postcode,
+      city: banAddress.city,
+      latitude: banAddress.latitude,
+      longitude: banAddress.longitude,
+    }
+    expect(meta.organization).toEqual({
+      name: 'Club Roc Amiens',
+      type: 'gym',
+      description: fullProfile.description,
+      contactEmail: 'contact@club-roc.test',
+      contactPhone: '03 22 00 00 00',
+      websiteUrl: 'https://club-roc.test',
+      address: publicAddress,
+    })
+  })
+
+  it('une modification partielle ne touche pas au reste ; null vide un champ', async () => {
+    const owner = await ownerWorld()
+    await patchProfile(owner.accessToken, fullProfile)
+    const response = await patchProfile(owner.accessToken, { contactPhone: null, address: null })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      name: 'Club Roc Amiens',
+      contactEmail: 'contact@club-roc.test',
+      contactPhone: null,
+      address: null,
+    })
+  })
+
+  it('garde une adresse saisie à la main, sans position', async () => {
+    const owner = await ownerWorld()
+    const manual = {
+      label: 'Gymnase Jules-Verne, Amiens',
+      postcode: null,
+      city: null,
+      latitude: null,
+      longitude: null,
+      banId: null,
+    }
+    const response = await patchProfile(owner.accessToken, { address: manual })
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as OrganizationProfile).address).toEqual(manual)
+  })
+
+  it('un organizer la lit mais ne la modifie pas', async () => {
+    const owner = await ownerWorld()
+    await patchProfile(owner.accessToken, fullProfile)
+    const { accessToken } = await addMember(owner.accessToken, 'lecteur@club-demo.test')
+    const read = await getProfile(accessToken)
+    expect(read.status).toBe(200)
+    expect(((await read.json()) as OrganizationProfile).name).toBe('Club Roc Amiens')
+    expect((await patchProfile(accessToken, { name: 'Autre nom' })).status).toBe(403)
+  })
+
+  it('ne modifie que SA propre organisation', async () => {
+    const first = await ownerWorld()
+    const second = await ownerWorld()
+    const before = (await (await getProfile(second.accessToken)).json()) as OrganizationProfile
+    await patchProfile(first.accessToken, { name: 'Renommée' })
+    const after = (await (await getProfile(second.accessToken)).json()) as OrganizationProfile
+    expect(after).toEqual(before)
+  })
+
+  it('refuse un site en http avec un message qui dit quoi faire, et un champ inconnu', async () => {
+    const owner = await ownerWorld()
+    const http = await patchProfile(owner.accessToken, { websiteUrl: 'http://club-roc.test' })
+    expect(http.status).toBe(400)
+    expect(((await http.json()) as { detail: string }).detail).toBe(
+      'Adresse du site invalide : elle doit commencer par https://.',
+    )
+    expect((await patchProfile(owner.accessToken, { slug: 'pirate' })).status).toBe(400)
+    const halfPosition = await patchProfile(owner.accessToken, {
+      address: { ...banAddress, longitude: null },
+    })
+    expect(halfPosition.status).toBe(400)
+  })
+
+  it('sans jeton : 401', async () => {
+    expect((await app.request('/api/v1/organization')).status).toBe(401)
   })
 })

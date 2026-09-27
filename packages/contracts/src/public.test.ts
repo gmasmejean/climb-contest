@@ -30,6 +30,21 @@ describe('publicCompetitionMetaSchema', () => {
       format: 'contest',
       status: 'running',
     },
+    organization: {
+      name: 'Club Roc',
+      type: 'club',
+      description: null,
+      contactEmail: 'contact@club-roc.test',
+      contactPhone: null,
+      websiteUrl: null,
+      address: {
+        label: '8 Boulevard du Port 80000 Amiens',
+        postcode: '80000',
+        city: 'Amiens',
+        latitude: 49.897442,
+        longitude: 2.290084,
+      },
+    },
     categories: [{ id: uuid, label: 'U16 Femme', displayOrder: 0 }],
     rounds: [],
   }
@@ -44,6 +59,19 @@ describe('publicCompetitionMetaSchema', () => {
       competition: { ...valid.competition, format: 'ligue' },
     })
     expect(result.success).toBe(false)
+  })
+
+  it('refuse un champ de trop dans l’encart organisation (pas d’identifiant BAN, pas de slug)', () => {
+    const withBanId = {
+      ...valid,
+      organization: {
+        ...valid.organization,
+        address: { ...valid.organization.address, banId: '80021_6590_00008' },
+      },
+    }
+    expect(publicCompetitionMetaSchema.safeParse(withBanId).success).toBe(false)
+    const withSlug = { ...valid, organization: { ...valid.organization, slug: 'club-roc' } }
+    expect(publicCompetitionMetaSchema.safeParse(withSlug).success).toBe(false)
   })
 })
 

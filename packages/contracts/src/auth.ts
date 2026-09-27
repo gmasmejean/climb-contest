@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { organizationTypeSchema } from './organization'
+
 const passwordSchema = z
   .string()
   .min(12, 'Le mot de passe doit contenir au moins 12 caractères.')
@@ -10,6 +12,8 @@ export const registerInputSchema = z.object({
   password: passwordSchema,
   displayName: z.string().trim().min(1).max(120),
   organizationName: z.string().trim().min(1).max(120),
+  // ADR-088 point 6.
+  organizationType: organizationTypeSchema,
 })
 export type RegisterInput = z.infer<typeof registerInputSchema>
 

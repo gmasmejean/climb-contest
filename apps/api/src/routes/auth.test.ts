@@ -69,7 +69,13 @@ async function registerAndVerify(email: string, password = 'un-mot-de-passe-soli
   await app.request('/api/v1/auth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password, displayName: 'Alex', organizationName: 'Club Démo' }),
+    body: JSON.stringify({
+      email,
+      password,
+      displayName: 'Alex',
+      organizationName: 'Club Démo',
+      organizationType: 'club',
+    }),
   })
   const token = mailer.lastTokenFor(email)
   const verifyResponse = await app.request('/api/v1/auth/verify-email', {
@@ -90,6 +96,7 @@ describe('POST /auth/register', () => {
         password: 'un-mot-de-passe-solide',
         displayName: 'Alex',
         organizationName: 'Club Démo',
+        organizationType: 'club',
       }),
     })
     expect(response.status).toBe(201)
@@ -107,6 +114,7 @@ describe('POST /auth/register', () => {
         password: 'un-mot-de-passe-solide',
         displayName: 'Alex',
         organizationName: 'Club Démo',
+        organizationType: 'club',
       }),
     })
     expect(response.status).toBe(409)
@@ -120,7 +128,13 @@ describe('vérification et connexion', () => {
     await app.request('/api/v1/auth/register', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password, displayName: 'Alex', organizationName: 'Club Démo' }),
+      body: JSON.stringify({
+        email,
+        password,
+        displayName: 'Alex',
+        organizationName: 'Club Démo',
+        organizationType: 'club',
+      }),
     })
 
     const before = await app.request('/api/v1/auth/login', {
@@ -156,6 +170,7 @@ describe('vérification et connexion', () => {
         password: 'un-mot-de-passe-solide',
         displayName: 'Alex',
         organizationName: 'Club Démo',
+        organizationType: 'club',
       }),
     })
     const token = mailer.lastTokenFor(email)

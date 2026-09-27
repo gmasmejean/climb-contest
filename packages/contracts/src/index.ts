@@ -1,4 +1,5 @@
 export * from './entities'
+export * from './address'
 export * from './ascent'
 export * from './auth'
 export * from './auth-response'

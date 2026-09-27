@@ -8,6 +8,7 @@ import {
 import {
   asset,
   category,
+  organization,
   round,
   roundCategory,
   roundRoute,
@@ -20,6 +21,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 
+import { toPublicOrganization } from '../lib/organization-profile'
 import type { PublicRankingCache } from '../lib/public-cache'
 import { resolvePublicCompetitionBySlug } from '../lib/public-access'
 import { assembleCategoryRanking } from '../lib/public-ranking'
@@ -145,6 +147,11 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
         ? await loadPublicRounds(db, currentCompetition.id)
         : []
 
+    const owner = await db.query.organization.findFirst({
+      where: eq(organization.id, currentCompetition.organizationId),
+    })
+    if (!owner) throw new ApiError(500, 'Erreur interne', 'Organisation introuvable.')
+
     return c.json(
       publicCompetitionMetaSchema.parse({
         competition: {
@@ -157,6 +164,7 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
           format: currentCompetition.format,
           status: currentCompetition.status,
         },
+        organization: toPublicOrganization(owner),
         categories,
         rounds,
       }),

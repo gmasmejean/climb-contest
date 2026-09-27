@@ -18,16 +18,28 @@ function unique(prefix: string): string {
 export async function registerLoggedInOrganizer(
   app: App,
   mailer: FakeMailer,
-  overrides: { email?: string; password?: string; organizationName?: string } = {},
+  overrides: {
+    email?: string
+    password?: string
+    organizationName?: string
+    organizationType?: 'club' | 'gym' | 'other'
+  } = {},
 ): Promise<{ accessToken: string; email: string }> {
   const email = overrides.email ?? `${unique('organizer')}@club-demo.test`
   const password = overrides.password ?? 'un-mot-de-passe-solide'
   const organizationName = overrides.organizationName ?? unique('Club')
+  const organizationType = overrides.organizationType ?? 'club'
 
   await app.request('/api/v1/auth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password, displayName: 'Alex', organizationName }),
+    body: JSON.stringify({
+      email,
+      password,
+      displayName: 'Alex',
+      organizationName,
+      organizationType,
+    }),
   })
   const token = mailer.lastTokenFor(email)
   await app.request('/api/v1/auth/verify-email', {

@@ -1,4 +1,4 @@
-import { changeMemberRoleInputSchema } from '@climbcontest/contracts'
+import { changeMemberRoleInputSchema, updateOrganizationInputSchema } from '@climbcontest/contracts'
 import {
   hashToken,
   organization,
@@ -22,6 +22,7 @@ import {
   removesLastActiveOwner,
   toMember,
 } from '../lib/members'
+import { organizationUpdateColumns, toOrganizationProfile } from '../lib/organization-profile'
 import { requireOrganizer, requireOwner } from '../middleware/auth'
 import { ApiError, problem } from '../middleware/problem'
 import { INVITATION_TTL_MS } from './auth'
@@ -42,9 +43,10 @@ const LAST_OWNER_DETAIL =
   'Votre organisation doit garder au moins un propriétaire actif. Donnez d’abord ce rôle à un autre membre.'
 
 /**
- * Membres de l'organisation (Lot 24, DECISIONS.md ADR-087). Lecture pour tout
- * membre ; tout le reste est réservé aux owners, dont le rôle est relu en base.
- * Un membre d'une autre organisation répond 404, jamais 403, comme pour les
+ * L'organisation de l'organisateur connecté : sa fiche (Lot 25, ADR-088) et
+ * ses membres (Lot 24, DECISIONS.md ADR-087). Lecture pour tout membre ; tout
+ * le reste est réservé aux owners, dont le rôle est relu en base. Un membre
+ * d'une autre organisation répond 404, jamais 403, comme pour les
  * compétitions.
  */
 export function createOrganizationRoutes(deps: OrganizationRouteDeps): Hono {
@@ -94,6 +96,43 @@ export function createOrganizationRoutes(deps: OrganizationRouteDeps): Hono {
   async function lockMembers(tx: Tx, organizationId: string): Promise<UserRow[]> {
     return tx.select().from(user).where(eq(user.organizationId, organizationId)).for('update')
   }
+
+  async function loadOrganization(organizationId: string) {
+    const row = await db.query.organization.findFirst({
+      where: eq(organization.id, organizationId),
+    })
+    if (!row) throw new ApiError(401, 'Session invalide', 'Organisation introuvable.')
+    return row
+  }
+
+  app.get('/', async (c) => {
+    const organizer = c.get('organizer')
+    return c.json(toOrganizationProfile(await loadOrganization(organizer.organizationId)))
+  })
+
+  app.patch(
+    '/',
+    requireOwner(db),
+    zValidator('json', updateOrganizationInputSchema, (result, c) => {
+      if (!result.success) {
+        return problem(c, 400, 'Fiche invalide', result.error.issues[0]?.message)
+      }
+    }),
+    async (c) => {
+      const organizer = c.get('organizer')
+      const columns = organizationUpdateColumns(c.req.valid('json'))
+      if (Object.keys(columns).length === 0) {
+        return c.json(toOrganizationProfile(await loadOrganization(organizer.organizationId)))
+      }
+      const [updated] = await db
+        .update(organization)
+        .set({ ...columns, updatedAt: now() })
+        .where(eq(organization.id, organizer.organizationId))
+        .returning()
+      if (!updated) throw new ApiError(401, 'Session invalide', 'Organisation introuvable.')
+      return c.json(toOrganizationProfile(updated))
+    },
+  )
 
   app.get('/members', async (c) => {
     const organizer = c.get('organizer')

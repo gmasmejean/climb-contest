@@ -104,7 +104,10 @@ export function createAuthRoutes(deps: AuthRouteDeps): Hono {
       let createdOrganization: typeof organization.$inferSelect | undefined
       for (let attempt = 0; attempt < 5 && !createdOrganization; attempt += 1) {
         try {
-          const [row] = await db.insert(organization).values({ name: input.organizationName, slug }).returning()
+          const [row] = await db
+            .insert(organization)
+            .values({ name: input.organizationName, type: input.organizationType, slug })
+            .returning()
           createdOrganization = row
         } catch {
           slug = `${baseSlug}-${randomToken(4).toLowerCase()}`
