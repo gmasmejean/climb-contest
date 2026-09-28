@@ -37,6 +37,39 @@ const timestamps = {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }
 
+// ADR-088 : une adresse est un libellé, avec ou sans position. Partagée par
+// l'organisation et le lieu des compétitions (ADR-089).
+const addressColumns = () => ({
+  addressLabel: text('address_label'),
+  postcode: text('postcode'),
+  city: text('city'),
+  latitude: doublePrecision('latitude'),
+  longitude: doublePrecision('longitude'),
+  banId: text('ban_id'),
+})
+
+interface AddressTable {
+  addressLabel: AnyPgColumn
+  postcode: AnyPgColumn
+  city: AnyPgColumn
+  latitude: AnyPgColumn
+  longitude: AnyPgColumn
+  banId: AnyPgColumn
+}
+
+const addressChecks = (tableName: string, table: AddressTable) => [
+  check(
+    `${tableName}_position_check`,
+    // Un CHECK passe quand il vaut NULL : les IS NOT NULL explicites empêchent
+    // une latitude sans longitude de passer par un `BETWEEN` qui vaudrait NULL.
+    sql`(${table.latitude} IS NULL AND ${table.longitude} IS NULL) OR (${table.latitude} IS NOT NULL AND ${table.longitude} IS NOT NULL AND ${table.latitude} BETWEEN -90 AND 90 AND ${table.longitude} BETWEEN -180 AND 180)`,
+  ),
+  check(
+    `${tableName}_address_check`,
+    sql`${table.addressLabel} IS NOT NULL OR (${table.postcode} IS NULL AND ${table.city} IS NULL AND ${table.latitude} IS NULL AND ${table.banId} IS NULL)`,
+  ),
+]
+
 // ADR-086 : la structure organisatrice (club, salle ou autre). Anciennement
 // `club` ; le club d'affiliation d'un compétiteur reste `competitor.club_name`.
 // ADR-088 : la fiche publique (type, description, contact, site, adresse).
@@ -53,26 +86,12 @@ export const organization = pgTable(
     contactEmail: text('contact_email'),
     contactPhone: text('contact_phone'),
     websiteUrl: text('website_url'),
-    addressLabel: text('address_label'),
-    postcode: text('postcode'),
-    city: text('city'),
-    latitude: doublePrecision('latitude'),
-    longitude: doublePrecision('longitude'),
-    banId: text('ban_id'),
+    ...addressColumns(),
     ...timestamps,
   },
   (table) => [
     check('organization_type_check', sql`${table.type} IN ('club', 'gym', 'other')`),
-    check(
-      'organization_position_check',
-      // Un CHECK passe quand il vaut NULL : les IS NOT NULL explicites empêchent
-      // une latitude sans longitude de passer par un `BETWEEN` qui vaudrait NULL.
-      sql`(${table.latitude} IS NULL AND ${table.longitude} IS NULL) OR (${table.latitude} IS NOT NULL AND ${table.longitude} IS NOT NULL AND ${table.latitude} BETWEEN -90 AND 90 AND ${table.longitude} BETWEEN -180 AND 180)`,
-    ),
-    check(
-      'organization_address_check',
-      sql`${table.addressLabel} IS NOT NULL OR (${table.postcode} IS NULL AND ${table.city} IS NULL AND ${table.latitude} IS NULL AND ${table.banId} IS NULL)`,
-    ),
+    ...addressChecks('organization', table),
   ],
 )
 
@@ -159,6 +178,9 @@ export const competition = pgTable(
     // personnelle, comme trace de la purge.
     purgedAt: timestamp('purged_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // ADR-089 : adresse du lieu, copiée depuis l'organisation à la création
+    // (par le formulaire) ou saisie ; `venue` reste le nom du lieu.
+    ...addressColumns(),
     ...timestamps,
   },
   (table) => [
@@ -167,6 +189,7 @@ export const competition = pgTable(
       'competition_status_check',
       sql`${table.status} IN ('draft', 'open', 'running', 'closed', 'archived')`,
     ),
+    ...addressChecks('competition', table),
   ],
 )
 
