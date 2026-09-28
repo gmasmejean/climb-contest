@@ -3769,6 +3769,64 @@ saisies). Une ancienne version de l'appli restée ouverte ignore simplement l'ad
 
 ---
 
+## ADR-090 — Photos de l'organisation
+
+**Date :** 2026-09-28
+**Contexte :** Lot 27 (ROADMAP.md), cadré par ADR-086 point 11 : jusqu'à 6 photos par
+organisation, ré-encodées en JPEG dans le navigateur, ordonnables, avec un texte alternatif,
+dans une table dédiée, suppression logique annulable, visibles dans l'encart public.
+
+**Décision :**
+
+1. **Table `organization_photo`** (`id`, `organization_id`, `storage_key`, `mime_type`,
+   `size_bytes`, `position`, `alt_text`, `uploaded_by`, `deleted_at`, horodatages), pas
+   `asset` : `asset.competition_id` est obligatoire et la purge RGPD d'une compétition s'appuie
+   dessus. Clé de stockage `organizations/<organizationId>/photos/<photoId>`, jamais dérivée
+   d'une entrée client (ADR-058).
+2. **Même chaîne que la photo de voie** (ADR-066) : ré-encodage dans le navigateur (côté long
+   1600 px, qualité 0,85, orientation appliquée, GPS retiré), le serveur n'accepte que du JPEG
+   reconnu à sa signature, 8 Mio au plus, en une seule requête. **Pas de recadrage** : les
+   vignettes sont découpées à l'affichage, la photo entière s'ouvre en grand. `TODO.md`.
+3. **6 photos actives au plus, vérifié par le serveur** dans une transaction qui verrouille la
+   ligne de l'organisation : deux envois simultanés ne font pas une 7ᵉ photo. On peut en
+   choisir plusieurs d'un coup ; au-delà des places libres, les premières sont envoyées et
+   l'écran dit combien ont été laissées.
+4. **Ordre** : `position` entière ; l'owner monte ou descend une photo par des boutons
+   (48 px, pas de glisser-déposer : pas de geste caché). L'ordre est envoyé en entier
+   (`PUT /organization/photos/order`) et refusé (409) s'il ne correspond plus aux photos
+   actives (un autre owner a ajouté ou supprimé entre-temps). Une nouvelle photo va à la fin.
+5. **Texte alternatif facultatif**, 200 caractères. Le rendre obligatoire bloquerait un
+   bénévole pressé ; sans texte, la photo est annoncée « Photo 2 sur 4 de <organisation> ».
+   L'écran explique à quoi il sert.
+6. **Suppression logique, annulable** : « Supprimer » marque la photo, qui disparaît de la
+   page publique ; un bandeau « Photo supprimée — Annuler » reste affiché dans la section
+   jusqu'à la prochaine action (pas de notification qui s'efface seule : on n'a pas le temps
+   de toucher « Annuler » avant qu'elle parte). Annuler la remet à sa place, sauf si 6 photos
+   sont déjà actives (409). Le fichier reste sur le disque : purge physique dans `TODO.md`.
+7. **Photos enregistrées tout de suite**, hors du bouton « Enregistrer la fiche » : la section
+   « Photos » est séparée du formulaire et le dit.
+8. **Lecture** :
+   - public : `GET /public/:slug/organization/photos/:photoId`, seulement si la photo est
+     active et appartient à l'organisation de la compétition. `cache-control: public,
+     max-age=86400, immutable` : le contenu d'un identifiant ne change jamais ; une photo
+     supprimée peut rester un jour dans le cache d'un navigateur ;
+   - membres : `GET /organization/photos` (liste) et `GET /organization/photos/:id` (image,
+     jeton en en-tête, affichée depuis un `Blob`, comme la photo de voie).
+9. **Affichage public** : les photos s'ajoutent à l'encart de l'organisation, en grille de
+   vignettes (`loading="lazy"` : l'encart est sous le classement, un spectateur en 4G saturée
+   ne les charge que s'il descend jusque-là). Toucher une vignette ouvre la photo entière, avec
+   « Précédente », « Suivante » et « Fermer ». `publicOrganizationSchema.photos` donne
+   l'identifiant et le texte alternatif, dans l'ordre.
+10. **Données personnelles** : une photo de salle peut montrer des personnes. Le formulaire
+    rappelle de n'en publier qu'avec leur accord. Les photos ne font pas partie de la
+    sauvegarde d'une compétition ni de sa purge RGPD : elles appartiennent à l'organisation.
+
+**Conséquences :** migration `0018`, réversible (le down supprime la table ; les fichiers
+restent sur le disque, sans référence). L'API accepte le corps d'une photo jusqu'à 8 Mio sur
+`POST /organization/photos` seulement.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

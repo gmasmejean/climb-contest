@@ -665,6 +665,38 @@ export const organizationMemberLog = pgTable(
 )
 
 /**
+ * Lot 27 (ADR-090) — photos de la fiche de l'organisation, 6 actives au plus
+ * (vérifié par l'API). Pas `asset` : sa `competition_id` est obligatoire et
+ * porte la purge RGPD d'une compétition. Suppression logique (`deleted_at`),
+ * annulable ; l'ordre d'affichage est `position`.
+ */
+export const organizationPhoto = pgTable(
+  'organization_photo',
+  {
+    id: id(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organization.id),
+    storageKey: text('storage_key').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    position: integer('position').notNull(),
+    altText: text('alt_text'),
+    uploadedBy: uuid('uploaded_by')
+      .notNull()
+      .references(() => user.id),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    check('organization_photo_mime_type_check', sql`${table.mimeType} = 'image/jpeg'`),
+    check('organization_photo_size_check', sql`${table.sizeBytes} > 0`),
+    check('organization_photo_position_check', sql`${table.position} >= 0`),
+    index('organization_photo_organization_id_idx').on(table.organizationId, table.position),
+  ],
+)
+
+/**
  * Lot 11 — trace des mises à la corbeille, restaurations et suppressions
  * définitives d'une compétition (CLAUDE.md, règle n°3 : « toute saisie
  * destructive laisse une trace »). `competition_id` n'est volontairement PAS
