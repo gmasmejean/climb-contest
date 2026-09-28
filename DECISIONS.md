@@ -3713,6 +3713,62 @@ type → erreur de validation, rattrapée au rechargement (même situation qu'au
 
 ---
 
+## ADR-089 — Lieu des compétitions : copie de l'adresse de l'organisation
+
+**Date :** 2026-09-28
+**Contexte :** Lot 26 (ROADMAP.md), cadré par ADR-086 point 9 : la compétition garde `venue`
+(nom du lieu, obligatoire) et gagne une adresse facultative, préremplie depuis l'organisation
+par copie, modifiable. Les composants d'adresse et de carte viennent du Lot 25 (ADR-088).
+
+**Décision :**
+
+1. **Colonnes sur `competition`** : `address_label`, `postcode`, `city`, `latitude`,
+   `longitude`, `ban_id`, facultatives, avec les mêmes contraintes que l'organisation (position
+   complète ou absente, rien sans libellé). Les compétitions existantes restent sans adresse.
+2. **Contrat** : `createCompetitionInputSchema` et `updateCompetitionInputSchema` reçoivent
+   un bloc `address` (le même `addressSchema` que l'organisation, `null` pour l'effacer,
+   absent pour ne pas y toucher). La réponse reste l'entité à plat, comme toutes les colonnes
+   de `competition` : le web regroupe les six colonnes en une adresse.
+3. **La copie est faite par le formulaire, pas par le serveur.** Le serveur enregistre
+   l'adresse qu'on lui envoie ; il ne va jamais la chercher dans l'organisation. Une
+   compétition créée par l'API sans adresse, ou importée d'une sauvegarde, n'en a donc pas :
+   rien d'implicite, et si l'organisation déménage, les compétitions gardent leur vrai lieu.
+4. **Formulaire (création et onglet Infos)** : un choix « Lieu de l'organisation » / « Autre
+   lieu ».
+   - *Lieu de l'organisation* : nom du lieu = nom de l'organisation, adresse = celle de sa
+     fiche, affichés en résumé. Le choisir de nouveau recopie la fiche actuelle (utile après un
+     déménagement).
+   - *Autre lieu* : « Nom du lieu » (obligatoire) et « Adresse » autocomplétée (facultative),
+     préremplis avec le lieu en cours : passer à « Autre lieu » pour écrire « salle 2 » ne
+     fait pas tout retaper.
+   - À la création, « Lieu de l'organisation » est présélectionné quand la fiche a une
+     adresse ; sinon « Autre lieu », avec un message qui renvoie vers la fiche (lien pour un
+     owner, « un propriétaire peut la renseigner » pour un organizer). Un brouillon restauré
+     garde son choix.
+   - Dans l'onglet Infos, le choix affiché est « Lieu de l'organisation » quand le nom et
+     l'adresse de la compétition sont exactement ceux de la fiche, « Autre lieu » sinon.
+5. **Page publique** : l'adresse s'ajoute sous le nom du lieu dans l'en-tête ; une section
+   « Lieu » avec la carte et le lien « Itinéraire » vient sous le classement, avant l'encart de
+   l'organisation. Quand la compétition a lieu à la même position que l'organisation, l'encart
+   n'en répète pas la carte ni l'adresse.
+6. **Sauvegarde JSON** : `competition.address` facultatif (et `null` quand il n'y en a pas).
+   Ajout rétrocompatible : une sauvegarde d'avant ce lot reste importable, sans adresse ; le
+   format reste en version 2.
+7. **Hors périmètre** : la liste des compétitions, les exports PDF/CSV, l'écran de salle et
+   les écrans du juge n'affichent pas l'adresse (rien de demandé ; le juge est sur place).
+
+**Mise en œuvre (2026-09-28) :** les six colonnes et leurs deux contraintes sont déclarées
+une fois dans `schema.ts` (`addressColumns`, `addressChecks`) et partagées avec l'organisation
+— sans changer le SQL de celle-ci ; côté API, `lib/address.ts` fait le passage colonnes ↔ bloc
+pour les deux. Tant que la fiche n'est pas chargée (réseau lent, hors ligne), le formulaire
+laisse la saisie ouverte : rien n'attend le serveur. La garde e2e des cibles tactiles compte
+l'étiquette d'un bouton radio, comme pour une case à cocher.
+
+**Conséquences :** migration `0017`, réversible (le down supprime les colonnes et les adresses
+saisies). Une ancienne version de l'appli restée ouverte ignore simplement l'adresse.
+
+---
+
 ## Points encore ouverts (non tranchés dans ce Lot 0)
 
 - ~~**RGPD — durée de conservation et de purge**~~ Tranché au Lot 9,

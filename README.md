@@ -451,6 +451,14 @@ chaque compétition (ADR-088).
 - **CSP** : `connect-src` et `img-src` n'ouvrent que `https://data.geopf.fr`
   (`infra/docker/Caddyfile`).
 
+**Lieu des compétitions** (ADR-089) : à la création comme dans l'onglet Infos, le choix
+« Lieu de l'organisation » recopie le nom et l'adresse de la fiche ; « Autre lieu » fait
+saisir un nom et une adresse (facultative, même autocomplétion). C'est une copie : modifier
+la fiche ne change pas les compétitions déjà créées. La page publique montre l'adresse et
+une carte sous le classement ; l'encart de l'organisation ne répète pas la carte quand
+c'est le même endroit. La sauvegarde JSON porte l'adresse (facultative : les anciennes
+sauvegardes s'importent toujours).
+
 ## Liste des compétitions et corbeille
 
 La connexion mène directement à **Mes compétitions** (`/competitions`,
