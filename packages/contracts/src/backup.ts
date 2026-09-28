@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { addressSchema } from './address'
 import { competitionFormatSchema, competitionStatusSchema } from './competition'
 import { roundStatusSchema, roundStyleSchema, roundTypeSchema } from './round'
 
@@ -31,6 +32,9 @@ export const backupCompetitionSchema = z
   .object({
     name: z.string().min(1),
     venue: z.string(),
+    // ADR-089 : ajouté sans changer de version — une sauvegarde d'avant n'en
+    // a pas et reste importable.
+    address: addressSchema.nullable().optional(),
     startsOn: isoDate,
     endsOn: isoDate,
     discipline: z.string(),

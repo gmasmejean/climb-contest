@@ -12,8 +12,13 @@ import LocationMap from './LocationMap.vue'
  */
 
 const props = withDefaults(
-  defineProps<{ organization: PublicOrganization; eyebrow?: string | undefined }>(),
-  { eyebrow: undefined },
+  defineProps<{
+    organization: PublicOrganization
+    eyebrow?: string | undefined
+    /** ADR-089 : la compétition a lieu chez l'organisation, sa carte est déjà affichée. */
+    hideLocation?: boolean
+  }>(),
+  { eyebrow: undefined, hideLocation: false },
 )
 
 const titleId = useId()
@@ -54,7 +59,7 @@ const linkClass =
       {{ organization.description }}
     </p>
 
-    <LocationMap v-if="organization.address" :address="organization.address" />
+    <LocationMap v-if="organization.address && !hideLocation" :address="organization.address" />
 
     <ul v-if="hasContact" class="flex flex-col" aria-label="Contact">
       <li v-if="organization.contactEmail">

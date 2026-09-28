@@ -372,3 +372,94 @@ describe('GET /competitions/:id/readiness', () => {
     ).toBe(true)
   })
 })
+
+describe('adresse du lieu (ADR-089)', () => {
+  const banAddress = {
+    label: '8 Boulevard du Port 80000 Amiens',
+    postcode: '80000',
+    city: 'Amiens',
+    latitude: 49.897442,
+    longitude: 2.290084,
+    banId: '80021_6590_00008',
+  }
+  const flat = {
+    addressLabel: banAddress.label,
+    postcode: '80000',
+    city: 'Amiens',
+    latitude: 49.897442,
+    longitude: 2.290084,
+    banId: '80021_6590_00008',
+  }
+  const patch = (token: string, id: string, body: unknown) =>
+    app.request(`/api/v1/competitions/${id}`, {
+      method: 'PATCH',
+      headers: authHeaders(token),
+      body: JSON.stringify(body),
+    })
+
+  it('enregistre l’adresse envoyée à la création, la renvoie à plat', async () => {
+    const { accessToken } = await registerLoggedInOrganizer(app, mailer)
+    const created = await createTestCompetition(app, accessToken, { address: banAddress })
+    expect(created).toMatchObject(flat)
+  })
+
+  it('sans adresse envoyée, n’en recopie aucune depuis l’organisation (la copie est explicite)', async () => {
+    const { accessToken } = await registerLoggedInOrganizer(app, mailer)
+    const profile = await app.request('/api/v1/organization', {
+      method: 'PATCH',
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ address: banAddress }),
+    })
+    expect(profile.status).toBe(200)
+    const created = await createTestCompetition(app, accessToken)
+    expect(created['addressLabel']).toBeNull()
+    expect(created['latitude']).toBeNull()
+  })
+
+  it('la modifie, l’efface avec null, et n’y touche pas quand elle est absente', async () => {
+    const { accessToken } = await registerLoggedInOrganizer(app, mailer)
+    const created = await createTestCompetition(app, accessToken)
+    const set = await patch(accessToken, created.id, { address: banAddress })
+    expect(set.status).toBe(200)
+    expect(await set.json()).toMatchObject(flat)
+
+    const other = await patch(accessToken, created.id, { name: 'Autre nom' })
+    expect(await other.json()).toMatchObject({ name: 'Autre nom', ...flat })
+
+    const cleared = await patch(accessToken, created.id, { address: null })
+    expect(await cleared.json()).toMatchObject({
+      addressLabel: null,
+      postcode: null,
+      city: null,
+      latitude: null,
+      longitude: null,
+      banId: null,
+    })
+  })
+
+  it('refuse une position incomplète', async () => {
+    const { accessToken } = await registerLoggedInOrganizer(app, mailer)
+    const created = await createTestCompetition(app, accessToken)
+    const response = await patch(accessToken, created.id, {
+      address: { ...banAddress, longitude: null },
+    })
+    expect(response.status).toBe(400)
+  })
+
+  it('la page publique montre l’adresse, sans identifiant BAN', async () => {
+    const { accessToken } = await registerLoggedInOrganizer(app, mailer)
+    const created = await createTestCompetition(app, accessToken, { address: banAddress })
+    const response = await app.request(`/api/v1/public/${String(created['publicSlug'])}`, {
+      headers: { 'x-forwarded-for': '198.51.100.26' },
+    })
+    expect(response.status).toBe(200)
+    const meta = (await response.json()) as { competition: { address: unknown } }
+    expect(meta.competition.address).toEqual({
+      label: banAddress.label,
+      postcode: '80000',
+      city: 'Amiens',
+      latitude: 49.897442,
+      longitude: 2.290084,
+    })
+  })
+})

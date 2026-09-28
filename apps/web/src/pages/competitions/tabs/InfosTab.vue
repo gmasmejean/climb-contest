@@ -1,12 +1,24 @@
 <script setup lang="ts">
-import { updateCompetitionInputSchema, type Competition } from '@climbcontest/contracts'
+import {
+  updateCompetitionInputSchema,
+  type Address,
+  type Competition,
+} from '@climbcontest/contracts'
 import { Badge, Button, Select, TextField, useToast } from '@climbcontest/ui'
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
-import { reactive, ref } from 'vue'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { computed, reactive, ref, watch } from 'vue'
 
 import { ApiError } from '../../../api/client'
 import { competitionsApi } from '../../../api/competitions'
+import { organizationApi } from '../../../api/organization'
+import { currentUser } from '../../../api/session'
+import CompetitionPlaceFields from '../../../components/CompetitionPlaceFields.vue'
 import { useFormDraft } from '../../../composables/useFormDraft'
+import {
+  competitionAddress,
+  initialPlaceChoice,
+  type PlaceChoice,
+} from '../../../lib/competition-place'
 
 const props = defineProps<{ competition: Competition }>()
 
@@ -24,13 +36,49 @@ async function copyPublicUrl(): Promise<void> {
   }
 }
 
-const form = reactive({
+const form = reactive<{
+  name: string
+  venue: string
+  // ADR-089 : null tant que la fiche de l'organisation n'est pas arrivée.
+  placeChoice: PlaceChoice | null
+  address: Address | null
+  startsOn: string
+  endsOn: string
+}>({
   name: props.competition.name,
   venue: props.competition.venue,
+  placeChoice: null,
+  address: competitionAddress(props.competition),
   startsOn: props.competition.startsOn,
   endsOn: props.competition.endsOn,
 })
 const errors = reactive<Partial<Record<keyof typeof form, string>>>({})
+
+const { data: organization } = useQuery({
+  queryKey: ['organization', 'profile'],
+  queryFn: organizationApi.profile,
+})
+const isOwner = computed(() => currentUser.value?.role === 'owner')
+// Affiché « Lieu de l'organisation » seulement si le lieu est exactement celui
+// de la fiche ; un brouillon restauré garde son choix.
+watch(
+  organization,
+  (profile) => {
+    if (!profile || form.placeChoice !== null) return
+    form.placeChoice = initialPlaceChoice(profile, { venue: form.venue, address: form.address })
+  },
+  { immediate: true },
+)
+
+function payload() {
+  return {
+    name: form.name,
+    venue: form.venue,
+    address: form.address,
+    startsOn: form.startsOn,
+    endsOn: form.endsOn,
+  }
+}
 
 // Une compétition de club tient en général sur une journée : quand on change
 // la date de début, la date de fin la suit. Branché sur l'événement (et non
@@ -44,7 +92,7 @@ const formError = ref('')
 const { clearDraft } = useFormDraft(`competition-edit-${props.competition.id}`, form)
 
 const updateMutation = useMutation({
-  mutationFn: () => competitionsApi.update(props.competition.id, { ...form }),
+  mutationFn: () => competitionsApi.update(props.competition.id, payload()),
   onSuccess: async (updated) => {
     clearDraft()
     queryClient.setQueryData(['competitions', props.competition.id], updated)
@@ -62,7 +110,7 @@ const updateMutation = useMutation({
 function onSubmit(): void {
   formError.value = ''
   for (const key of Object.keys(errors) as (keyof typeof errors)[]) delete errors[key]
-  const result = updateCompetitionInputSchema.safeParse(form)
+  const result = updateCompetitionInputSchema.safeParse(payload())
   if (!result.success) {
     for (const issue of result.error.issues) {
       const field = issue.path[0]
@@ -111,7 +159,14 @@ function applyStatus(): void {
   <div class="flex flex-col gap-8">
     <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
       <TextField v-model="form.name" label="Nom de la compétition" required :error="errors.name" />
-      <TextField v-model="form.venue" label="Lieu" required :error="errors.venue" />
+      <CompetitionPlaceFields
+        v-model:venue="form.venue"
+        v-model:address="form.address"
+        v-model:choice="form.placeChoice"
+        :organization="organization"
+        :is-owner="isOwner"
+        :errors="{ venue: errors.venue, address: errors.address }"
+      />
       <div class="grid grid-cols-2 gap-4">
         <TextField
           v-model="form.startsOn"

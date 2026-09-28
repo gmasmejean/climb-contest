@@ -18,12 +18,21 @@ function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 }
 
-const meta = {
+const orgAddress = {
+  label: '8 Boulevard du Port 80000 Amiens',
+  postcode: '80000',
+  city: 'Amiens',
+  latitude: 49.897442,
+  longitude: 2.290084,
+}
+
+let meta = {
   competition: {
     id: 'comp-1',
     slug: 'abc123',
     name: 'Coupe du club',
     venue: 'Salle Roc',
+    address: null as null | typeof orgAddress,
     startsOn: '2026-05-01',
     endsOn: '2026-05-01',
     format: 'contest',
@@ -36,13 +45,7 @@ const meta = {
     contactEmail: 'contact@club-roc.test',
     contactPhone: null,
     websiteUrl: 'https://club-roc.test',
-    address: {
-      label: '8 Boulevard du Port 80000 Amiens',
-      postcode: '80000',
-      city: 'Amiens',
-      latitude: 49.897442,
-      longitude: 2.290084,
-    },
+    address: orgAddress,
   },
   categories: [
     { id: 'cat-1', label: 'U16 Femme', displayOrder: 0 },
@@ -117,6 +120,46 @@ describe('PublicCompetition', () => {
     // Après les onglets et leur contenu : le classement reste en tête de page.
     const html = wrapper.html()
     expect(html.indexOf('data-testid="organization-card"')).toBeGreaterThan(html.indexOf('role="tablist"'))
+  })
+
+  describe('lieu de la compétition (ADR-089)', () => {
+    const baseMeta = meta
+    afterEach(() => {
+      meta = baseMeta
+    })
+
+    it('sans adresse : ni section « Lieu », et l’encart garde sa carte', async () => {
+      const wrapper = mount(PublicCompetition, { global: { plugins: [router, VueQueryPlugin] } })
+      await flush()
+      expect(wrapper.find('[data-testid="competition-place"]').exists()).toBe(false)
+      expect(
+        wrapper.get('[data-testid="organization-card"]').find('[data-testid="location-map"]').exists(),
+      ).toBe(true)
+    })
+
+    it('chez l’organisation : l’adresse en tête, une section « Lieu », pas de carte en double', async () => {
+      meta = { ...baseMeta, competition: { ...baseMeta.competition, address: orgAddress } }
+      const wrapper = mount(PublicCompetition, { global: { plugins: [router, VueQueryPlugin] } })
+      await flush()
+      expect(wrapper.get('main header').text()).toContain('8 Boulevard du Port 80000 Amiens')
+      const place = wrapper.get('[data-testid="competition-place"]')
+      expect(place.text()).toContain('Salle Roc')
+      expect(place.find('[data-testid="location-map"]').exists()).toBe(true)
+      expect(wrapper.findAll('[data-testid="location-map"]')).toHaveLength(1)
+    })
+
+    it('ailleurs : la carte du lieu et celle de l’organisation', async () => {
+      meta = {
+        ...baseMeta,
+        competition: {
+          ...baseMeta.competition,
+          address: { ...orgAddress, label: 'Gymnase, Abbeville', latitude: 50.1, longitude: 1.83 },
+        },
+      }
+      const wrapper = mount(PublicCompetition, { global: { plugins: [router, VueQueryPlugin] } })
+      await flush()
+      expect(wrapper.findAll('[data-testid="location-map"]')).toHaveLength(2)
+    })
   })
 
   it('mémorise la catégorie choisie dans le stockage local, par compétition', async () => {

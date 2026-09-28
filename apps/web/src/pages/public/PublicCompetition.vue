@@ -13,7 +13,9 @@ import {
 import PublicRanking from './PublicRanking.vue'
 import PublicRoutes from './PublicRoutes.vue'
 import BrandShell from '../../components/brand/BrandShell.vue'
+import LocationMap from '../../components/LocationMap.vue'
 import OrganizationCard from '../../components/OrganizationCard.vue'
+import { samePlace } from '../../lib/competition-place'
 
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
@@ -128,6 +130,9 @@ const lastUpdatedLabel = computed(() => {
           <p class="text-sm text-gray-600">
             {{ meta.competition.venue }} — {{ meta.competition.startsOn }}
           </p>
+          <p v-if="meta.competition.address" class="text-sm text-gray-600">
+            {{ meta.competition.address.label }}
+          </p>
           <div role="status" class="flex items-center gap-2 text-xs text-gray-600">
             <span
               class="h-2 w-2 rounded-full"
@@ -175,8 +180,24 @@ const lastUpdatedLabel = computed(() => {
           :category-id="selectedCategoryId"
         />
 
-        <!-- ADR-088 : sous les résultats, que le spectateur vient voir d'abord. -->
-        <OrganizationCard :organization="meta.organization" eyebrow="Organisé par" class="mt-4" />
+        <!-- ADR-089 : le lieu, puis l'organisation (ADR-088), sous les résultats que
+             le spectateur vient voir d'abord. -->
+        <section
+          v-if="meta.competition.address"
+          aria-labelledby="place-title"
+          class="mt-4 flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4"
+          data-testid="competition-place"
+        >
+          <h2 id="place-title" class="text-ink text-xl font-bold">Lieu</h2>
+          <p class="font-medium text-gray-900">{{ meta.competition.venue }}</p>
+          <LocationMap :address="meta.competition.address" />
+        </section>
+        <OrganizationCard
+          :organization="meta.organization"
+          eyebrow="Organisé par"
+          :hide-location="samePlace(meta.competition.address, meta.organization.address)"
+          :class="meta.competition.address ? '' : 'mt-4'"
+        />
       </template>
     </main>
   </BrandShell>

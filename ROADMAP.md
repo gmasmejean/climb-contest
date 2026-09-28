@@ -827,7 +827,13 @@ domaines BAN (connect-src) et tuiles IGN (img-src). Vérifier d'abord l'URL BAN
 et les conditions d'usage IGN (ADR-086).
 ```
 
-### Lot 26 — Lieu des compétitions (à faire)
+### Lot 26 — Lieu des compétitions (livré)
+
+> Livré le 2026-09-28 sur la branche `lot-26-lieu-competitions`. Décision : ADR-089. Écarts au
+> cadrage : le bloc s'appelle `address` (même contrat que l'organisation) et la réponse reste
+> à plat ; la copie est faite par le formulaire, jamais par le serveur ; « Autre lieu » garde
+> le lieu en cours pour n'en retoucher qu'un détail ; l'encart de l'organisation ne répète pas
+> la carte quand la compétition a lieu chez elle.
 
 ```
 Lot 26 : la compétition garde `venue` (nom du lieu, obligatoire) et gagne une

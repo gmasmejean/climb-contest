@@ -18,6 +18,7 @@ import { zValidator } from '@hono/zod-validator'
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 
+import { addressColumns } from '../lib/address'
 import type { AccessTokenSigner } from '../lib/jwt'
 import { computeReadiness } from '../lib/readiness'
 import { requireCompetitionAccess } from '../middleware/competition-access'
@@ -125,6 +126,9 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
             scoringConfig,
             publicSlug: randomToken(PUBLIC_SLUG_LENGTH),
             createdBy: organizer.sub,
+            // ADR-089 : l'adresse envoyée par le formulaire, jamais celle de
+            // l'organisation lue ici — la copie est explicite.
+            ...addressColumns(input.address ?? null),
           })
           .returning()
         if (!row) {
@@ -162,7 +166,7 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
     }),
     async (c) => {
       const current = c.get('competition')
-      const input = c.req.valid('json')
+      const { address, ...input } = c.req.valid('json')
 
       const nextStartsOn = input.startsOn ?? current.startsOn
       const nextEndsOn = input.endsOn ?? current.endsOn
@@ -177,7 +181,11 @@ export function createCompetitionRoutes(deps: CompetitionRouteDeps): Hono {
       const updated = await db.transaction(async (tx) => {
         const [row] = await tx
           .update(competition)
-          .set({ ...input, updatedAt: new Date() })
+          .set({
+            ...input,
+            ...(address === undefined ? {} : addressColumns(address)),
+            updatedAt: new Date(),
+          })
           .where(eq(competition.id, current.id))
           .returning()
         if (!row) {

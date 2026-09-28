@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { addressSchema } from './address'
+
 export const competitionFormatSchema = z.enum(['contest', 'phases'])
 export const competitionStatusSchema = z.enum(['draft', 'open', 'running', 'closed', 'archived'])
 
@@ -14,6 +16,9 @@ export const createCompetitionInputSchema = z
     // Validé finement côté API via `engine.configSchema.parse` — ce paquet
     // ne connaît pas la forme exacte par moteur (voir DECISIONS.md).
     scoringConfig: z.unknown().optional(),
+    // ADR-089 : adresse du lieu, copiée depuis l'organisation par le
+    // formulaire ou saisie. Absente ou nulle : pas d'adresse.
+    address: addressSchema.nullable().optional(),
   })
   .refine((input) => input.endsOn >= input.startsOn, {
     message: 'La date de fin doit être postérieure ou égale à la date de début.',
@@ -40,6 +45,8 @@ export const updateCompetitionInputSchema = z
     // clair déjà stockés pour les juges de cette compétition ; passer à vrai
     // ne s'applique qu'aux actions futures (DECISIONS.md ADR-027).
     judgeCredentialsStored: z.boolean(),
+    // ADR-089 : `null` efface l'adresse, absente elle n'est pas touchée.
+    address: addressSchema.nullable(),
   })
   .partial()
   .refine(

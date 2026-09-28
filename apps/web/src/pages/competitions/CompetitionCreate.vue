@@ -1,20 +1,36 @@
 <script setup lang="ts">
-import { createCompetitionInputSchema, type CreateCompetitionInput } from '@climbcontest/contracts'
+import {
+  createCompetitionInputSchema,
+  type Address,
+  type CreateCompetitionInput,
+} from '@climbcontest/contracts'
 import { Button, NumberField, Select, TextField } from '@climbcontest/ui'
-import { reactive, ref } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { ApiError } from '../../api/client'
 import { competitionsApi } from '../../api/competitions'
+import { organizationApi } from '../../api/organization'
+import { currentUser } from '../../api/session'
 import { useFormDraft } from '../../composables/useFormDraft'
 import BrandShell from '../../components/brand/BrandShell.vue'
 import OrganizerMenu from '../../components/brand/OrganizerMenu.vue'
+import CompetitionPlaceFields from '../../components/CompetitionPlaceFields.vue'
+import {
+  initialPlaceChoice,
+  organizationPlace,
+  type PlaceChoice,
+} from '../../lib/competition-place'
 
 const router = useRouter()
 
 interface FormState {
   name: string
   venue: string
+  // ADR-089 : null tant que la fiche de l'organisation n'est pas arrivée.
+  placeChoice: PlaceChoice | null
+  address: Address | null
   startsOn: string
   endsOn: string
   format: 'contest' | 'phases'
@@ -24,13 +40,15 @@ interface FormState {
 const form = reactive<FormState>({
   name: '',
   venue: '',
+  placeChoice: null,
+  address: null,
   startsOn: '',
   endsOn: '',
   format: 'contest',
   routesCounted: 3,
 })
-type ErrorField = 'name' | 'venue' | 'startsOn' | 'endsOn'
-const errorFields: readonly ErrorField[] = ['name', 'venue', 'startsOn', 'endsOn']
+type ErrorField = 'name' | 'venue' | 'address' | 'startsOn' | 'endsOn'
+const errorFields: readonly ErrorField[] = ['name', 'venue', 'address', 'startsOn', 'endsOn']
 const errors = reactive<Partial<Record<ErrorField, string>>>({})
 
 // Une compétition de club tient en général sur une journée : quand on change
@@ -45,6 +63,27 @@ const formError = ref('')
 
 const { clearDraft } = useFormDraft('competition-create', form)
 
+// ADR-089 : le lieu de l'organisation est proposé par défaut, recopié dans le
+// formulaire. Un brouillon restauré (choix déjà fait) n'est pas écrasé.
+const { data: organization } = useQuery({
+  queryKey: ['organization', 'profile'],
+  queryFn: organizationApi.profile,
+})
+const isOwner = computed(() => currentUser.value?.role === 'owner')
+watch(
+  organization,
+  (profile) => {
+    if (!profile || form.placeChoice !== null) return
+    form.placeChoice = initialPlaceChoice(profile)
+    const place = organizationPlace(profile)
+    if (form.placeChoice === 'organization' && place) {
+      form.venue = place.venue
+      form.address = place.address
+    }
+  },
+  { immediate: true },
+)
+
 const formatOptions = [
   { value: 'contest', label: 'Contest — N voies libres, M meilleures comptent' },
   { value: 'phases', label: 'Phases — qualification puis demi-finale / finale' },
@@ -54,6 +93,7 @@ function buildPayload(): CreateCompetitionInput {
   return {
     name: form.name,
     venue: form.venue,
+    address: form.address,
     startsOn: form.startsOn,
     endsOn: form.endsOn,
     format: form.format,
@@ -118,7 +158,14 @@ async function onSubmit(): Promise<void> {
             required
             :error="errors.name"
           />
-          <TextField v-model="form.venue" label="Lieu" required :error="errors.venue" />
+          <CompetitionPlaceFields
+            v-model:venue="form.venue"
+            v-model:address="form.address"
+            v-model:choice="form.placeChoice"
+            :organization="organization"
+            :is-owner="isOwner"
+            :errors="{ venue: errors.venue, address: errors.address }"
+          />
           <div class="grid grid-cols-2 gap-4">
             <TextField
               v-model="form.startsOn"

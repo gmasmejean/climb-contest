@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { publicAddressSchema } from './address'
 import { competitionFormatSchema, competitionStatusSchema } from './competition'
 import { publicOrganizationSchema } from './organization'
 import { httpUrlSchema } from './route'
@@ -53,6 +54,8 @@ export const publicCompetitionSchema = z
     slug: z.string(),
     name: z.string(),
     venue: z.string(),
+    // ADR-089 : adresse du lieu, sans identifiant BAN.
+    address: publicAddressSchema.nullable(),
     startsOn: z.string(),
     endsOn: z.string(),
     format: competitionFormatSchema,

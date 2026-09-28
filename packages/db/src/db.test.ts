@@ -386,10 +386,11 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
     const fixture = await seedCompetitionAndCategories()
     await withRawClient(async (client) => {
       // 0011 (Lot 15), 0012 (Lot 21), 0013 (juge, ADR-081), 0014
-      // (organisation, ADR-086), 0015 (membres, ADR-087) et 0016 (fiche,
-      // ADR-088) ont été posées par-dessus 0010 : sept crans. À réviser si une
-      // migration est ajoutée après 0016.
-      expect(await revertLastMigrations(client, 7)).toEqual([
+      // (organisation, ADR-086), 0015 (membres, ADR-087), 0016 (fiche,
+      // ADR-088) et 0017 (lieu, ADR-089) ont été posées par-dessus 0010 : huit
+      // crans. À réviser si une migration est ajoutée après 0017.
+      expect(await revertLastMigrations(client, 8)).toEqual([
+        '0017_lot26_competition_address.sql',
         '0016_lot25_organization_profile.sql',
         '0015_lot24_members.sql',
         '0014_lot23_rename_club_to_organization.sql',
@@ -427,7 +428,7 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
         [openId, u16.id],
       )
-      await revertLastMigrations(client, 7)
+      await revertLastMigrations(client, 8)
       const back = await client.query<{ id: string; status: string }>(
         'select id, status from round where id = any($1)',
         [[openId, closedId, draftId]],
@@ -824,6 +825,68 @@ describe('migration 0016_lot25_organization_profile (ADR-088)', () => {
       .from(organization)
       .where(sql`${organization.id} = ${demoOrganization.id}`)
     expect(back?.type).toBe('club')
+  })
+})
+
+describe('migration 0017_lot26_competition_address (ADR-089)', () => {
+  async function insertCompetition() {
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
+    const [row] = await handle.db
+      .insert(competition)
+      .values({
+        organizationId: demoOrganization.id,
+        name: 'Comp',
+        venue: 'Salle',
+        startsOn: '2026-01-01',
+        endsOn: '2026-01-01',
+        format: 'contest',
+        scoringEngineId: 'ffme-difficulty-2026',
+        publicSlug: crypto.randomUUID(),
+        createdBy: demoUser.id,
+      })
+      .returning()
+    if (!row) throw new Error('competition insert failed')
+    return row
+  }
+
+  it('une compétition n’a pas d’adresse par défaut ; les mêmes règles que l’organisation', async () => {
+    const created = await insertCompetition()
+    expect(created.addressLabel).toBeNull()
+    const attempt = (fields: Partial<typeof competition.$inferInsert>) =>
+      handle.db
+        .update(competition)
+        .set(fields)
+        .where(sql`${competition.id} = ${created.id}`)
+    await expect(attempt({ addressLabel: 'Amiens', longitude: 2.29 })).rejects.toThrow()
+    await expect(attempt({ city: 'Amiens' })).rejects.toThrow()
+    await expect(
+      attempt({ addressLabel: '8 Boulevard du Port 80000 Amiens', latitude: 49.9, longitude: 2.29 }),
+    ).resolves.toBeDefined()
+  })
+
+  it('est réversible : le down retire les colonnes d’adresse, le up les rétablit', async () => {
+    const created = await insertCompetition()
+    await withRawClient(async (client) => {
+      const hasAddress = async () =>
+        (
+          await client.query(
+            "select 1 from information_schema.columns where table_name = 'competition' and column_name = 'address_label'",
+          )
+        ).rows.length === 1
+
+      expect(await hasAddress()).toBe(true)
+      let guard = 0
+      while (await hasAddress()) {
+        expect((await revertLastMigrations(client, 1)).length).toBe(1)
+        guard += 1
+        expect(guard).toBeLessThan(20)
+      }
+      const kept = await client.query('select venue from competition where id = $1', [created.id])
+      expect(kept.rows).toEqual([{ venue: 'Salle' }])
+
+      await applyPendingMigrations(client)
+      expect(await hasAddress()).toBe(true)
+    })
   })
 })
 

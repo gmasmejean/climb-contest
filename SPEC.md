@@ -105,7 +105,10 @@ Il peut :
 **Préparer**
 
 - créer une compétition : nom, date(s), lieu, format (contest ou phases) —
-  elle appartient à l'organisation de l'organisateur ;
+  elle appartient à l'organisation de l'organisateur. Le lieu est un nom
+  (obligatoire) et une adresse facultative ; « Lieu de l'organisation » recopie le
+  nom et l'adresse de la fiche, « Autre lieu » les fait saisir. C'est une copie :
+  si l'organisation déménage, les compétitions gardent leur lieu (ADR-089) ;
 - définir les catégories, soit depuis un modèle prédéfini (FFME jeunes : U12,
   U14, U16, U18, U20, Senior, Vétéran × Homme/Femme), soit en libre ;
 - saisir les compétiteurs un par un, ou les importer en masse depuis un CSV
@@ -390,7 +393,10 @@ organization_member_log                 -- ADR-087 : actions d'un owner sur les 
 
 competition
   id, organization_id → organization
-  name, venue, starts_on, ends_on
+  name, venue, starts_on, ends_on       -- venue : nom du lieu
+  address_label, postcode, city, latitude, longitude, ban_id
+                                       -- ADR-089 : adresse facultative, mêmes règles
+                                       -- que celle de l'organisation
   discipline ('difficulty')             -- extensible : 'boulder', 'speed'
   format ('contest' | 'phases')
   scoring_engine_id, scoring_config (jsonb)

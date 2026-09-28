@@ -21,6 +21,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 
+import { publicAddressOf } from '../lib/address'
 import { toPublicOrganization } from '../lib/organization-profile'
 import type { PublicRankingCache } from '../lib/public-cache'
 import { resolvePublicCompetitionBySlug } from '../lib/public-access'
@@ -159,6 +160,7 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
           slug: currentCompetition.publicSlug,
           name: currentCompetition.name,
           venue: currentCompetition.venue,
+          address: publicAddressOf(currentCompetition),
           startsOn: currentCompetition.startsOn,
           endsOn: currentCompetition.endsOn,
           format: currentCompetition.format,
