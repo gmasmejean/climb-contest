@@ -4,14 +4,17 @@ import { Button, Select, TextArea, TextField, useToast } from '@climbcontest/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, reactive, ref, watch } from 'vue'
 
-import { organizationApi } from '../../api/organization'
+import { organizationApi, organizationPhotosApi } from '../../api/organization'
 import { currentUser } from '../../api/session'
 import AddressAutocomplete from '../../components/AddressAutocomplete.vue'
 import BrandShell from '../../components/brand/BrandShell.vue'
 import OrganizerMenu from '../../components/brand/OrganizerMenu.vue'
 import LocationMap from '../../components/LocationMap.vue'
 import OrganizationCard from '../../components/OrganizationCard.vue'
+import OrganizationPhotosManager from '../../components/OrganizationPhotosManager.vue'
+import { useOrganizationPhotoUrls } from '../../composables/useOrganizationPhotoUrls'
 import { describeError, UNREACHABLE_MESSAGE } from '../../lib/network-errors'
+import { galleryPhotos } from '../../lib/organization-photos'
 import {
   DESCRIPTION_MAX_LENGTH,
   formFromProfile,
@@ -102,6 +105,19 @@ async function onSubmit(): Promise<void> {
 }
 
 const preview = computed(() => form.address)
+
+// Un organizer voit la fiche comme le public, photos comprises (ADR-090) ; un
+// owner les gère dans sa propre section, qui fait ses requêtes.
+const { data: photoList } = useQuery({
+  queryKey: ['organization', 'photos'],
+  queryFn: organizationPhotosApi.list,
+  enabled: computed(() => !isOwner.value),
+})
+const photoIds = computed(() => (isOwner.value ? [] : (photoList.value ?? []).map((p) => p.id)))
+const { src: photoSrc } = useOrganizationPhotoUrls(photoIds)
+const previewPhotos = computed(() =>
+  data.value ? galleryPhotos(photoList.value ?? [], data.value.name, photoSrc) : [],
+)
 </script>
 
 <template>
@@ -200,12 +216,16 @@ const preview = computed(() => form.address)
           </Button>
         </div>
       </form>
+      <OrganizationPhotosManager v-if="isOwner && data" :organization-name="data.name" />
 
       <template v-else-if="data">
         <p class="text-gray-700">
           Voici la fiche telle que le public la voit. Seul un propriétaire peut la modifier.
         </p>
-        <OrganizationCard :organization="publicView(data)" />
+        <OrganizationCard
+          :organization="publicView(data, photoList ?? [])"
+          :photos="previewPhotos"
+        />
       </template>
     </main>
   </BrandShell>

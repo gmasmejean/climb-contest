@@ -3,8 +3,10 @@ import { isHttpUrl, type PublicOrganization } from '@climbcontest/contracts'
 import { Badge } from '@climbcontest/ui'
 import { computed, useId } from 'vue'
 
+import type { GalleryPhoto } from '../lib/organization-photos'
 import { ORGANIZATION_TYPE_LABELS, telHref } from '../lib/organization-profile'
 import LocationMap from './LocationMap.vue'
+import OrganizationPhotoGallery from './OrganizationPhotoGallery.vue'
 
 /**
  * La fiche de l'organisation telle que le public la voit (ADR-088) : encart de
@@ -17,8 +19,10 @@ const props = withDefaults(
     eyebrow?: string | undefined
     /** ADR-089 : la compétition a lieu chez l'organisation, sa carte est déjà affichée. */
     hideLocation?: boolean
+    /** ADR-090 : les photos, prêtes à afficher (l'adresse d'une image dépend de qui regarde). */
+    photos?: readonly GalleryPhoto[]
   }>(),
-  { eyebrow: undefined, hideLocation: false },
+  { eyebrow: undefined, hideLocation: false, photos: () => [] },
 )
 
 const titleId = useId()
@@ -58,6 +62,8 @@ const linkClass =
     <p v-if="organization.description" class="whitespace-pre-line text-gray-800">
       {{ organization.description }}
     </p>
+
+    <OrganizationPhotoGallery :photos="photos" :organization-name="organization.name" />
 
     <LocationMap v-if="organization.address && !hideLocation" :address="organization.address" />
 

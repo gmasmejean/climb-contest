@@ -1,5 +1,6 @@
 import type {
   Address,
+  OrganizationPhoto,
   OrganizationProfile,
   OrganizationType,
   PublicAddress,
@@ -101,7 +102,10 @@ export function telHref(phone: string): string {
 }
 
 /** La fiche telle que le public la verra : sans identifiant, ni de l'organisation ni BAN. */
-export function publicView(profile: OrganizationProfile): PublicOrganization {
+export function publicView(
+  profile: OrganizationProfile,
+  photos: readonly OrganizationPhoto[] = [],
+): PublicOrganization {
   return {
     name: profile.name,
     type: profile.type,
@@ -116,5 +120,6 @@ export function publicView(profile: OrganizationProfile): PublicOrganization {
       latitude: profile.address.latitude,
       longitude: profile.address.longitude,
     },
+    photos: [...photos],
   }
 }
