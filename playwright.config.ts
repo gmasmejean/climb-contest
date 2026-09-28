@@ -19,11 +19,12 @@ export default defineConfig({
     // la liste des compétitions et la corbeille y passent aussi (règle des 360 px). Lot 12 :
     // le pilotage par catégorie aussi. ADR-067 : le recadrage de photo aussi.
     // ADR-070 : la page d'accueil publique aussi. ADR-087 : les membres de l'organisation aussi.
+    // ADR-090 : ses photos aussi.
     {
       name: 'mobile',
       use: { ...devices['Pixel 5'], viewport: { width: 360, height: 740 } },
       testMatch:
-        /(judge-(ascent|draft|revoked)|competition-trash|round-category-status|route-photo(-create-crop)?|landing|organization-(members|profile)|competition-place)\.spec\.ts/,
+        /(judge-(ascent|draft|revoked)|competition-trash|round-category-status|route-photo(-create-crop)?|landing|organization-(members|profile|photos)|competition-place)\.spec\.ts/,
     },
   ],
 })
