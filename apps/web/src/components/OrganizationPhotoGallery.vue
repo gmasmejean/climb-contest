@@ -49,7 +49,7 @@ function close(): void {
   const index = openIndex.value
   openIndex.value = null
   document.removeEventListener('keydown', onKeydown)
-  // Le focus revient à la vignette ouverte, pas en haut de la page.
+  // Le focus revient à la vignette de la photo affichée, pas en haut de la page.
   if (index !== null) thumbnails[index]?.focus()
 }
 
@@ -111,7 +111,7 @@ const navButtonClass =
         role="dialog"
         aria-modal="true"
         :aria-labelledby="titleId"
-        class="fixed inset-0 z-50 flex flex-col bg-black/90 p-4"
+        class="fixed inset-0 z-50 flex flex-col bg-black/95 p-4"
         data-testid="organization-photo-viewer"
         @click.self="close"
       >
