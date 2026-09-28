@@ -23,12 +23,23 @@ export async function tooSmall(
     ({ limit, rootSelector }) => {
       const scope = document.querySelector(rootSelector) ?? document.body
       return (
-        [...scope.querySelectorAll('button, a, input:not([type=checkbox]), select, label')]
+        // Case à cocher ou bouton radio : la cible est l'étiquette qui l'enveloppe.
+        [
+          ...scope.querySelectorAll(
+            'button, a, input:not([type=checkbox]):not([type=radio]), select, label',
+          ),
+        ]
           .filter((el) => el instanceof HTMLElement && el.offsetParent !== null)
           // Un lien qui n'enveloppe qu'un bouton prend la taille du bouton : on ne compte que le bouton.
           .filter((el) => !(el.tagName === 'A' && el.querySelector('button')))
           // Le lien de texte courant « ← Mes compétitions » et les labels de champ ne sont pas des cibles.
-          .filter((el) => !(el.tagName === 'LABEL' && !el.querySelector('input[type=checkbox]')))
+          .filter(
+            (el) =>
+              !(
+                el.tagName === 'LABEL' &&
+                !el.querySelector('input[type=checkbox], input[type=radio]')
+              ),
+          )
           // Un champ masqué aux yeux (`sr-only`) n'est pas une cible : c'est
           // l'étiquette stylée qui en tient lieu.
           .filter((el) => el.getBoundingClientRect().width > 1)
