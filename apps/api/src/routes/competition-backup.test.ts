@@ -262,6 +262,49 @@ describe('POST /competitions/import', () => {
     ).toHaveLength(6)
   })
 
+  it('garde l’adresse du lieu à l’aller-retour ; une sauvegarde sans adresse s’importe sans (ADR-089)', async () => {
+    const s = await setUpPhasesScenario(app, mailer, 2)
+    const address = {
+      label: '8 Boulevard du Port 80000 Amiens',
+      postcode: '80000',
+      city: 'Amiens',
+      latitude: 49.897442,
+      longitude: 2.290084,
+      banId: '80021_6590_00008',
+    }
+    const patched = await app.request(`/api/v1/competitions/${s.competitionId}`, {
+      method: 'PATCH',
+      headers: authHeaders(s.organizerToken),
+      body: JSON.stringify({ address }),
+    })
+    expect(patched.status).toBe(200)
+    const { backup } = await exportBackup(s)
+    expect(backup.competition.address).toEqual(address)
+
+    const copyAddress = async (body: unknown) => {
+      const response = await postImport(s.organizerToken, { mode: 'commit', backup: body })
+      expect(response.status).toBe(201)
+      const { competitionId } = await json<{ competitionId: string }>(response)
+      const row = await handle.db.query.competition.findFirst({
+        where: eq(competition.id, competitionId),
+      })
+      return row && { label: row.addressLabel, latitude: row.latitude, banId: row.banId }
+    }
+    expect(await copyAddress(backup)).toEqual({
+      label: address.label,
+      latitude: 49.897442,
+      banId: '80021_6590_00008',
+    })
+
+    const before: Record<string, unknown> = { ...backup.competition }
+    delete before['address']
+    expect(await copyAddress({ ...backup, competition: before })).toEqual({
+      label: null,
+      latitude: null,
+      banId: null,
+    })
+  })
+
   it('relit une sauvegarde au format 1 : l’ancien statut du tour est répliqué sur ses catégories (ADR-065)', async () => {
     const s = await richScenario()
     const { backup } = await exportBackup(s)

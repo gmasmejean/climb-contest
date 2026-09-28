@@ -137,6 +137,40 @@ describe('parseCompetitionBackup', () => {
     expect(parseCompetitionBackup(tampered).success).toBe(false)
   })
 
+  it('lit une sauvegarde v2 d’avant l’adresse du lieu (ADR-089), et une avec adresse', () => {
+    const v1 = parseCompetitionBackup(backupV1())
+    expect(v1.success).toBe(true)
+    if (!v1.success) return
+    const withoutAddress = JSON.parse(JSON.stringify(v1.data)) as {
+      competition: Record<string, unknown>
+    }
+    delete withoutAddress.competition['address']
+    const old = parseCompetitionBackup(withoutAddress)
+    expect(old.success).toBe(true)
+    if (old.success) expect(old.data.competition.address).toBeUndefined()
+
+    const address = {
+      label: '8 Boulevard du Port 80000 Amiens',
+      postcode: '80000',
+      city: 'Amiens',
+      latitude: 49.897442,
+      longitude: 2.290084,
+      banId: '80021_6590_00008',
+    }
+    const withAddress = {
+      ...withoutAddress,
+      competition: { ...withoutAddress.competition, address },
+    }
+    const parsed = parseCompetitionBackup(withAddress)
+    expect(parsed.success && parsed.data.competition.address).toEqual(address)
+
+    const halfPosition = {
+      ...withoutAddress,
+      competition: { ...withoutAddress.competition, address: { ...address, longitude: null } },
+    }
+    expect(parseCompetitionBackup(halfPosition).success).toBe(false)
+  })
+
   it('refuse une version inconnue', () => {
     expect(parseCompetitionBackup({ ...backupV1(), schemaVersion: 3 }).success).toBe(false)
   })

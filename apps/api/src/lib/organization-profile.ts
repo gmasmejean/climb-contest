@@ -1,43 +1,15 @@
 import {
   organizationTypeSchema,
-  type Address,
   type OrganizationProfile,
   type PublicOrganization,
   type UpdateOrganizationInput,
 } from '@climbcontest/contracts'
 import type { organization } from '@climbcontest/db'
 
+import { addressColumns, addressOf, publicAddressOf } from './address'
+
 type OrganizationRow = typeof organization.$inferSelect
 type OrganizationUpdate = Partial<typeof organization.$inferInsert>
-
-/**
- * Passage entre les colonnes à plat de `organization` et le bloc `address`
- * des contrats (ADR-088). Pas de libellé = pas d'adresse : la contrainte
- * `organization_address_check` garantit qu'aucune autre colonne d'adresse
- * n'est alors renseignée.
- */
-export function addressOf(row: OrganizationRow): Address | null {
-  if (row.addressLabel === null) return null
-  return {
-    label: row.addressLabel,
-    postcode: row.postcode,
-    city: row.city,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    banId: row.banId,
-  }
-}
-
-export function addressColumns(address: Address | null): OrganizationUpdate {
-  return {
-    addressLabel: address?.label ?? null,
-    postcode: address?.postcode ?? null,
-    city: address?.city ?? null,
-    latitude: address?.latitude ?? null,
-    longitude: address?.longitude ?? null,
-    banId: address?.banId ?? null,
-  }
-}
 
 export function toOrganizationProfile(row: OrganizationRow): OrganizationProfile {
   return {
@@ -54,7 +26,6 @@ export function toOrganizationProfile(row: OrganizationRow): OrganizationProfile
 
 /** L'encart public : les mêmes champs, sans identifiant (ni l'organisation, ni BAN). */
 export function toPublicOrganization(row: OrganizationRow): PublicOrganization {
-  const address = addressOf(row)
   return {
     name: row.name,
     type: toOrganizationType(row.type),
@@ -62,13 +33,7 @@ export function toPublicOrganization(row: OrganizationRow): PublicOrganization {
     contactEmail: row.contactEmail,
     contactPhone: row.contactPhone,
     websiteUrl: row.websiteUrl,
-    address: address && {
-      label: address.label,
-      postcode: address.postcode,
-      city: address.city,
-      latitude: address.latitude,
-      longitude: address.longitude,
-    },
+    address: publicAddressOf(row),
   }
 }
 

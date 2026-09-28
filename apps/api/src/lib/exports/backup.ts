@@ -22,6 +22,8 @@ import {
 } from '@climbcontest/db'
 import { asc, eq } from 'drizzle-orm'
 
+import { addressOf } from '../address'
+
 type CompetitionRow = typeof competition.$inferSelect
 
 const iso = (date: Date) => date.toISOString()
@@ -142,6 +144,7 @@ export async function buildCompetitionBackup(
     competition: {
       name: currentCompetition.name,
       venue: currentCompetition.venue,
+      address: addressOf(currentCompetition),
       startsOn: currentCompetition.startsOn,
       endsOn: currentCompetition.endsOn,
       discipline: currentCompetition.discipline,

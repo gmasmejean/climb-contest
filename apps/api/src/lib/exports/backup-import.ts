@@ -20,6 +20,8 @@ import {
 } from '@climbcontest/db'
 import { uuidv7 } from 'uuidv7'
 
+import { addressColumns } from '../address'
+
 const PUBLIC_SLUG_LENGTH = 22
 const INSERT_CHUNK_SIZE = 500
 
@@ -279,6 +281,8 @@ export async function importBackup(
       judgePinRequired: c.judgePinRequired,
       judgeCredentialsStored: c.judgeCredentialsStored,
       createdBy: importer.userId,
+      // ADR-089 : une sauvegarde d'avant le Lot 26 n'a pas d'adresse.
+      ...addressColumns(c.address ?? null),
     })
 
     for (const rows of chunks(backup.categories)) {

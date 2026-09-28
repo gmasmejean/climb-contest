@@ -25,6 +25,7 @@ describe('publicCompetitionMetaSchema', () => {
       slug: 'abc123',
       name: 'Coupe du club',
       venue: 'Salle Roc',
+      address: null,
       startsOn: '2026-05-01',
       endsOn: '2026-05-01',
       format: 'contest',

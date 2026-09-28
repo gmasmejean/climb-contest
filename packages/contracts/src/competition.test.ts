@@ -34,6 +34,24 @@ describe('createCompetitionInputSchema', () => {
     const result = createCompetitionInputSchema.safeParse({ ...valid, format: 'ligue' })
     expect(result.success).toBe(false)
   })
+
+  it('accepte une adresse, sans adresse ou nulle ; refuse une position incomplète (ADR-089)', () => {
+    const address = {
+      label: '8 Boulevard du Port 80000 Amiens',
+      postcode: '80000',
+      city: 'Amiens',
+      latitude: 49.897442,
+      longitude: 2.290084,
+      banId: '80021_6590_00008',
+    }
+    expect(createCompetitionInputSchema.safeParse({ ...valid, address }).success).toBe(true)
+    expect(createCompetitionInputSchema.safeParse({ ...valid, address: null }).success).toBe(true)
+    expect(
+      createCompetitionInputSchema.safeParse({ ...valid, address: { ...address, latitude: null } })
+        .success,
+    ).toBe(false)
+    expect(updateCompetitionInputSchema.safeParse({ address: null }).success).toBe(true)
+  })
 })
 
 describe('updateCompetitionInputSchema', () => {
