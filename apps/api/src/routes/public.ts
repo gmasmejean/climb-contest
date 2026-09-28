@@ -22,6 +22,12 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 
 import { publicAddressOf } from '../lib/address'
+import {
+  listOrganizationPhotos,
+  openOrganizationPhoto,
+  organizationPhotoHeaders,
+  toOrganizationPhoto,
+} from '../lib/organization-photos'
 import { toPublicOrganization } from '../lib/organization-profile'
 import type { PublicRankingCache } from '../lib/public-cache'
 import { resolvePublicCompetitionBySlug } from '../lib/public-access'
@@ -152,6 +158,7 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
       where: eq(organization.id, currentCompetition.organizationId),
     })
     if (!owner) throw new ApiError(500, 'Erreur interne', 'Organisation introuvable.')
+    const photos = await listOrganizationPhotos(db, owner.id)
 
     return c.json(
       publicCompetitionMetaSchema.parse({
@@ -166,7 +173,7 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
           format: currentCompetition.format,
           status: currentCompetition.status,
         },
-        organization: toPublicOrganization(owner),
+        organization: toPublicOrganization(owner, photos.map(toOrganizationPhoto)),
         categories,
         rounds,
       }),
@@ -286,6 +293,23 @@ export function createPublicRoutes(deps: PublicRouteDeps): Hono {
     }
     if (range) headers['content-range'] = `bytes ${range.start}-${range.end}/${stored.size}`
     return new Response(stored.stream, { status: range ? 206 : 200, headers })
+  })
+
+  // Photo de la fiche de l'organisation (Lot 27, ADR-090) : seulement une photo
+  // active de l'organisation QUI porte cette compétition.
+  app.get('/:slug/organization/photos/:photoId', publicReadRateLimiter, async (c) => {
+    const currentCompetition = await resolvePublicCompetitionBySlug(db, c.req.param('slug'))
+    const opened = deps.storage
+      ? await openOrganizationPhoto(
+          { db, storage: deps.storage },
+          { organizationId: currentCompetition.organizationId, photoId: c.req.param('photoId') },
+        )
+      : null
+    if (!opened) throw new ApiError(404, 'Photo introuvable', 'Cette photo n’existe pas.')
+    return new Response(opened.stream, {
+      status: 200,
+      headers: organizationPhotoHeaders(opened, 'public'),
+    })
   })
 
   app.get('/:slug/stream', publicStreamRateLimiter, async (c) => {

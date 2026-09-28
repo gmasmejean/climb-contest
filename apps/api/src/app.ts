@@ -28,6 +28,7 @@ import { createJudgeAscentRoutes } from './routes/judge-ascents'
 import { createJudgeAuthRoutes } from './routes/judge-auth'
 import { createJudgeRoutes } from './routes/judges'
 import { createOrganizationRoutes } from './routes/organization'
+import { createOrganizationPhotoRoutes } from './routes/organization-photos'
 import { createOrganizerAscentRoutes } from './routes/organizer-ascents'
 import { createPublicRoutes } from './routes/public'
 import { createQrCodesRoutes } from './routes/qrcodes'
@@ -41,12 +42,14 @@ import { createRouteRoutes } from './routes/routes'
 const MIB = 1024 * 1024
 
 /**
- * Trois routes gèrent leur PROPRE limite, avec un message adapté : l'import de
- * sauvegarde (25 Mio), les morceaux de vidéo (16 Mio) et la photo de voie
- * (8 Mio, ADR-066). La limite globale ne s'y applique pas.
+ * Quatre routes gèrent leur PROPRE limite, avec un message adapté : l'import de
+ * sauvegarde (25 Mio), les morceaux de vidéo (16 Mio), la photo de voie
+ * (8 Mio, ADR-066) et celle de l'organisation (8 Mio, ADR-090). La limite
+ * globale ne s'y applique pas.
  */
 function hasOwnBodyLimit(method: string, path: string): boolean {
   if (method === 'POST' && path === '/api/v1/competitions/import') return true
+  if (method === 'POST' && path === '/api/v1/organization/photos') return true
   if (method === 'PUT' && /\/routes\/[^/]+\/photo$/.test(path)) return true
   return method === 'PATCH' && /\/routes\/[^/]+\/video\/uploads\/[^/]+$/.test(path)
 }
@@ -156,6 +159,19 @@ export function createApp(deps: AppDeps): Hono {
       now: deps.now,
     }),
   )
+
+  if (deps.storage) {
+    // Photos de la fiche (Lot 27, ADR-090).
+    app.route(
+      '/api/v1/organization/photos',
+      createOrganizationPhotoRoutes({
+        db: deps.db,
+        accessTokenSigner: deps.accessTokenSigner,
+        storage: deps.storage,
+        now: deps.now,
+      }),
+    )
+  }
 
   const scopedDeps = { db: deps.db, accessTokenSigner: deps.accessTokenSigner }
   app.route(

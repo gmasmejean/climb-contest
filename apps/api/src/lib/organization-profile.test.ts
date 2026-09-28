@@ -60,11 +60,19 @@ describe('toOrganizationProfile', () => {
 
 describe('toPublicOrganization', () => {
   it('ne donne ni l’identifiant de l’organisation, ni son slug, ni l’identifiant BAN', () => {
-    const publicCard = toPublicOrganization(row)
+    const publicCard = toPublicOrganization(row, [])
     expect(publicCard).not.toHaveProperty('id')
     expect(publicCard).not.toHaveProperty('slug')
     expect(publicCard.address).not.toHaveProperty('banId')
     expect(publicCard.address?.label).toBe('8 Boulevard du Port 80000 Amiens')
+  })
+
+  it('reprend les photos dans l’ordre donné', () => {
+    const photos = [
+      { id: '0192f2a0-7b1c-7cc0-8f00-000000000002', altText: 'Le mur' },
+      { id: '0192f2a0-7b1c-7cc0-8f00-000000000001', altText: null },
+    ]
+    expect(toPublicOrganization(row, photos).photos).toEqual(photos)
   })
 })
 

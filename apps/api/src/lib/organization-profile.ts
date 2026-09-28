@@ -1,5 +1,6 @@
 import {
   organizationTypeSchema,
+  type OrganizationPhoto,
   type OrganizationProfile,
   type PublicOrganization,
   type UpdateOrganizationInput,
@@ -24,8 +25,14 @@ export function toOrganizationProfile(row: OrganizationRow): OrganizationProfile
   }
 }
 
-/** L'encart public : les mêmes champs, sans identifiant (ni l'organisation, ni BAN). */
-export function toPublicOrganization(row: OrganizationRow): PublicOrganization {
+/**
+ * L'encart public : les mêmes champs, sans identifiant (ni l'organisation, ni
+ * BAN), et les photos actives dans l'ordre (ADR-090).
+ */
+export function toPublicOrganization(
+  row: OrganizationRow,
+  photos: readonly OrganizationPhoto[],
+): PublicOrganization {
   return {
     name: row.name,
     type: toOrganizationType(row.type),
@@ -34,6 +41,7 @@ export function toPublicOrganization(row: OrganizationRow): PublicOrganization {
     contactPhone: row.contactPhone,
     websiteUrl: row.websiteUrl,
     address: publicAddressOf(row),
+    photos: [...photos],
   }
 }
 

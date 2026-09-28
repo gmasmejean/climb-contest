@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { addressSchema, publicAddressSchema } from './address'
+import { ROUTE_PHOTO_MAX_BYTES } from './route-photo'
 
 /**
  * Membres de l'organisation (Lot 24, DECISIONS.md ADR-087). Le statut est
@@ -91,6 +92,46 @@ export const updateOrganizationInputSchema = z
   .partial()
 export type UpdateOrganizationInput = z.infer<typeof updateOrganizationInputSchema>
 
+/**
+ * Photos de la fiche (Lot 27, DECISIONS.md ADR-090) : même chaîne que la photo
+ * de voie (JPEG ré-encodé dans le navigateur, signature vérifiée par le
+ * serveur), 6 actives au plus. Une liste est toujours dans l'ordre d'affichage.
+ */
+export const ORGANIZATION_PHOTO_MAX_COUNT = 6
+export const ORGANIZATION_PHOTO_MAX_BYTES = ROUTE_PHOTO_MAX_BYTES
+export const ORGANIZATION_PHOTO_ALT_MAX_LENGTH = 200
+
+export const organizationPhotoSchema = z.strictObject({
+  id: z.uuid(),
+  altText: z.string().nullable(),
+})
+export type OrganizationPhoto = z.infer<typeof organizationPhotoSchema>
+
+export const organizationPhotoListSchema = z.array(organizationPhotoSchema)
+
+/** `PATCH /organization/photos/:id` — `null` retire le texte. */
+export const updateOrganizationPhotoInputSchema = z.strictObject({
+  altText: z
+    .string()
+    .trim()
+    .min(1)
+    .max(
+      ORGANIZATION_PHOTO_ALT_MAX_LENGTH,
+      `La description ne peut pas dépasser ${ORGANIZATION_PHOTO_ALT_MAX_LENGTH} caractères.`,
+    )
+    .nullable(),
+})
+export type UpdateOrganizationPhotoInput = z.infer<typeof updateOrganizationPhotoInputSchema>
+
+/** `PUT /organization/photos/order` — toutes les photos actives, dans le nouvel ordre. */
+export const reorderOrganizationPhotosInputSchema = z.strictObject({
+  photoIds: z
+    .array(z.uuid())
+    .max(ORGANIZATION_PHOTO_MAX_COUNT)
+    .refine((ids) => new Set(ids).size === ids.length, 'Une photo apparaît deux fois.'),
+})
+export type ReorderOrganizationPhotosInput = z.infer<typeof reorderOrganizationPhotosInputSchema>
+
 /** L'encart « Organisation » de la page publique d'une compétition. */
 export const publicOrganizationSchema = z.strictObject({
   name: z.string(),
@@ -100,5 +141,6 @@ export const publicOrganizationSchema = z.strictObject({
   contactPhone: z.string().nullable(),
   websiteUrl: z.string().nullable(),
   address: publicAddressSchema.nullable(),
+  photos: z.array(organizationPhotoSchema).max(ORGANIZATION_PHOTO_MAX_COUNT),
 })
 export type PublicOrganization = z.infer<typeof publicOrganizationSchema>
