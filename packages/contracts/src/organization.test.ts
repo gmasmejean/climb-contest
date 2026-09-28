@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { addressSchema } from './address'
-import { updateOrganizationInputSchema } from './organization'
+import {
+  ORGANIZATION_PHOTO_ALT_MAX_LENGTH,
+  reorderOrganizationPhotosInputSchema,
+  updateOrganizationInputSchema,
+  updateOrganizationPhotoInputSchema,
+} from './organization'
 
 const banAddress = {
   label: '8 Boulevard du Port 80000 Amiens',
@@ -93,5 +98,34 @@ describe('updateOrganizationInputSchema (ADR-088)', () => {
 
   it('refuse un champ inconnu (le slug ne se modifie pas)', () => {
     expect(updateOrganizationInputSchema.safeParse({ slug: 'autre' }).success).toBe(false)
+  })
+})
+
+describe('photos de l’organisation (ADR-090)', () => {
+  const photoId = '0192f2a0-7b1c-7cc0-8f00-000000000001'
+  const otherId = '0192f2a0-7b1c-7cc0-8f00-000000000002'
+
+  it('le texte alternatif est facultatif, nettoyé, et borné', () => {
+    const parse = (altText: string | null) =>
+      updateOrganizationPhotoInputSchema.safeParse({ altText })
+    expect(parse(null).success).toBe(true)
+    expect(parse('  Le mur de bloc  ').data).toEqual({ altText: 'Le mur de bloc' })
+    expect(parse('   ').success).toBe(false)
+    expect(parse('a'.repeat(ORGANIZATION_PHOTO_ALT_MAX_LENGTH)).success).toBe(true)
+    expect(parse('a'.repeat(ORGANIZATION_PHOTO_ALT_MAX_LENGTH + 1)).error?.issues[0]?.message).toBe(
+      'La description ne peut pas dépasser 200 caractères.',
+    )
+  })
+
+  it('un nouvel ordre ne répète pas une photo et n’en compte pas plus de six', () => {
+    const parse = (photoIds: string[]) =>
+      reorderOrganizationPhotosInputSchema.safeParse({ photoIds })
+    expect(parse([otherId, photoId]).success).toBe(true)
+    expect(parse([]).success).toBe(true)
+    expect(parse([photoId, photoId]).error?.issues[0]?.message).toBe(
+      'Une photo apparaît deux fois.',
+    )
+    expect(parse(Array.from({ length: 7 }, () => crypto.randomUUID())).success).toBe(false)
+    expect(parse(['pas-un-uuid']).success).toBe(false)
   })
 })

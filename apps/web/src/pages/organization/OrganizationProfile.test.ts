@@ -37,6 +37,7 @@ describe('OrganizationProfile', () => {
   let wrapper: VueWrapper
   let patches: unknown[]
   let patchResponse: (body: unknown) => Response
+  let photoList: { id: string; altText: string | null }[]
 
   function login(role: 'owner' | 'organizer'): void {
     setSession('jeton', {
@@ -89,6 +90,11 @@ describe('OrganizationProfile', () => {
 
   beforeEach(() => {
     patches = []
+    photoList = []
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: () => 'blob:photo', revokeObjectURL: () => {} }),
+    )
     patchResponse = (body) => json(200, { ...stored, ...(body as object) })
     vi.stubGlobal(
       'fetch',
@@ -96,6 +102,12 @@ describe('OrganizationProfile', () => {
         const method = init?.method ?? 'GET'
         if (url.endsWith('/api/v1/organization') && method === 'GET') {
           return Promise.resolve(json(200, stored))
+        }
+        if (url.endsWith('/api/v1/organization/photos') && method === 'GET') {
+          return Promise.resolve(json(200, photoList))
+        }
+        if (url.includes('/api/v1/organization/photos/') && method === 'GET') {
+          return Promise.resolve(new Response(new Uint8Array([0xff, 0xd8, 0xff]), { status: 200 }))
         }
         if (url.endsWith('/api/v1/organization') && method === 'PATCH') {
           if (typeof init?.body !== 'string') throw new Error('corps de requête attendu')
@@ -184,5 +196,26 @@ describe('OrganizationProfile', () => {
     expect(wrapper.text()).toContain('Seul un propriétaire peut la modifier.')
     expect(wrapper.get('[data-testid="organization-card"]').text()).toContain('Club Roc')
     expect(wrapper.text()).toContain('8 Boulevard du Port 80000 Amiens')
+  })
+
+  it('un organizer voit les photos dans l’encart ; un owner les gère dans leur section (ADR-090)', async () => {
+    photoList = [{ id: '0192f2a0-7b1c-7cc0-8f00-000000000001', altText: 'Le mur de bloc' }]
+    login('organizer')
+    await open()
+    expect(wrapper.find('[data-testid="photos-manager"]').exists()).toBe(false)
+    // L'image se lit avec le jeton, puis devient une adresse `blob:`.
+    await vi.waitFor(() =>
+      expect(wrapper.find('[data-testid="organization-photo"] img').exists()).toBe(true),
+    )
+    const image = wrapper.get(
+      '[data-testid="organization-card"] [data-testid="organization-photo"] img',
+    )
+    expect(image.attributes()).toMatchObject({ src: 'blob:photo', alt: 'Le mur de bloc' })
+    wrapper.unmount()
+
+    login('owner')
+    await open()
+    expect(wrapper.get('[data-testid="photos-manager"]').text()).toContain('Photo 1 sur 1')
+    expect(wrapper.find('[data-testid="organization-card"]').exists()).toBe(false)
   })
 })

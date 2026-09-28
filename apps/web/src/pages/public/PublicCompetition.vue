@@ -16,6 +16,7 @@ import BrandShell from '../../components/brand/BrandShell.vue'
 import LocationMap from '../../components/LocationMap.vue'
 import OrganizationCard from '../../components/OrganizationCard.vue'
 import { samePlace } from '../../lib/competition-place'
+import { galleryPhotos, publicPhotoUrl } from '../../lib/organization-photos'
 
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
@@ -31,6 +32,15 @@ const {
   queryFn: () => publicApi.meta(slug.value),
   refetchOnWindowFocus: false,
 })
+
+// ADR-090 : les photos de l'organisation se lisent par la compétition affichée.
+const organizationPhotos = computed(() =>
+  meta.value
+    ? galleryPhotos(meta.value.organization.photos, meta.value.organization.name, (id) =>
+        publicPhotoUrl(slug.value, id),
+      )
+    : [],
+)
 
 const selectedCategoryId = ref<string>(categoryPreference.get() ?? '')
 watch(
@@ -195,6 +205,7 @@ const lastUpdatedLabel = computed(() => {
         <OrganizationCard
           :organization="meta.organization"
           eyebrow="Organisé par"
+          :photos="organizationPhotos"
           :hide-location="samePlace(meta.competition.address, meta.organization.address)"
           :class="meta.competition.address ? '' : 'mt-4'"
         />

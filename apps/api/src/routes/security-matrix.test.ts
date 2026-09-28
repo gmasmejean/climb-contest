@@ -372,7 +372,9 @@ describe('frontière publique et routes anonymes', () => {
         r.method !== 'GET' ||
         r.path.includes('stream') ||
         r.path === '/health' ||
-        r.path.endsWith('/video')
+        // Des fichiers (vidéo, photo de l'organisation), pas des données.
+        r.path.endsWith('/video') ||
+        r.path.endsWith('/organization/photos/:photoId')
       )
         continue
       const query =
@@ -418,6 +420,7 @@ describe('les lectures (GET) ne modifient rien', () => {
       'judge',
       'asset',
       'asset_upload',
+      'organization_photo',
       'activity_log',
       'round_qualifier',
     ]

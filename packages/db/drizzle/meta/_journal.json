@@ -120,6 +120,13 @@
       "when": 1790570210573,
       "tag": "0017_lot26_competition_address",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790582719927,
+      "tag": "0018_lot27_organization_photos",
+      "breakpoints": true
     }
   ]
 }

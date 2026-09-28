@@ -450,6 +450,14 @@ chaque compétition (ADR-088).
   Hors ligne, l'adresse reste affichée avec le lien « Itinéraire » (Google Maps).
 - **CSP** : `connect-src` et `img-src` n'ouvrent que `https://data.geopf.fr`
   (`infra/docker/Caddyfile`).
+- **Photos** (ADR-090) : jusqu'à 6, ré-encodées en JPEG dans le navigateur comme la photo
+  de voie (1600 px, GPS retiré), avec une description facultative (texte alternatif). On
+  en choisit plusieurs d'un coup, on les ordonne avec « Avancer » / « Reculer » ; « Supprimer »
+  laisse un bandeau « Annuler » jusqu'à l'action suivante. Elles sont enregistrées dès
+  l'envoi, hors du bouton « Enregistrer la fiche ». Dans l'encart public : des vignettes,
+  chargées quand on descend jusqu'à elles, qui s'ouvrent en grand. Stockées sous
+  `organizations/<id>/photos/` ; un fichier supprimé reste sur le disque (purge à venir,
+  `TODO.md`).
 
 **Lieu des compétitions** (ADR-089) : à la création comme dans l'onglet Infos, le choix
 « Lieu de l'organisation » recopie le nom et l'adresse de la fiche ; « Autre lieu » fait

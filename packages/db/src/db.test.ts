@@ -12,6 +12,7 @@ import {
   competition,
   competitor,
   organization,
+  organizationPhoto,
   round,
   route,
   user,
@@ -81,6 +82,7 @@ describe('migrations', () => {
         'judge_route',
         'organization',
         'organization_member_log',
+        'organization_photo',
         'round',
         'round_category',
         'round_qualifier',
@@ -113,7 +115,7 @@ describe('migrations', () => {
       const afterUp = await client.query(
         "select table_name from information_schema.tables where table_schema = 'public' and table_name != '_migrations_applied'",
       )
-      expect(afterUp.rows.length).toBe(21)
+      expect(afterUp.rows.length).toBe(22)
     })
   })
 })
@@ -387,9 +389,11 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
     await withRawClient(async (client) => {
       // 0011 (Lot 15), 0012 (Lot 21), 0013 (juge, ADR-081), 0014
       // (organisation, ADR-086), 0015 (membres, ADR-087), 0016 (fiche,
-      // ADR-088) et 0017 (lieu, ADR-089) ont été posées par-dessus 0010 : huit
-      // crans. À réviser si une migration est ajoutée après 0017.
-      expect(await revertLastMigrations(client, 8)).toEqual([
+      // ADR-088), 0017 (lieu, ADR-089) et 0018 (photos, ADR-090) ont été
+      // posées par-dessus 0010 : neuf crans. À réviser si une migration est
+      // ajoutée après 0018.
+      expect(await revertLastMigrations(client, 9)).toEqual([
+        '0018_lot27_organization_photos.sql',
         '0017_lot26_competition_address.sql',
         '0016_lot25_organization_profile.sql',
         '0015_lot24_members.sql',
@@ -428,7 +432,7 @@ describe('migration 0010_lot12_round_category (ADR-065)', () => {
         "update round_category set status = 'closed' where round_id = $1 and category_id = $2",
         [openId, u16.id],
       )
-      await revertLastMigrations(client, 8)
+      await revertLastMigrations(client, 9)
       const back = await client.query<{ id: string; status: string }>(
         'select id, status from round where id = any($1)',
         [[openId, closedId, draftId]],
@@ -886,6 +890,58 @@ describe('migration 0017_lot26_competition_address (ADR-089)', () => {
 
       await applyPendingMigrations(client)
       expect(await hasAddress()).toBe(true)
+    })
+  })
+})
+
+describe('migration 0018_lot27_organization_photos (ADR-090)', () => {
+  const photoValues = (organizationId: string, uploadedBy: string) => ({
+    organizationId,
+    storageKey: `organizations/${organizationId}/photos/${crypto.randomUUID()}`,
+    mimeType: 'image/jpeg',
+    sizeBytes: 1024,
+    position: 0,
+    uploadedBy,
+  })
+
+  it('n’accepte que du JPEG, une taille et une position positives', async () => {
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
+    const base = photoValues(demoOrganization.id, demoUser.id)
+    const [created] = await handle.db.insert(organizationPhoto).values(base).returning()
+    expect(created?.altText).toBeNull()
+    expect(created?.deletedAt).toBeNull()
+    await expect(
+      handle.db.insert(organizationPhoto).values({ ...base, mimeType: 'image/png' }),
+    ).rejects.toThrow()
+    await expect(
+      handle.db.insert(organizationPhoto).values({ ...base, sizeBytes: 0 }),
+    ).rejects.toThrow()
+    await expect(
+      handle.db.insert(organizationPhoto).values({ ...base, position: -1 }),
+    ).rejects.toThrow()
+  })
+
+  it('est réversible : le down retire la table, le up la rétablit', async () => {
+    const { demoOrganization, demoUser } = await insertOrganizationAndUser()
+    await handle.db.insert(organizationPhoto).values(photoValues(demoOrganization.id, demoUser.id))
+    await withRawClient(async (client) => {
+      const hasTable = async () =>
+        (
+          await client.query(
+            "select 1 from information_schema.tables where table_name = 'organization_photo'",
+          )
+        ).rows.length === 1
+
+      expect(await hasTable()).toBe(true)
+      expect(await revertLastMigrations(client, 1)).toEqual(['0018_lot27_organization_photos.sql'])
+      expect(await hasTable()).toBe(false)
+      const kept = await client.query('select name from organization where id = $1', [
+        demoOrganization.id,
+      ])
+      expect(kept.rows).toHaveLength(1)
+
+      await applyPendingMigrations(client)
+      expect(await hasTable()).toBe(true)
     })
   })
 })

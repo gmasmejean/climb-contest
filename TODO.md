@@ -675,6 +675,14 @@ qu'on a choisi de ne pas faire maintenant, et pourquoi.
   aucun écran ne le permet, et aucun lot ne le prévoit.
 - **Purge physique des photos d'organisation supprimées** (Lot 27) : la suppression est logique,
   le fichier reste sur le disque.
+- **Recadrer une photo d'organisation** (Lot 27, ADR-090) : non livré, les vignettes sont
+  découpées à l'affichage. `PhotoCropDialog` (photo de voie, ADR-067) pourrait servir.
+- **Vignettes réduites pour l'encart public** (Lot 27) : les vignettes chargent la photo de
+  1600 px (environ 300 Ko chacune), seulement quand on descend jusqu'à l'encart. Une version
+  de 480 px, produite par le navigateur à l'envoi, allégerait une page consultée en 4G saturée.
+- **Seule la dernière photo supprimée se remet** (Lot 27) : le bandeau « Annuler » disparaît
+  à l'action suivante ; les photos supprimées plus tôt restent en base sans écran pour les
+  retrouver.
 - **Une personne dans plusieurs organisations** : écarté (ADR-086 point 2). À rouvrir si un
   bénévole doit vraiment aider deux structures avec le même e-mail.
 - **Adresses hors de France** : la BAN ne couvre que la France ; ailleurs, saisie manuelle sans

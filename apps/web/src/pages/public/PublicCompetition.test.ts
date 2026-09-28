@@ -46,6 +46,7 @@ let meta = {
     contactPhone: null,
     websiteUrl: 'https://club-roc.test',
     address: orgAddress,
+    photos: [] as { id: string; altText: string | null }[],
   },
   categories: [
     { id: 'cat-1', label: 'U16 Femme', displayOrder: 0 },
@@ -120,6 +121,33 @@ describe('PublicCompetition', () => {
     // Après les onglets et leur contenu : le classement reste en tête de page.
     const html = wrapper.html()
     expect(html.indexOf('data-testid="organization-card"')).toBeGreaterThan(html.indexOf('role="tablist"'))
+  })
+
+  it('montre les photos de l’organisation, lues par la compétition affichée (ADR-090)', async () => {
+    const baseMeta = meta
+    meta = {
+      ...baseMeta,
+      organization: {
+        ...baseMeta.organization,
+        photos: [
+          { id: 'p2', altText: 'Le mur de bloc' },
+          { id: 'p1', altText: null },
+        ],
+      },
+    }
+    try {
+      const wrapper = mount(PublicCompetition, { global: { plugins: [router, VueQueryPlugin] } })
+      await flush()
+      const images = wrapper
+        .get('[data-testid="organization-card"]')
+        .findAll('[data-testid="organization-photo"] img')
+      expect(images.map((image) => [image.attributes('src'), image.attributes('alt')])).toEqual([
+        ['/api/v1/public/abc123/organization/photos/p2', 'Le mur de bloc'],
+        ['/api/v1/public/abc123/organization/photos/p1', 'Photo 2 sur 2 de Club Roc'],
+      ])
+    } finally {
+      meta = baseMeta
+    }
   })
 
   describe('lieu de la compétition (ADR-089)', () => {

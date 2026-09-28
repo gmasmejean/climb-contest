@@ -45,6 +45,7 @@ describe('publicCompetitionMetaSchema', () => {
         latitude: 49.897442,
         longitude: 2.290084,
       },
+      photos: [{ id: uuid, altText: 'Le mur principal' }],
     },
     categories: [{ id: uuid, label: 'U16 Femme', displayOrder: 0 }],
     rounds: [],
@@ -73,6 +74,14 @@ describe('publicCompetitionMetaSchema', () => {
     expect(publicCompetitionMetaSchema.safeParse(withBanId).success).toBe(false)
     const withSlug = { ...valid, organization: { ...valid.organization, slug: 'club-roc' } }
     expect(publicCompetitionMetaSchema.safeParse(withSlug).success).toBe(false)
+    const withStorageKey = {
+      ...valid,
+      organization: {
+        ...valid.organization,
+        photos: [{ id: uuid, altText: null, storageKey: 'organizations/x/photos/y' }],
+      },
+    }
+    expect(publicCompetitionMetaSchema.safeParse(withStorageKey).success).toBe(false)
   })
 })
 

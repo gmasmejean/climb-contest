@@ -539,6 +539,7 @@ describe('fiche de l’organisation (ADR-088)', () => {
       contactPhone: '03 22 00 00 00',
       websiteUrl: 'https://club-roc.test',
       address: publicAddress,
+      photos: [],
     })
   })
 
