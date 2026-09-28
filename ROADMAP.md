@@ -846,7 +846,14 @@ compétitions existantes restent sans adresse ; la sauvegarde JSON porte les
 nouveaux champs en facultatif (anciennes sauvegardes importables, testé).
 ```
 
-### Lot 27 — Photos de l'organisation (à faire)
+### Lot 27 — Photos de l'organisation (livré)
+
+> Livré le 2026-09-28 sur la branche `lot-27-photos-organisation`. Décision : ADR-090. Écarts
+> au cadrage : pas de recadrage (les vignettes sont découpées à l'affichage) ; texte
+> alternatif facultatif, avec un repli « Photo 2 sur 4 de … » ; plusieurs photos choisies
+> d'un coup ; « Annuler » par un bandeau qui reste jusqu'à l'action suivante (les
+> notifications de l'appli n'ont pas de bouton) ; les photos publiques restent un jour en
+> cache navigateur.
 
 ```
 Lot 27 : jusqu'à 6 photos par organisation, JPEG ré-encodées dans le navigateur

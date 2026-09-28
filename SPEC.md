@@ -391,6 +391,11 @@ organization_member_log                 -- ADR-087 : actions d'un owner sur les 
           'role_changed' | 'deactivated' | 'reactivated'),
   details (jsonb — rôle : { from, to }), created_at
 
+organization_photo                      -- ADR-090 : 6 actives au plus (vérifié par l'API)
+  id, organization_id → organization, storage_key, mime_type ('image/jpeg'),
+  size_bytes, position (ordre d'affichage), alt_text (nullable),
+  uploaded_by → user, deleted_at (nullable — suppression logique, annulable)
+
 competition
   id, organization_id → organization
   name, venue, starts_on, ends_on       -- venue : nom du lieu
@@ -764,6 +769,13 @@ DELETE /organization/members/:memberId/invitation   annuler — owner
 PATCH  /organization/members/:memberId   { role } — owner
 POST   /organization/members/:memberId/deactivate   — owner, jamais soi-même
 POST   /organization/members/:memberId/reactivate   — owner
+GET    /organization/photos              photos actives, dans l'ordre — tout membre — Lot 27, ADR-090
+POST   /organization/photos              corps : le JPEG (8 Mio au plus) — owner
+GET    /organization/photos/:photoId     l'image — tout membre
+PATCH  /organization/photos/:photoId     { altText } — owner
+PUT    /organization/photos/order        { photoIds } : toutes les photos actives — owner
+DELETE /organization/photos/:photoId     suppression logique — owner
+POST   /organization/photos/:photoId/restore        « Annuler » — owner
 
 GET    /competitions
 POST   /competitions
@@ -872,7 +884,10 @@ GET    /judge/bootstrap                  tout ce dont le juge a besoin, en un ap
 POST   /judge/ascents/batch              [{ id, ... }] → état par élément
 
 GET    /public/:slug                     métadonnées de la compétition, et encart
-                                         `organization` (sans identifiant, ADR-088)
+                                         `organization` (sans identifiant, ADR-088 ;
+                                         ses photos : { id, altText }, ADR-090)
+GET    /public/:slug/organization/photos/:photoId   photo de l'organisation qui porte
+                                         la compétition (ADR-090)
 GET    /public/:slug/rankings?category=  classement publié
 GET    /public/:slug/routes?category=
 GET    /public/:slug/routes/:rid/video   vidéo téléversée, avec Range (Lot 9)

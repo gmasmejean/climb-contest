@@ -3821,6 +3821,16 @@ dans une table dédiée, suppression logique annulable, visibles dans l'encart p
     rappelle de n'en publier qu'avec leur accord. Les photos ne font pas partie de la
     sauvegarde d'une compétition ni de sa purge RGPD : elles appartiennent à l'organisation.
 
+**Mise en œuvre (2026-09-28) :** `lib/organization-photos.ts` côté API reprend `isJpeg` et
+l'ordre « fichier, puis transaction » de la photo de voie ; une photo refusée sous verrou (la
+7ᵉ) voit son fichier effacé. Côté web, `useOrganizationPhotoUrls` charge les images des
+membres en `Blob` (une fois chacune, libérées quand elles quittent la liste) ;
+`OrganizationPhotoGallery` sert à l'encart public comme à l'aperçu d'un organizer. En fermant
+la photo agrandie, le focus revient à la vignette de la photo affichée en dernier. Les photos
+publiques passent par le cache `NetworkFirst` de l'API du service worker, comme le reste de la
+page publique. Un fichier illisible parmi plusieurs est signalé par son nom, les autres
+partent quand même.
+
 **Conséquences :** migration `0018`, réversible (le down supprime la table ; les fichiers
 restent sur le disque, sans référence). L'API accepte le corps d'une photo jusqu'à 8 Mio sur
 `POST /organization/photos` seulement.
